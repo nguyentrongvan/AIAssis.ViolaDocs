@@ -1,0 +1,98 @@
+from pydantic_settings import BaseSettings
+from typing import List
+
+
+class Settings(BaseSettings):
+    app_name: str = "ViolaDocs API"
+    env: str = "local"
+    api_prefix: str = "/api/v1"
+    debug: bool = True
+    log_level: str = "INFO"
+
+    # PostgreSQL
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_user: str = "viadocs"
+    postgres_password: str = "viadocs_pass"
+    postgres_db: str = "viadocs_db"
+
+    @property
+    def postgres_dsn(self) -> str:
+        return f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+
+    @property
+    def postgres_async_dsn(self) -> str:
+        return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+
+    # Redis
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+
+    @property
+    def redis_url(self) -> str:
+        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
+    # MinIO
+    minio_endpoint: str = "localhost:9000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin123"
+    minio_secure: bool = False
+    minio_bucket: str = "documents"
+
+    # JWT
+    jwt_secret_key: str = "change-me-in-production-min-32-chars-long"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 30
+    jwt_refresh_token_expire_days: int = 7
+
+    # LLM - Support multiple keys (comma-separated) for quota distribution
+    gemini_api_key: str = ""  # Single key or comma-separated keys
+    openai_api_key: str = ""  # Single key or comma-separated keys
+
+    # OCR
+    ocr_provider: str = "paddle"
+    ocr_languages: str = "en,vi"
+
+    @property
+    def ocr_lang_list(self) -> List[str]:
+        return [lang.strip() for lang in self.ocr_languages.split(",")]
+
+    # Retention
+    default_retention_days: int = 365
+    purge_grace_period_days: int = 30
+
+    # Upload
+    max_upload_size_mb: int = 100
+    allowed_mime_types: str = "application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/jpeg,image/png,image/tiff"
+
+    @property
+    def max_upload_size_bytes(self) -> int:
+        return self.max_upload_size_mb * 1024 * 1024
+
+    @property
+    def allowed_mime_list(self) -> List[str]:
+        return [mime.strip() for mime in self.allowed_mime_types.split(",")]
+    
+    @property
+    def gemini_api_keys(self) -> List[str]:
+        """Get list of Gemini API keys"""
+        if not self.gemini_api_key:
+            return []
+        return [key.strip() for key in self.gemini_api_key.split(",") if key.strip()]
+    
+    @property
+    def openai_api_keys(self) -> List[str]:
+        """Get list of OpenAI API keys"""
+        if not self.openai_api_key:
+            return []
+        return [key.strip() for key in self.openai_api_key.split(",") if key.strip()]
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+
+
+settings = Settings()
+
