@@ -1,9 +1,6 @@
 <template>
-  <Layout>
-    <template #header>
-      <h1>Settings</h1>
-    </template>
-    <div class="admin-page">
+  <div class="admin-page">
+    <h1 class="page-header">Settings</h1>
       <div class="settings-sections">
         <div class="section">
           <h3>Retention Policy</h3>
@@ -46,12 +43,10 @@
         </div>
       </div>
     </div>
-  </Layout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import Layout from '../../components/Layout.vue'
 import api from '../../services/api'
 
 const settings = ref({

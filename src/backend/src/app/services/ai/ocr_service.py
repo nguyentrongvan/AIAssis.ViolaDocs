@@ -1,7 +1,7 @@
 from typing import Optional, List
 import io
 from PIL import Image
-import pdf2image
+import fitz  # PyMuPDF
 
 from ...config import settings
 from ...prompts import *
@@ -66,10 +66,18 @@ class PaddleOcrProvider(OcrProvider):
             return {"text": "", "error": "PaddleOCR not available"}
         
         try:
-            images = pdf2image.convert_from_bytes(pdf_data)
+            # Use PyMuPDF to extract pages as images
+            pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
             all_text = []
             
-            for img in images:
+            for page_num in range(len(pdf_document)):
+                page = pdf_document[page_num]
+                # Render page to image with good resolution (300 DPI)
+                pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72))
+                # Convert to PIL Image
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                
+                # Run OCR on the image
                 result = self.ocr.ocr(img, cls=True)
                 text_lines = []
                 if result and result[0]:
@@ -78,12 +86,14 @@ class PaddleOcrProvider(OcrProvider):
                             text_lines.append(line[1][0])
                 all_text.extend(text_lines)
             
+            pdf_document.close()
+            
             full_text = "\n".join(all_text)
             return {
                 "text": full_text,
                 "lines": all_text,
                 "provider": "paddle",
-                "pages": len(images),
+                "pages": len(pdf_document),
                 "languages": languages
             }
         except Exception as e:
@@ -119,4 +129,5 @@ class OcrService:
 def get_ocr_service() -> OcrService:
     """Factory to get OCR service"""
     return OcrService()
+
 

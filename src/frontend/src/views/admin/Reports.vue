@@ -1,9 +1,6 @@
 <template>
-  <Layout>
-    <template #header>
-      <h1>Reports</h1>
-    </template>
-    <div class="admin-page">
+  <div class="admin-page">
+    <h1 class="page-header">Reports</h1>
       <div class="report-filters">
         <div class="filter-group">
           <label>Report Type</label>
@@ -48,12 +45,10 @@
         </div>
       </div>
     </div>
-  </Layout>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
-import Layout from '../../components/Layout.vue'
 import api from '../../services/api'
 
 const reportType = ref('audit')

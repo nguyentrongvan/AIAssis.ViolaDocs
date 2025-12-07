@@ -1,9 +1,6 @@
 <template>
-  <Layout>
-    <template #header>
-      <h1>Tasks</h1>
-    </template>
-    <div class="tasks-page">
+  <div class="tasks-page">
+    <h1 class="page-header">Tasks</h1>
       <div class="task-filters">
         <button @click="filter = 'pending'" :class="['filter-btn', { active: filter === 'pending' }]">Pending</button>
         <button @click="filter = 'completed'" :class="['filter-btn', { active: filter === 'completed' }]">Completed</button>
@@ -27,13 +24,11 @@
         </div>
       </div>
     </div>
-  </Layout>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import Layout from '../components/Layout.vue'
 import api from '../services/api'
 
 const router = useRouter()

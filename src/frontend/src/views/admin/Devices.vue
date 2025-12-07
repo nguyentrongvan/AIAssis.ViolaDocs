@@ -1,10 +1,9 @@
 <template>
-  <Layout>
-    <template #header>
+  <div class="admin-page">
+    <div class="page-header">
       <h1>Device Management</h1>
       <button @click="showCreateModal = true" class="btn-primary">+ Add Device</button>
-    </template>
-    <div class="admin-page">
+    </div>
       <table class="data-table">
         <thead>
           <tr>
@@ -32,12 +31,10 @@
         </tbody>
       </table>
     </div>
-  </Layout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import Layout from '../../components/Layout.vue'
 import api from '../../services/api'
 
 const devices = ref([])

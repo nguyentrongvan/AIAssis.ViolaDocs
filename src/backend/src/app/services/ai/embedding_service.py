@@ -160,3 +160,4 @@ def get_embedding_service() -> Optional[EmbeddingService]:
         return service
     return None
 
+

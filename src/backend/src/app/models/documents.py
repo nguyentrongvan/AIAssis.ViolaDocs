@@ -77,3 +77,4 @@ class Share(BaseModel):
     expires_at = Column(DateTime, nullable=True)
     permissions = Column(JSON, nullable=True)  # read, write, delete
 
+

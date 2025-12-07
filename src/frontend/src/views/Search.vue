@@ -1,9 +1,6 @@
 <template>
-  <Layout>
-    <template #header>
-      <h1>Search Documents</h1>
-    </template>
-    <div class="search-page">
+  <div class="search-page">
+    <h1 class="page-header">Search Documents</h1>
       <div class="search-bar">
         <input v-model="query" @keyup.enter="doSearch" placeholder="Search documents..." class="search-input" />
         <div class="search-mode">
@@ -27,12 +24,10 @@
         No documents found
       </div>
     </div>
-  </Layout>
 </template>
 
 <script setup>
 import { ref } from 'vue'
-import Layout from '../components/Layout.vue'
 import api from '../services/api'
 
 const query = ref('')

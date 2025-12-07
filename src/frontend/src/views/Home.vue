@@ -1,9 +1,6 @@
 <template>
-  <Layout>
-    <template #header>
-      <h1>Document Library</h1>
-    </template>
-    <div class="home-page">
+  <div class="home-page">
+    <h1 class="page-header">Document Library</h1>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-value">{{ stats.totalDocuments || 0 }}</div>
@@ -20,30 +17,29 @@
       </div>
       <div class="quick-actions">
         <router-link to="/upload" class="action-card">
-          <div class="action-icon">📤</div>
+          <Upload class="action-icon" />
           <div class="action-title">Upload Documents</div>
         </router-link>
         <router-link to="/search" class="action-card">
-          <div class="action-icon">🔍</div>
+          <Search class="action-icon" />
           <div class="action-title">Search</div>
         </router-link>
         <router-link to="/chatbot" class="action-card">
-          <div class="action-icon">💬</div>
+          <MessageSquare class="action-icon" />
           <div class="action-title">Chatbot</div>
         </router-link>
         <router-link to="/tasks" class="action-card">
-          <div class="action-icon">✅</div>
+          <CheckSquare class="action-icon" />
           <div class="action-title">Tasks</div>
         </router-link>
       </div>
     </div>
-  </Layout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import Layout from '../components/Layout.vue'
 import api from '../services/api'
+import { Upload, Search, MessageSquare, CheckSquare } from 'lucide-vue-next'
 
 const stats = ref({
   totalDocuments: 0,
@@ -116,8 +112,11 @@ onMounted(async () => {
   box-shadow: 0 8px 16px rgba(0,0,0,0.1);
 }
 .action-icon {
-  font-size: 3rem;
-  margin-bottom: 1rem;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 1rem;
+  color: var(--primary);
+  stroke-width: 1.5;
 }
 .action-title {
   font-weight: 500;

@@ -14,6 +14,10 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #333;
+  overflow-x: hidden;
+}
+html {
+  overflow-x: hidden;
 }
 </style>
 

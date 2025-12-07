@@ -1,9 +1,6 @@
 <template>
-  <Layout>
-    <template #header>
-      <h1>Chatbot Assistant</h1>
-    </template>
-    <div class="chatbot-page">
+  <div class="chatbot-page">
+    <h1 class="page-header">Chatbot Assistant</h1>
       <div class="chat-container">
         <div class="chat-sidebar">
           <div class="group-selector">
@@ -40,13 +37,11 @@
         </div>
       </div>
     </div>
-  </Layout>
 </template>
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import Layout from '../components/Layout.vue'
 import api from '../services/api'
 
 const router = useRouter()

@@ -127,11 +127,14 @@ alembic upgrade head
 #### Start Backend Server
 
 ```bash
-# Development mode with auto-reload
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Option 1: Using the run script (recommended)
+python run.py
 
-# Or using Python module
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Option 2: Using uvicorn with correct module path
+uvicorn src.app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Option 3: Using Python module
+python -m uvicorn src.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Backend API will be available at: **http://localhost:8000**

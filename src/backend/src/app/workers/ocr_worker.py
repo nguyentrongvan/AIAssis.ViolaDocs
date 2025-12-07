@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from ..db import AsyncSessionLocal
 from ..models.ai import AIJob
-from ..models.documents import DocumentVersion
+from ..models.documents import DocumentVersion, Document
 from ..services.ai import get_ocr_service
 from ..services.storage import get_minio_client
 from ..config import settings
@@ -43,7 +43,10 @@ async def process_ocr_job(job_id: int):
             
             # Download file from MinIO
             minio_client = get_minio_client()
-            object_name = version.blob_uri.replace(f"minio://{settings.minio_bucket}/", "")
+            # blob_uri is just the object_name, not full URI
+            object_name = version.blob_uri
+            if object_name.startswith(f"minio://{settings.minio_bucket}/"):
+                object_name = object_name.replace(f"minio://{settings.minio_bucket}/", "")
             
             try:
                 file_data = minio_client.get_object(settings.minio_bucket, object_name)
@@ -55,12 +58,20 @@ async def process_ocr_job(job_id: int):
             
             # Process with OCR service
             ocr_service = get_ocr_service()
-            mime = version.document.mime if hasattr(version, 'document') else "application/pdf"
+            # Get document to access mime type
+            doc_result = await session.execute(
+                select(Document).where(Document.id == version.document_id)
+            )
+            document = doc_result.scalar_one_or_none()
+            mime = document.mime if document else "application/pdf"
+            
+            # Get languages from settings
+            languages = settings.ocr_lang_list
             
             if mime.startswith("image/"):
-                ocr_result = ocr_service.process_image(file_bytes)
+                ocr_result = ocr_service.process_image(file_bytes, languages)
             elif mime == "application/pdf":
-                ocr_result = ocr_service.process_pdf(file_bytes)
+                ocr_result = ocr_service.process_pdf(file_bytes, languages)
             else:
                 raise ValueError(f"Unsupported MIME type for OCR: {mime}")
             
@@ -70,24 +81,30 @@ async def process_ocr_job(job_id: int):
             extracted_text = ocr_result.get("text", "")
             
             # Save extracted text to MinIO
-            text_object_name = f"ocr/{version_id}/text.txt"
+            text_object_name = f"renditions/{document.id}/{version_id}/text.txt"
             from io import BytesIO
+            text_bytes = extracted_text.encode('utf-8')
             minio_client.put_object(
                 settings.minio_bucket,
                 text_object_name,
-                BytesIO(extracted_text.encode('utf-8')),
-                length=len(extracted_text.encode('utf-8')),
+                BytesIO(text_bytes),
+                length=len(text_bytes),
                 content_type="text/plain"
             )
             
             # Update version with OCR URI
-            version.text_uri = f"minio://{settings.minio_bucket}/{text_object_name}"
+            version.text_uri = text_object_name  # Store just object name
+            version.ocr_uri = text_object_name  # Also set ocr_uri
             version.provider_info = {
                 "ocr": {
                     "provider": ocr_result.get("provider", "paddle"),
                     "languages": settings.ocr_lang_list
                 }
             }
+            
+            # Update document status to ready after OCR
+            if document:
+                document.status = "ready"
             
             # Update job
             job.status = "completed"
@@ -97,6 +114,23 @@ async def process_ocr_job(job_id: int):
             }
             
             await session.commit()
+            
+            # Trigger embedding job after OCR completes
+            try:
+                from ..models.ai import AIJob as EmbeddingJob
+                embed_job = EmbeddingJob(
+                    job_type="embed",
+                    target={"document_id": document.id, "version_id": version.id},
+                    provider="openai",  # or get from settings
+                    status="queued"
+                )
+                session.add(embed_job)
+                await session.commit()
+                
+                # Process embedding in background
+                asyncio.create_task(process_embedding_job(embed_job.id))
+            except Exception as e:
+                print(f"Failed to create embedding job: {e}")
             
         except Exception as e:
             job.status = "failed"
@@ -146,7 +180,10 @@ async def process_embedding_job(job_id: int):
                 raise ValueError("No OCR text available. Run OCR first.")
             
             minio_client = get_minio_client()
-            text_object_name = version.text_uri.replace(f"minio://{settings.minio_bucket}/", "")
+            # text_uri is just object name, not full URI
+            text_object_name = version.text_uri
+            if text_object_name.startswith(f"minio://{settings.minio_bucket}/"):
+                text_object_name = text_object_name.replace(f"minio://{settings.minio_bucket}/", "")
             
             try:
                 file_data = minio_client.get_object(settings.minio_bucket, text_object_name)

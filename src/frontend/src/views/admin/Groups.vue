@@ -1,10 +1,9 @@
 <template>
-  <Layout>
-    <template #header>
+  <div class="admin-page">
+    <div class="page-header">
       <h1>Document Groups</h1>
       <button @click="showCreateModal = true" class="btn-primary">+ Create Group</button>
-    </template>
-    <div class="admin-page">
+    </div>
       <div class="groups-grid">
         <div v-for="group in groups" :key="group.id" class="group-card">
           <h3>{{ group.name }}</h3>
@@ -20,12 +19,10 @@
         </div>
       </div>
     </div>
-  </Layout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import Layout from '../../components/Layout.vue'
 import api from '../../services/api'
 
 const groups = ref([])

@@ -66,6 +66,8 @@ const handleLogin = async () => {
   box-shadow: 0 8px 32px rgba(0,0,0,0.1);
   width: 100%;
   max-width: 400px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 .logo-container {
   display: flex;
@@ -73,17 +75,22 @@ const handleLogin = async () => {
   justify-content: center;
   gap: 1rem;
   margin-bottom: 1rem;
+  flex-wrap: wrap;
 }
 .logo-img {
   height: 60px;
   width: auto;
+  flex-shrink: 0;
 }
 .logo-text {
   text-align: center;
   color: var(--primary);
   margin: 0;
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tagline {
   text-align: center;
@@ -106,6 +113,7 @@ const handleLogin = async () => {
   border: 1px solid #ddd;
   border-radius: 6px;
   font-size: 1rem;
+  box-sizing: border-box;
 }
 .error {
   color: var(--error);

@@ -230,3 +230,4 @@ def get_llm_service() -> Optional[LLMService]:
         return service
     return None
 
+

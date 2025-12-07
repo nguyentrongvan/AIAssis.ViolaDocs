@@ -1,9 +1,6 @@
 <template>
-  <Layout>
-    <template #header>
-      <h1>Scan Inbox</h1>
-    </template>
-    <div class="scan-page">
+  <div class="scan-page">
+    <h1 class="page-header">Scan Inbox</h1>
       <div v-if="scans.length === 0" class="empty-state">
         <p>No pending scans</p>
       </div>
@@ -25,12 +22,10 @@
         </div>
       </div>
     </div>
-  </Layout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import Layout from '../components/Layout.vue'
 import api from '../services/api'
 
 const scans = ref([])

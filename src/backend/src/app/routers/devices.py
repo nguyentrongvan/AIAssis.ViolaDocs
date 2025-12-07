@@ -103,3 +103,4 @@ async def delete_device(
     
     return success_response({"id": device_id, "deleted": True})
 
+

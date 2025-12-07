@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     app_name: str = "ViolaDocs API"
     env: str = "local"
     api_prefix: str = "/api/v1"
+    api_v1_prefix: str = "/api/v1"  # Alias for env variable API_V1_PREFIX
     debug: bool = True
     log_level: str = "INFO"
 
@@ -92,6 +93,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"  # Ignore extra fields from .env that don't match model fields
 
 
 settings = Settings()

@@ -4,16 +4,23 @@ from alembic import context
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+# Add src directory to Python path
+backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+src_dir = os.path.join(backend_dir, 'src')
+sys.path.insert(0, src_dir)
 
 from app.models.base import Base
 from app.config import settings
 
-# Import all models to register them
-from app.models import users, documents, devices, groups, workflows, audit, ai
+# Import all models to register them with Base.metadata
+from app.models import (
+    User, Document, DocumentVersion, Tag, DocumentTag, Share,
+    Device, DocumentGroup, Workflow, Task, AuditEvent, AIJob, Embedding
+)
 
 config = context.config
-config.set_main_option('sqlalchemy.url', settings.postgres_async_dsn.replace('+asyncpg', ''))
+# Alembic requires synchronous connection, use postgres_dsn (psycopg2) instead of async
+config.set_main_option('sqlalchemy.url', settings.postgres_dsn)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

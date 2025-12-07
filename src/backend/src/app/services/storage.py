@@ -10,6 +10,7 @@ _minio_client: Optional[Minio] = None
 
 
 def get_minio_client() -> Minio:
+    """Get or create MinIO client instance"""
     global _minio_client
     if _minio_client is None:
         _minio_client = Minio(
@@ -22,6 +23,7 @@ def get_minio_client() -> Minio:
         try:
             if not _minio_client.bucket_exists(settings.minio_bucket):
                 _minio_client.make_bucket(settings.minio_bucket)
+                print(f"Created MinIO bucket: {settings.minio_bucket}")
         except S3Error as e:
             print(f"Error creating bucket: {e}")
     return _minio_client

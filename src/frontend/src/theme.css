@@ -13,6 +13,17 @@
   --text-light: #666;
 }
 
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  overflow-x: hidden;
+}
+
 .btn-primary {
   background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
   color: white;
@@ -66,5 +77,17 @@
   color: var(--primary);
   cursor: pointer;
   text-decoration: underline;
+}
+
+.page-header {
+  margin-bottom: 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.page-header h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  color: var(--text-dark);
 }
 

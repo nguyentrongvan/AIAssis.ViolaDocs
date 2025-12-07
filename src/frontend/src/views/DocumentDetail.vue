@@ -1,10 +1,7 @@
 <template>
-  <Layout>
-    <template #header>
-      <h1>{{ document?.title || 'Document' }}</h1>
-    </template>
-    <div v-if="loading" class="loading">Loading...</div>
-    <div v-else-if="document" class="document-detail">
+  <div v-if="loading" class="loading">Loading...</div>
+  <div v-else-if="document" class="document-detail">
+    <h1 class="page-header">{{ document?.title || 'Document' }}</h1>
       <div class="detail-grid">
         <div class="main-panel">
           <div class="preview-area">
@@ -54,13 +51,11 @@
         </div>
       </div>
     </div>
-  </Layout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import Layout from '../components/Layout.vue'
 import { useAuthStore } from '../store/auth'
 import api from '../services/api'
 
