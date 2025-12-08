@@ -2,7 +2,7 @@ import hashlib
 import uuid
 from typing import Optional, Dict
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -227,4 +227,38 @@ async def finalize_upload(
         "document_id": doc.id,
         "version_id": version.id
     })
+
+
+@router.put("/{upload_id}/chunk")
+async def upload_chunk(
+    upload_id: str,
+    chunk_number: int = Query(..., description="Chunk number"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Optional chunked upload endpoint."""
+    # Check if upload exists
+    metadata = _upload_metadata.get(upload_id)
+    if not metadata:
+        return error_response(
+            "Upload not found or expired",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Verify user owns this upload
+    if metadata["user_id"] != current_user.id:
+        return error_response(
+            "Unauthorized",
+            status_code=status.HTTP_403_FORBIDDEN
+        )
+    
+    # For now, just return success (chunked upload can be implemented later)
+    # In production, this would handle chunk assembly
+    return success_response({
+        "upload_id": upload_id,
+        "chunk_number": chunk_number,
+        "status": "received"
+    })
+
+
 

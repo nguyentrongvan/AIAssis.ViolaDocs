@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional, List
 from datetime import datetime
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,9 +49,20 @@ async def chat(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
+    """Chat with RAG system."""
+    # Validate message
+    if not request.message or not request.message.strip():
+        return error_response(
+            "Message cannot be empty",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    
     llm_service = get_llm_service()
     if not llm_service:
-        return error_response("LLM provider not configured")
+        return error_response(
+            "LLM provider not configured",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
     
     redis_client = await get_redis()
     
@@ -106,6 +117,7 @@ async def get_session_history(
     session_id: str,
     current_user: User = Depends(get_current_user)
 ):
+    """Get session history."""
     redis_client = await get_redis()
     messages = []
     
@@ -113,7 +125,8 @@ async def get_session_history(
         session_key = f"chat:session:{session_id}"
         history = await redis_client.lrange(session_key, 0, -1)
         
-        for msg in history:
+        # Reverse to get chronological order
+        for msg in reversed(history):
             msg_str = msg.decode() if isinstance(msg, bytes) else msg
             if msg_str.startswith("user:"):
                 messages.append({"role": "user", "content": msg_str[5:]})
@@ -123,5 +136,118 @@ async def get_session_history(
     return success_response({
         "session_id": session_id,
         "messages": messages
+    })
+
+
+class FeedbackRequest(BaseModel):
+    rating: str  # positive, negative
+    comment: Optional[str] = None
+
+
+class HandoffRequest(BaseModel):
+    reason: str
+    context: Optional[dict] = None
+
+
+class SourceAccessRequest(BaseModel):
+    source_ids: List[int]
+    access_type: str = "preview"  # preview, download
+
+
+@router.post("/session/{session_id}/feedback")
+async def submit_feedback(
+    session_id: str,
+    request: FeedbackRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Submit feedback for chat session."""
+    # Validate rating
+    if request.rating not in ["positive", "negative"]:
+        return error_response(
+            "Rating must be 'positive' or 'negative'",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # TODO: Store feedback in database
+    # For now, just return success
+    return success_response({
+        "session_id": session_id,
+        "rating": request.rating,
+        "comment": request.comment,
+        "submitted_at": datetime.utcnow().isoformat()
+    })
+
+
+@router.post("/session/{session_id}/handoff")
+async def handoff_to_human(
+    session_id: str,
+    request: HandoffRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Escalate chat session to human agent."""
+    # TODO: Create support ticket or assign to staff
+    # For now, just return success
+    return success_response({
+        "session_id": session_id,
+        "handoff_id": str(uuid.uuid4()),
+        "reason": request.reason,
+        "status": "pending",
+        "created_at": datetime.utcnow().isoformat()
+    })
+
+
+@router.post("/session/{session_id}/source-access")
+async def request_source_access(
+    session_id: str,
+    request: SourceAccessRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Request access to source documents."""
+    from ..models.documents import Document
+    from ..services.storage import generate_presigned_download_url
+    from datetime import timedelta
+    
+    # Get documents and verify access
+    accessible_docs = []
+    for doc_id in request.source_ids:
+        doc_result = await session.execute(
+            select(Document).where(
+                and_(
+                    Document.id == doc_id,
+                    Document.deleted_at.is_(None)
+                )
+            )
+        )
+        doc = doc_result.scalar_one_or_none()
+        
+        if doc and (doc.owner_id == current_user.id or current_user.role in ["admin", "staff"]):
+            # Generate presigned URL if access_type is download
+            url = None
+            if request.access_type == "download" and doc.versions:
+                # Get latest version blob_uri
+                from ..models.documents import DocumentVersion
+                version_result = await session.execute(
+                    select(DocumentVersion)
+                    .where(DocumentVersion.document_id == doc.id)
+                    .order_by(DocumentVersion.version_no.desc())
+                    .limit(1)
+                )
+                version = version_result.scalar_one_or_none()
+                if version and version.blob_uri:
+                    url = generate_presigned_download_url(version.blob_uri, expires=timedelta(hours=1))
+            
+            accessible_docs.append({
+                "document_id": doc.id,
+                "title": doc.title,
+                "url": url,
+                "access_type": request.access_type
+            })
+    
+    return success_response({
+        "session_id": session_id,
+        "sources": accessible_docs
     })
 

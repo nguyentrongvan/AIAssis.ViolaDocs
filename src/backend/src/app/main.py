@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .routers import (
     ai,
+    audit,
     auth,
     chat,
     devices,
@@ -11,7 +12,9 @@ from .routers import (
     groups,
     health,
     reports,
+    scan_jobs,
     search,
+    tasks,
     uploads,
     users,
     workflows,
@@ -40,14 +43,17 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix=api_prefix)
     app.include_router(auth.router, prefix=api_prefix)
     app.include_router(uploads.router, prefix=api_prefix)
+    app.include_router(scan_jobs.router, prefix=api_prefix)
     app.include_router(search.router, prefix=api_prefix)
     app.include_router(chat.router, prefix=api_prefix)
     app.include_router(reports.router, prefix=api_prefix)
+    app.include_router(audit.router, prefix=api_prefix)
     app.include_router(documents.router, prefix=api_prefix)
     app.include_router(groups.router, prefix=api_prefix)
     app.include_router(users.router, prefix=api_prefix)
     app.include_router(devices.router, prefix=api_prefix)
     app.include_router(workflows.router, prefix=api_prefix)
+    app.include_router(tasks.router, prefix=api_prefix)
     app.include_router(ai.router, prefix=api_prefix)
     return app
 

@@ -142,3 +142,47 @@ async def delete_user(
     return success_response({"id": user_id, "deleted": True})
 
 
+@router.post("/{user_id}/activate")
+async def activate_user(
+    user_id: int,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Activate user account."""
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        return error_response("User not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    user.status = "active"
+    await session.commit()
+    
+    return success_response({
+        "id": user.id,
+        "status": user.status
+    })
+
+
+@router.post("/{user_id}/deactivate")
+async def deactivate_user(
+    user_id: int,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Deactivate user account."""
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        return error_response("User not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    user.status = "inactive"
+    await session.commit()
+    
+    return success_response({
+        "id": user.id,
+        "status": user.status
+    })
+
+

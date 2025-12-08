@@ -177,7 +177,7 @@ async def process_embedding_job(job_id: int):
             
             # Get text from OCR result
             if not version.text_uri:
-                raise ValueError("No OCR text available. Run OCR first.")
+                raise ValueError("No OCR text")
             
             minio_client = get_minio_client()
             # text_uri is just object name, not full URI

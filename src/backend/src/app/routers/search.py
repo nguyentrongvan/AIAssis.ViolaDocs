@@ -1,14 +1,16 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_
 
 from ..db import get_session
-from ..dependencies import get_current_user
+from ..dependencies import get_current_user, get_current_admin_user
 from ..models.users import User
 from ..models.documents import Document
-from ..utils.response import success_response
+from ..models.ai import Embedding
+from ..services.ai import get_embedding_service
+from ..utils.response import success_response, error_response
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -21,12 +23,36 @@ class SearchRequest(BaseModel):
     limit: int = 20
 
 
+class VectorSearchRequest(BaseModel):
+    query: str
+    top_k: int = 10
+    filters: Optional[dict] = None
+
+
 @router.post("")
 async def search(
     request: SearchRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
+    """Hybrid search (keyword + vector)."""
+    # Validate mode
+    if request.mode not in ["keyword", "vector", "hybrid"]:
+        return error_response(
+            "Invalid mode. Must be 'keyword', 'vector', or 'hybrid'",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Validate query
+    if not request.query or not request.query.strip():
+        return success_response({
+            "results": [],
+            "total": 0
+        })
+    
+    keyword_results = []
+    vector_results = []
+    
     # Keyword search
     if request.mode in ["keyword", "hybrid"]:
         keyword_query = select(Document).where(
@@ -35,19 +61,38 @@ async def search(
                 Document.deleted_at.is_(None),
                 Document.title.ilike(f"%{request.query}%")
             )
-        ).limit(request.limit)
+        )
+        
+        # Apply filters
+        if request.filters:
+            if "mime" in request.filters:
+                keyword_query = keyword_query.where(Document.mime == request.filters["mime"])
+            if "status" in request.filters:
+                keyword_query = keyword_query.where(Document.status == request.filters["status"])
+        
+        keyword_query = keyword_query.limit(request.limit)
         
         result = await session.execute(keyword_query)
         keyword_results = result.scalars().all()
-    else:
-        keyword_results = []
     
     # Vector search (placeholder - requires pgvector setup)
     if request.mode in ["vector", "hybrid"]:
-        # TODO: Implement vector search with pgvector
-        vector_results = []
-    else:
-        vector_results = []
+        # For now, return empty results if vector search is requested
+        # In production, this would use pgvector or external vector DB
+        embedding_service = get_embedding_service()
+        if embedding_service:
+            # Generate query embedding
+            query_embedding = embedding_service.generate_embedding(request.query)
+            # TODO: Use pgvector to find similar documents
+            # For now, return empty
+            vector_results = []
+        else:
+            # No embedding service configured
+            if request.mode == "vector":
+                return error_response(
+                    "Vector search not available. Embedding service not configured.",
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
     
     # Merge and deduplicate results
     all_results = {}
@@ -70,10 +115,148 @@ async def search(
 
 @router.post("/vector")
 async def vector_search(
-    request: SearchRequest,
+    request: VectorSearchRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    # TODO: Implement vector search with embeddings
-    return success_response({"results": []})
+    """Vector search only."""
+    embedding_service = get_embedding_service()
+    if not embedding_service:
+        return error_response(
+            "Vector search not available. Embedding service not configured.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+    
+    # Generate query embedding
+    query_embedding = embedding_service.generate_embedding(request.query)
+    
+    # TODO: Use pgvector to find similar documents
+    # For now, return empty results
+    # In production, this would:
+    # 1. Query embeddings table with cosine similarity
+    # 2. Filter by ACL (owner_id == current_user.id)
+    # 3. Apply additional filters from request.filters
+    # 4. Return top_k results
+    
+    return success_response({
+        "results": [],
+        "total": 0
+    })
+
+
+@router.post("/index/reindex")
+async def reindex_all(
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Reindex all documents (admin only)."""
+    # Get all documents that need reindexing
+    result = await session.execute(
+        select(Document).where(
+            and_(
+                Document.deleted_at.is_(None),
+                Document.status == "ready"
+            )
+        )
+    )
+    documents = result.scalars().all()
+    
+    # Create embedding jobs for all documents
+    from ..models.ai import AIJob
+    job_count = 0
+    for doc in documents:
+        # Get latest version
+        from ..models.documents import DocumentVersion
+        version_result = await session.execute(
+            select(DocumentVersion)
+            .where(DocumentVersion.document_id == doc.id)
+            .order_by(DocumentVersion.version_no.desc())
+            .limit(1)
+        )
+        version = version_result.scalar_one_or_none()
+        
+        if version and version.text_uri:
+            # Check if embedding job already exists
+            existing_job_result = await session.execute(
+                select(AIJob).where(
+                    and_(
+                        AIJob.job_type == "embed",
+                        AIJob.target["version_id"].astext == str(version.id),
+                        AIJob.status.in_(["queued", "processing", "completed"])
+                    )
+                )
+            )
+            existing_job = existing_job_result.scalar_one_or_none()
+            
+            if not existing_job:
+                embed_job = AIJob(
+                    job_type="embed",
+                    target={"document_id": doc.id, "version_id": version.id},
+                    provider="openai",
+                    status="queued"
+                )
+                session.add(embed_job)
+                job_count += 1
+    
+    await session.commit()
+    
+    return success_response({
+        "message": f"Reindexing initiated for {job_count} documents",
+        "job_count": job_count
+    })
+
+
+@router.post("/index/reindex/{document_id}")
+async def reindex_document(
+    document_id: int,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Reindex single document (admin only)."""
+    # Get document
+    doc_result = await session.execute(
+        select(Document).where(
+            and_(
+                Document.id == document_id,
+                Document.deleted_at.is_(None)
+            )
+        )
+    )
+    doc = doc_result.scalar_one_or_none()
+    
+    if not doc:
+        return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Get latest version
+    from ..models.documents import DocumentVersion
+    version_result = await session.execute(
+        select(DocumentVersion)
+        .where(DocumentVersion.document_id == doc.id)
+        .order_by(DocumentVersion.version_no.desc())
+        .limit(1)
+    )
+    version = version_result.scalar_one_or_none()
+    
+    if not version or not version.text_uri:
+        return error_response(
+            "Document version or OCR text not available",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Create embedding job
+    from ..models.ai import AIJob
+    embed_job = AIJob(
+        job_type="embed",
+        target={"document_id": doc.id, "version_id": version.id},
+        provider="openai",
+        status="queued"
+    )
+    session.add(embed_job)
+    await session.commit()
+    await session.refresh(embed_job)
+    
+    return success_response({
+        "message": "Reindexing job created",
+        "job_id": embed_job.id
+    })
 

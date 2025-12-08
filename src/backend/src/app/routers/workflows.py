@@ -20,9 +20,6 @@ class WorkflowStart(BaseModel):
     assignees: Optional[List[int]] = None
 
 
-class TaskAction(BaseModel):
-    action: str  # approve, reject, request_changes
-    comment: Optional[str] = None
 
 
 @router.post("")
@@ -31,6 +28,27 @@ async def start_workflow(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
+    """Start workflow on document."""
+    from ..models.documents import Document
+    
+    # Verify document exists
+    doc_result = await session.execute(
+        select(Document).where(
+            and_(
+                Document.id == payload.document_id,
+                Document.deleted_at.is_(None)
+            )
+        )
+    )
+    doc = doc_result.scalar_one_or_none()
+    
+    if not doc:
+        return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Verify user has access to document
+    if doc.owner_id != current_user.id and current_user.role not in ["admin", "staff"]:
+        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    
     workflow = Workflow(
         document_id=payload.document_id,
         template=payload.template or "default",
@@ -53,6 +71,7 @@ async def start_workflow(
     await session.refresh(workflow)
     
     return success_response({
+        "id": workflow.id,
         "workflow_id": workflow.id,
         "document_id": payload.document_id,
         "state": workflow.state
@@ -82,53 +101,4 @@ async def get_workflow(
     })
 
 
-@router.get("/tasks")
-async def list_tasks(
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
-):
-    result = await session.execute(
-        select(Task).where(Task.assignee_id == current_user.id)
-        .order_by(Task.created_at.desc())
-    )
-    tasks = result.scalars().all()
-    
-    return success_response([{
-        "id": t.id,
-        "workflow_id": t.workflow_id,
-        "state": t.state,
-        "action": t.action,
-        "comment": t.comment,
-        "created_at": t.created_at.isoformat()
-    } for t in tasks])
-
-
-@router.post("/tasks/{task_id}/action")
-async def task_action(
-    task_id: int,
-    payload: TaskAction,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
-):
-    result = await session.execute(select(Task).where(Task.id == task_id))
-    task = result.scalar_one_or_none()
-    
-    if not task:
-        return error_response("Task not found", status_code=status.HTTP_404_NOT_FOUND)
-    
-    if task.assignee_id != current_user.id:
-        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
-    
-    task.action = payload.action
-    task.comment = payload.comment
-    task.state = "completed" if payload.action in ["approve", "reject"] else "pending"
-    task.updated_at = datetime.utcnow()
-    
-    await session.commit()
-    
-    return success_response({
-        "task_id": task_id,
-        "action": payload.action,
-        "state": task.state
-    })
 

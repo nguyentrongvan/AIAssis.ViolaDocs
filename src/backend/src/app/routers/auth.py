@@ -7,6 +7,7 @@ from sqlalchemy import select
 from ..db import get_session
 from ..dependencies import get_current_user
 from ..models.users import User
+from ..models.devices import Device
 from ..services.auth import (
     authenticate_user,
     create_access_token,
@@ -32,6 +33,11 @@ class TokenResponse(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class DeviceLoginRequest(BaseModel):
+    device_key: str
+    device_id: int
 
 
 @router.post("/login")
@@ -67,6 +73,40 @@ async def refresh(request: RefreshRequest):
     return success_response({
         "access_token": access_token,
         "token_type": "bearer"
+    })
+
+
+@router.post("/device/login")
+async def device_login(
+    request: DeviceLoginRequest,
+    session: AsyncSession = Depends(get_session)
+):
+    """Device login using device key."""
+    result = await session.execute(select(Device).where(Device.id == request.device_id))
+    device = result.scalar_one_or_none()
+    
+    if not device:
+        return error_response("Device not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    if not device.public_key or device.public_key != request.device_key:
+        return error_response("Invalid device key", status_code=status.HTTP_401_UNAUTHORIZED)
+    
+    # Create device token (JWT with device info)
+    device_token = create_access_token(data={
+        "sub": f"device_{device.id}",
+        "device_id": device.id,
+        "type": "device"
+    })
+    
+    # Update device last_seen
+    device.last_seen = datetime.utcnow()
+    device.status = "online"
+    await session.commit()
+    
+    return success_response({
+        "device_token": device_token,
+        "token_type": "bearer",
+        "device_id": device.id
     })
 
 

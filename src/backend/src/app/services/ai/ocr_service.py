@@ -63,7 +63,7 @@ class PaddleOcrProvider(OcrProvider):
     
     def process_pdf(self, pdf_data: bytes, languages: List[str]) -> dict:
         if not self.ocr:
-            return {"text": "", "error": "PaddleOCR not available"}
+            return {"text": "", "error": "PaddleOCR not available", "pages": 0}
         
         try:
             # Use PyMuPDF to extract pages as images
@@ -86,6 +86,7 @@ class PaddleOcrProvider(OcrProvider):
                             text_lines.append(line[1][0])
                 all_text.extend(text_lines)
             
+            page_count = len(pdf_document)
             pdf_document.close()
             
             full_text = "\n".join(all_text)
@@ -93,7 +94,7 @@ class PaddleOcrProvider(OcrProvider):
                 "text": full_text,
                 "lines": all_text,
                 "provider": "paddle",
-                "pages": len(pdf_document),
+                "pages": page_count,
                 "languages": languages
             }
         except Exception as e:
