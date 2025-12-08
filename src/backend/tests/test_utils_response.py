@@ -91,3 +91,4 @@ class TestResponseUtils:
         response = error_response("Forbidden", status_code=403)
         
         assert response.status_code == 403
+

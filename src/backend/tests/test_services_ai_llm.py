@@ -193,3 +193,4 @@ class TestOpenAILLMProvider:
         result = provider.generate_response("Prompt text")
         
         assert "not available" in result.lower()
+

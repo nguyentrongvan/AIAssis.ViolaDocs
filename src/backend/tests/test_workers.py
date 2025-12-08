@@ -317,3 +317,4 @@ class TestEmbeddingWorker:
             
             await test_db.refresh(job)
             assert job.status == "failed"
+

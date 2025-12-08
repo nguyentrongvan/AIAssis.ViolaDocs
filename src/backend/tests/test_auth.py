@@ -273,3 +273,4 @@ class TestAuthMe:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["data"]["role"] == "staff"
+

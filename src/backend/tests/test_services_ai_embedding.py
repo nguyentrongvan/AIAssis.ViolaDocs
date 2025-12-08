@@ -165,3 +165,4 @@ class TestGeminiEmbeddingProvider:
         
         assert len(result) == 768
         assert all(v == 0.0 for v in result)
+

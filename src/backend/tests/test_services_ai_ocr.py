@@ -134,3 +134,4 @@ class TestPaddleOcrProvider:
         
         assert "error" in result
         assert result["text"] == ""
+

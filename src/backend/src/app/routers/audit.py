@@ -153,3 +153,4 @@ async def export_audit_logs(
             } for e in events],
             "total": len(events)
         })
+

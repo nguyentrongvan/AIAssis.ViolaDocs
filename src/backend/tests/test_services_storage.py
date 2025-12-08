@@ -152,3 +152,4 @@ class TestStorageService:
             url = get_object_url("test/file.pdf")
             
             assert url == "https://minio.example.com:9000/documents/test/file.pdf"
+

@@ -32,3 +32,4 @@ def error_response(message: str, status_code: int = 400, details: Optional[Any] 
     )
 
 
+

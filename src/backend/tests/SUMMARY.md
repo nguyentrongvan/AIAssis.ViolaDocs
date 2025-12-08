@@ -225,3 +225,4 @@ pytest -m auth         # Authentication tests
 5. Worker tests use mocks for external dependencies (MinIO, AI services) to avoid requiring actual services during testing.
 
 6. All comments and documentation are in English.
+

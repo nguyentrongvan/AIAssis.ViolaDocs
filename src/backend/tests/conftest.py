@@ -221,3 +221,4 @@ async def test_device(test_db: AsyncSession) -> Device:
     await test_db.commit()
     await test_db.refresh(device)
     return device
+

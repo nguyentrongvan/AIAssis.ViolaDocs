@@ -336,3 +336,4 @@ class TestTasksInbox:
         """Test getting tasks without authentication."""
         response = client.get("/api/v1/tasks")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+

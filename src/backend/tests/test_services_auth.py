@@ -225,3 +225,4 @@ class TestAuthService:
         found_user = await get_user_by_id(test_db, 99999)
         
         assert found_user is None
+

@@ -255,3 +255,4 @@ class TestAIJobsStatus:
         """Test getting job status without authentication."""
         response = client.get("/api/v1/ai/jobs/1")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+

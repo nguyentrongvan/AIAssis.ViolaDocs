@@ -427,3 +427,4 @@ class TestDocumentsRenditions:
         )
         # Adjust based on actual implementation
         assert response.status_code in [status.HTTP_200_OK, status.HTTP_404_NOT_FOUND, status.HTTP_405_METHOD_NOT_ALLOWED]
+

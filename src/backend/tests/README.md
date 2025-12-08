@@ -110,3 +110,4 @@ Required packages (already in requirements.txt):
 4. Device authentication tests may need adjustment based on actual implementation.
 
 5. Worker tests use mocks for external dependencies (MinIO, AI services) to avoid requiring actual services during testing.
+

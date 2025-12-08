@@ -152,3 +152,4 @@ class TestReportsDataQuality:
             headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
+

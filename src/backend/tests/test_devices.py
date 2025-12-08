@@ -250,3 +250,4 @@ class TestDevicesPing:
         if response.status_code == status.HTTP_200_OK:
             # Verify last_seen was updated
             pass
+

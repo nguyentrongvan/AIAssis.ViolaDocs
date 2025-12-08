@@ -335,3 +335,4 @@ class TestScanJobs:
         )
         # Adjust based on actual implementation
         assert response.status_code in [status.HTTP_200_OK, status.HTTP_401_UNAUTHORIZED, status.HTTP_404_NOT_FOUND]
+

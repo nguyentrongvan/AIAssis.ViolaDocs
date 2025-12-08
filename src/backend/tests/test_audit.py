@@ -175,3 +175,4 @@ class TestAuditExport:
             json={"format": "csv"}
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
