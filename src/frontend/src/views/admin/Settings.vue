@@ -289,9 +289,32 @@ const loadRetentionPolicies = async () => {
 const loadProviders = async () => {
   try {
     await settingsStore.fetchProviders()
-    providers.value = settingsStore.providers
+    const rawProviders = settingsStore.providers
+    
+    // Normalize providers to ensure they are arrays of objects
+    if (rawProviders) {
+      providers.value = {
+        ocr: Array.isArray(rawProviders.ocr) ? rawProviders.ocr : [],
+        embedding: Array.isArray(rawProviders.embedding) ? rawProviders.embedding : [],
+        llm: Array.isArray(rawProviders.llm) ? rawProviders.llm : [],
+        search: Array.isArray(rawProviders.search) ? rawProviders.search : []
+      }
+    } else {
+      providers.value = {
+        ocr: [],
+        embedding: [],
+        llm: [],
+        search: []
+      }
+    }
   } catch (e) {
     console.error('Failed to load providers', e)
+    providers.value = {
+      ocr: [],
+      embedding: [],
+      llm: [],
+      search: []
+    }
   }
 }
 

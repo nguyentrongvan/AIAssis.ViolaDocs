@@ -152,25 +152,49 @@ async def get_provider_settings(
     from ..config import settings
     
     return success_response({
-        "ocr": {
-            "provider": "paddle",
-            "enabled": True,
-            "languages": ["en", "vi"]
-        },
-        "embedding": {
-            "provider": "openai",
-            "enabled": bool(settings.openai_api_key),
-            "model": "text-embedding-3-small"
-        },
-        "llm": {
-            "provider": "openai",
-            "enabled": bool(settings.openai_api_key),
-            "model": "gpt-4"
-        },
-        "search": {
-            "provider": "postgres",
-            "enabled": True
-        }
+        "ocr": [
+            {
+                "name": "paddle",
+                "enabled": True,
+                "health": "unknown",
+                "languages": ["en", "vi"]
+            }
+        ],
+        "embedding": [
+            {
+                "name": "openai",
+                "enabled": bool(settings.openai_api_key),
+                "health": "unknown",
+                "model": "text-embedding-3-small"
+            },
+            {
+                "name": "local",
+                "enabled": True,
+                "health": "unknown",
+                "model": settings.embedding_model_name
+            }
+        ],
+        "llm": [
+            {
+                "name": "openai",
+                "enabled": bool(settings.openai_api_key),
+                "health": "unknown",
+                "models": ["gpt-4", "gpt-3.5-turbo"]
+            },
+            {
+                "name": "gemini",
+                "enabled": bool(settings.gemini_api_key),
+                "health": "unknown",
+                "models": ["gemini-pro"]
+            }
+        ],
+        "search": [
+            {
+                "name": "postgres",
+                "enabled": True,
+                "health": "unknown"
+            }
+        ]
     })
 
 
