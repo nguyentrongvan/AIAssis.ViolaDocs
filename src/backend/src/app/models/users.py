@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Boolean
 from sqlalchemy.orm import relationship
 from .base import BaseModel
 
@@ -17,6 +17,7 @@ class User(BaseModel):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     locale = Column(String(10), nullable=True)  # e.g., "en", "vi"
     time_zone = Column(String(50), nullable=True)  # e.g., "Asia/Ho_Chi_Minh"
+    is_maintainer = Column(Boolean, default=False, nullable=False)  # Root admin/maintainer flag for system config access
     
     # Many-to-many relationship with Role
     roles = relationship("Role", secondary="user_roles", back_populates="users")

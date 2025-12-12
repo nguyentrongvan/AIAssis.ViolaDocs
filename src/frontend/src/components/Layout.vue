@@ -61,6 +61,13 @@
             <span>Roles</span>
           </router-link>
         </template>
+        <template v-if="authStore.isMaintainer">
+          <div class="nav-divider">Maintainer</div>
+          <router-link to="/admin/system-config" class="nav-item">
+            <Settings class="nav-icon" />
+            <span>System Config</span>
+          </router-link>
+        </template>
       </nav>
       <div class="user-menu">
         <div class="user-info">

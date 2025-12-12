@@ -57,6 +57,22 @@ async def get_current_admin_user(
     return current_user
 
 
+async def get_current_maintainer(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """
+    Require maintainer/root admin access.
+    Maintainer is a user with is_maintainer=True flag.
+    This is the highest privilege level for system configuration management.
+    """
+    if not hasattr(current_user, 'is_maintainer') or not getattr(current_user, 'is_maintainer', False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Maintainer access required. This endpoint is restricted to root administrators."
+        )
+    return current_user
+
+
 
 
 

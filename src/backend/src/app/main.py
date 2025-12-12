@@ -17,6 +17,7 @@ from .routers import (
     scan_jobs,
     search,
     settings as settings_router,
+    system_config,
     tasks,
     uploads,
     users,
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
     app.include_router(tasks.router, prefix=api_prefix)
     app.include_router(ai.router, prefix=api_prefix)
     app.include_router(settings_router.router, prefix=api_prefix)
+    app.include_router(system_config.router, prefix=api_prefix)
     return app
 
 

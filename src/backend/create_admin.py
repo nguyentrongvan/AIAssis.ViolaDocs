@@ -40,6 +40,7 @@ async def create_admin():
             password_hash=get_password_hash("admin123"),
             role="admin",
             status="active",
+            is_maintainer=True,  # Grant maintainer access for system config management
             created_by=None
         )
         session.add(admin)

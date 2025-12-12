@@ -98,6 +98,13 @@ export const groupsAPI = {
   reindex: (id) => api.post(`/groups/${id}/reindex`)
 }
 
+export const systemConfigAPI = {
+  get: () => api.get('/system/config'),
+  update: (key, value, description) => api.post('/system/config/update', { key, value, description }),
+  updateBulk: (configs) => api.post('/system/config/update-bulk', { configs }),
+  getCategories: () => api.get('/system/config/categories')
+}
+
 export const uploadsAPI = {
   init: (data) => api.post('/uploads/init', data),
   chunk: (id, chunk, offset) => api.put(`/uploads/${id}/chunk`, chunk, {

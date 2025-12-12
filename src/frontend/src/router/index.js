@@ -86,6 +86,12 @@ const routes = [
         path: 'admin/roles',
         name: 'AdminRoles',
         component: () => import('../views/admin/Roles.vue')
+      },
+      {
+        path: 'admin/system-config',
+        name: 'AdminSystemConfig',
+        component: () => import('../views/admin/SystemConfig.vue'),
+        meta: { requiresMaintainer: true }
       }
     ]
   }
@@ -106,6 +112,8 @@ router.beforeEach(async (to, from, next) => {
   
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
+  } else if (to.meta.requiresMaintainer && !authStore.isMaintainer) {
+    next('/')
   } else {
     next()
   }
