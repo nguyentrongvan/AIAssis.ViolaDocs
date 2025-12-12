@@ -48,6 +48,16 @@ const routes = [
         component: () => import('../views/Chatbot.vue')
       },
       {
+        path: 'folders',
+        name: 'Folders',
+        component: () => import('../views/Folders.vue')
+      },
+      {
+        path: 'folders/:id',
+        name: 'FolderDetail',
+        component: () => import('../views/Folders.vue')
+      },
+      {
         path: 'admin/users',
         name: 'AdminUsers',
         component: () => import('../views/admin/Users.vue')
@@ -71,6 +81,11 @@ const routes = [
         path: 'admin/reports',
         name: 'AdminReports',
         component: () => import('../views/admin/Reports.vue')
+      },
+      {
+        path: 'admin/roles',
+        name: 'AdminRoles',
+        component: () => import('../views/admin/Roles.vue')
       }
     ]
   }
@@ -81,8 +96,14 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
+  
+  // Fetch user if we have token but no user data
+  if (authStore.token && !authStore.user) {
+    await authStore.fetchMe()
+  }
+  
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
   } else {

@@ -42,12 +42,101 @@
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Folder ID</label>
-              <input v-model.number="file.metadata.folder_id" type="number" placeholder="Optional" />
+              <label>Folder</label>
+              <div class="picker-input">
+                <input
+                  :value="getFolderName(file.metadata.folder_id)"
+                  readonly
+                  placeholder="Select folder"
+                  @click="openFolderPicker(idx)"
+                />
+                <button
+                  type="button"
+                  @click="openFolderPicker(idx)"
+                  class="picker-btn"
+                >
+                  <Folder :size="16" />
+                </button>
+                <button
+                  v-if="file.metadata.folder_id"
+                  type="button"
+                  @click.stop="file.metadata.folder_id = null"
+                  class="picker-clear"
+                >
+                  ×
+                </button>
+              </div>
             </div>
             <div class="form-group">
-              <label>Retention Policy ID</label>
-              <input v-model.number="file.metadata.retention_policy_id" type="number" placeholder="Optional" />
+              <label>Retention Policy</label>
+              <select v-model.number="file.metadata.retention_policy_id">
+                <option :value="null">Default</option>
+                <option
+                  v-for="p in retentionPolicies"
+                  :key="p.id"
+                  :value="p.id"
+                >
+                  {{ p.name }} ({{ p.duration_days }} days)
+                </option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>ACL - Allowed Users</label>
+            <div class="acl-selector">
+              <div class="selected-items">
+                <span
+                  v-for="userId in file.metadata.allowed_users || []"
+                  :key="userId"
+                  class="selected-item"
+                >
+                  {{ getUserName(userId) }}
+                  <button @click="removeUser(idx, userId)" class="item-remove">×</button>
+                </span>
+              </div>
+              <select
+                @change="addUser(idx, $event.target.value)"
+                class="acl-select"
+              >
+                <option value="">Add user...</option>
+                <option
+                  v-for="user in users"
+                  :key="user.id"
+                  :value="user.id"
+                  :disabled="(file.metadata.allowed_users || []).includes(user.id)"
+                >
+                  {{ user.name }} ({{ user.email }})
+                </option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>ACL - Allowed Roles</label>
+            <div class="acl-selector">
+              <div class="selected-items">
+                <span
+                  v-for="roleId in file.metadata.allowed_roles || []"
+                  :key="roleId"
+                  class="selected-item"
+                >
+                  {{ getRoleName(roleId) }}
+                  <button @click="removeRole(idx, roleId)" class="item-remove">×</button>
+                </span>
+              </div>
+              <select
+                @change="addRole(idx, $event.target.value)"
+                class="acl-select"
+              >
+                <option value="">Add role...</option>
+                <option
+                  v-for="role in roles"
+                  :key="role.id"
+                  :value="role.id"
+                  :disabled="(file.metadata.allowed_roles || []).includes(role.id)"
+                >
+                  {{ role.name }}
+                </option>
+              </select>
             </div>
           </div>
           <div class="form-group">
@@ -101,18 +190,45 @@
       </button>
       <button @click="clearFiles" class="btn-secondary">Clear All</button>
     </div>
+
+    <!-- Folder Picker Modal -->
+    <Modal v-model:show="showFolderPicker" title="Select Folder">
+      <FolderTree
+        :folders="foldersStore.folderTree"
+        @select="selectFolder"
+      />
+      <template #footer>
+        <button @click="showFolderPicker = false" class="btn-secondary">Cancel</button>
+      </template>
+    </Modal>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import api from '../services/api'
-import { Upload, Loader2, CheckCircle, XCircle } from 'lucide-vue-next'
+import { ref, onMounted } from 'vue'
+import { useFoldersStore } from '../store/folders'
+import { useSettingsStore } from '../store/settings'
+import { useRolesStore } from '../store/roles'
+import { usersAPI, uploadsAPI } from '../services/api'
+import { FolderTree, Modal } from '../components'
+import { Upload, Loader2, CheckCircle, XCircle, Folder, Shield } from 'lucide-vue-next'
 
 const fileInput = ref(null)
 const folderInput = ref(null)
 const files = ref([])
 const uploading = ref(false)
+const foldersStore = useFoldersStore()
+const settingsStore = useSettingsStore()
+const rolesStore = useRolesStore()
+
+const folders = ref([])
+const retentionPolicies = ref([])
+const roles = ref([])
+const users = ref([])
+const showFolderPicker = ref(false)
+const showUserPicker = ref(false)
+const showRolePicker = ref(false)
+const currentFileIndex = ref(null)
 
 const handleDrop = (e) => {
   const droppedFiles = Array.from(e.dataTransfer.files)
@@ -155,7 +271,9 @@ const addFiles = (fileList) => {
         folder_id: null,
         retention_policy_id: null,
         sensitivity: '',
-        workflow_template: ''
+        workflow_template: '',
+        allowed_users: [],
+        allowed_roles: []
       }
     })
   })
@@ -227,7 +345,7 @@ const startUpload = async () => {
       
       // Init upload
       fileItem.status = 'uploading'
-      const initRes = await api.post('/uploads/init', {
+      const initRes = await uploadsAPI.init({
         filename: fileItem.name,
         size: fileItem.size,
         mime: fileItem.file.type || 'application/octet-stream',
@@ -253,12 +371,14 @@ const startUpload = async () => {
         folder_id: fileItem.metadata.folder_id || null,
         retention_policy_id: fileItem.metadata.retention_policy_id || null,
         sensitivity: fileItem.metadata.sensitivity || null,
-        workflow_template: fileItem.metadata.workflow_template || null
+        workflow_template: fileItem.metadata.workflow_template || null,
+        allowed_users: fileItem.metadata.allowed_users || [],
+        allowed_roles: fileItem.metadata.allowed_roles || []
       }
       
       // Finalize upload
       fileItem.status = 'processing'
-      const finalizeRes = await api.post(`/uploads/${upload_id}/finalize`, finalizeData)
+      const finalizeRes = await uploadsAPI.finalize(upload_id, finalizeData)
       
       if (!finalizeRes.is_success) {
         throw new Error(finalizeRes.message || 'Failed to finalize upload')
@@ -312,6 +432,70 @@ const uploadFile = (file, url, onProgress) => {
 
 const clearFiles = () => {
   files.value = []
+}
+
+onMounted(async () => {
+  await loadFolders()
+  await loadRetentionPolicies()
+  await loadRoles()
+  await loadUsers()
+})
+
+const loadFolders = async () => {
+  try {
+    await foldersStore.fetchFolders()
+    folders.value = foldersStore.folders
+  } catch (e) {
+    console.error('Failed to load folders', e)
+  }
+}
+
+const loadRetentionPolicies = async () => {
+  try {
+    await settingsStore.fetchRetentionPolicies()
+    retentionPolicies.value = settingsStore.retentionPolicies
+  } catch (e) {
+    console.error('Failed to load retention policies', e)
+  }
+}
+
+const loadRoles = async () => {
+  try {
+    await rolesStore.fetchRoles()
+    roles.value = rolesStore.roles
+  } catch (e) {
+    console.error('Failed to load roles', e)
+  }
+}
+
+const loadUsers = async () => {
+  try {
+    const res = await usersAPI.list()
+    if (res.is_success) {
+      users.value = res.data || []
+    }
+  } catch (e) {
+    console.error('Failed to load users', e)
+  }
+}
+
+const openFolderPicker = (index) => {
+  currentFileIndex.value = index
+  showFolderPicker.value = true
+}
+
+const selectFolder = (folder) => {
+  if (currentFileIndex.value !== null) {
+    files.value[currentFileIndex.value].metadata.folder_id = folder.id
+  }
+  showFolderPicker.value = false
+  currentFileIndex.value = null
+}
+
+const getFolderName = (folderId) => {
+  if (!folderId) return 'None'
+  const folder = folders.value.find(f => f.id === folderId)
+  return folder ? folder.name : 'Unknown'
 }
 </script>
 
@@ -548,5 +732,94 @@ const clearFiles = () => {
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.picker-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.picker-input input {
+  flex: 1;
+  cursor: pointer;
+}
+
+.picker-btn {
+  padding: 0.5rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.picker-btn:hover {
+  background: var(--primary-dark);
+}
+
+.picker-clear {
+  padding: 0.5rem;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.picker-clear:hover {
+  background: #dc2626;
+}
+
+.acl-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.selected-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.selected-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--primary-light);
+  color: var(--primary);
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+
+.item-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--primary);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.item-remove:hover {
+  color: #ef4444;
+}
+
+.acl-select {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
 }
 </style>

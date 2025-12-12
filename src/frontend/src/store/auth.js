@@ -13,15 +13,27 @@ export const useAuthStore = defineStore('auth', {
   },
   actions: {
     async login(email, password) {
-      const res = await api.post('/auth/login', { email, password })
-      if (res.is_success && res.data) {
-        this.token = res.data.access_token
-        localStorage.setItem('access_token', res.data.access_token)
-        localStorage.setItem('refresh_token', res.data.refresh_token)
-        await this.fetchMe()
-        return true
+      try {
+        const res = await api.post('/auth/login', { email, password })
+        if (res.is_success && res.data) {
+          this.token = res.data.access_token
+          localStorage.setItem('access_token', res.data.access_token)
+          localStorage.setItem('refresh_token', res.data.refresh_token)
+          await this.fetchMe()
+          return true
+        }
+        throw new Error(res.message || 'Login failed')
+      } catch (error) {
+        // Handle axios errors
+        if (error.response) {
+          const errorData = error.response.data
+          throw new Error(errorData?.message || errorData?.data?.error?.message || 'Login failed')
+        } else if (error.request) {
+          throw new Error('Cannot connect to server. Please check if backend is running.')
+        } else {
+          throw error
+        }
       }
-      throw new Error(res.message || 'Login failed')
     },
     async fetchMe() {
       try {
@@ -31,6 +43,10 @@ export const useAuthStore = defineStore('auth', {
         }
       } catch (e) {
         console.error('Failed to fetch user', e)
+        // If token is invalid, clear it
+        if (e.response?.status === 401) {
+          this.logout()
+        }
       }
     },
     logout() {

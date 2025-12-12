@@ -18,6 +18,10 @@
           <Scan class="nav-icon" />
           <span>Scan Inbox</span>
         </router-link>
+        <router-link to="/folders" class="nav-item">
+          <Folder class="nav-icon" />
+          <span>Folders</span>
+        </router-link>
         <router-link to="/search" class="nav-item">
           <Search class="nav-icon" />
           <span>Search</span>
@@ -52,6 +56,10 @@
             <BarChart3 class="nav-icon" />
             <span>Reports</span>
           </router-link>
+          <router-link to="/admin/roles" class="nav-item">
+            <Shield class="nav-icon" />
+            <span>Roles</span>
+          </router-link>
         </template>
       </nav>
       <div class="user-menu">
@@ -74,6 +82,7 @@
 </template>
 
 <script setup>
+import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 import {
@@ -89,11 +98,19 @@ import {
   Settings,
   BarChart3,
   User,
-  LogOut
+  LogOut,
+  Shield
 } from 'lucide-vue-next'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+onMounted(async () => {
+  // Ensure user data is loaded if we have a token
+  if (authStore.token && !authStore.user) {
+    await authStore.fetchMe()
+  }
+})
 
 const handleLogout = () => {
   authStore.logout()
