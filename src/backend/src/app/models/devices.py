@@ -12,4 +12,6 @@ class Device(BaseModel):
     status = Column(String(50), default="offline")  # online, offline
     last_seen = Column(DateTime, nullable=True)
     public_key = Column(String(255), nullable=True)  # Device authentication key
+    allowed_users = Column(JSON, nullable=True, default=[])  # Array of user IDs
+    allowed_groups = Column(JSON, nullable=True, default=[])  # Array of group IDs
 

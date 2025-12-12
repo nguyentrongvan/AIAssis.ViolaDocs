@@ -186,3 +186,57 @@ async def deactivate_user(
     })
 
 
+@router.get("/{user_id}")
+async def get_user(
+    user_id: int,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get user details."""
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        return error_response("User not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    return success_response({
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role,
+        "status": user.status,
+        "expires_at": user.expires_at.isoformat() if user.expires_at else None,
+        "locale": user.locale,
+        "time_zone": user.time_zone,
+        "created_at": user.created_at.isoformat()
+    })
+
+
+class UserExpiryUpdate(BaseModel):
+    expires_at: Optional[str] = None
+
+
+@router.patch("/{user_id}/expiry")
+async def set_user_expiry(
+    user_id: int,
+    payload: UserExpiryUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Set expires_at for short-term accounts."""
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        return error_response("User not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    user.expires_at = datetime.fromisoformat(payload.expires_at) if payload.expires_at else None
+    await session.commit()
+    await session.refresh(user)
+    
+    return success_response({
+        "id": user.id,
+        "expires_at": user.expires_at.isoformat() if user.expires_at else None
+    })
+
+

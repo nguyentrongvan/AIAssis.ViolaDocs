@@ -252,10 +252,36 @@ class TestDocumentsDelete:
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
     
-    async def test_delete_document_unauthorized(self, client, user_token, test_document):
-        """Test deleting document as non-admin."""
+    async def test_delete_document_unauthorized(self, client, user_token, test_db, regular_user):
+        """Test deleting document as non-admin/non-owner."""
+        # Create document owned by different user
+        from src.app.models.users import User
+        other_user = User(
+            name="Other User",
+            email="other@example.com",
+            password_hash="hash",
+            role="user",
+            status="active"
+        )
+        test_db.add(other_user)
+        await test_db.flush()
+        
+        from src.app.models.documents import Document
+        doc = Document(
+            title="Other User's Doc",
+            source="web",
+            owner_id=other_user.id,
+            mime="application/pdf",
+            size=1024,
+            status="ready"
+        )
+        test_db.add(doc)
+        await test_db.commit()
+        await test_db.refresh(doc)
+        
+        # Try to delete as regular_user (not owner, not admin)
         response = client.delete(
-            f"/api/v1/documents/{test_document.id}",
+            f"/api/v1/documents/{doc.id}",
             headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -427,4 +453,7 @@ class TestDocumentsRenditions:
         )
         # Adjust based on actual implementation
         assert response.status_code in [status.HTTP_200_OK, status.HTTP_404_NOT_FOUND, status.HTTP_405_METHOD_NOT_ALLOWED]
+
+
+
 

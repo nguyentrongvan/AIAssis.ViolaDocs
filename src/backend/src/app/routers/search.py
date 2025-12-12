@@ -8,7 +8,6 @@ from ..db import get_session
 from ..dependencies import get_current_user, get_current_admin_user
 from ..models.users import User
 from ..models.documents import Document
-from ..models.ai import Embedding
 from ..services.ai import get_embedding_service
 from ..utils.response import success_response, error_response
 
@@ -75,17 +74,40 @@ async def search(
         result = await session.execute(keyword_query)
         keyword_results = result.scalars().all()
     
-    # Vector search (placeholder - requires pgvector setup)
+    # Vector search via Chroma
     if request.mode in ["vector", "hybrid"]:
-        # For now, return empty results if vector search is requested
-        # In production, this would use pgvector or external vector DB
         embedding_service = get_embedding_service()
         if embedding_service:
             # Generate query embedding
             query_embedding = embedding_service.generate_embedding(request.query)
-            # TODO: Use pgvector to find similar documents
-            # For now, return empty
-            vector_results = []
+            search_filters = {"owner_id": current_user.id}
+            if request.group_id:
+                search_filters["group_id"] = request.group_id
+            chroma_result = embedding_service.query_embeddings(
+                query_embedding=query_embedding,
+                where=search_filters,
+                top_k=request.limit
+            )
+            doc_ids = []
+            if chroma_result and chroma_result.get("metadatas"):
+                for metas in chroma_result["metadatas"]:
+                    for meta in metas:
+                        doc_id = meta.get("doc_id")
+                        if doc_id:
+                            doc_ids.append(doc_id)
+            if doc_ids:
+                docs_result = await session.execute(
+                    select(Document).where(
+                        and_(
+                            Document.id.in_(doc_ids),
+                            Document.owner_id == current_user.id,
+                            Document.deleted_at.is_(None)
+                        )
+                    )
+                )
+                vector_results = docs_result.scalars().all()
+            else:
+                vector_results = []
         else:
             # No embedding service configured
             if request.mode == "vector":
@@ -130,17 +152,50 @@ async def vector_search(
     # Generate query embedding
     query_embedding = embedding_service.generate_embedding(request.query)
     
-    # TODO: Use pgvector to find similar documents
-    # For now, return empty results
-    # In production, this would:
-    # 1. Query embeddings table with cosine similarity
-    # 2. Filter by ACL (owner_id == current_user.id)
-    # 3. Apply additional filters from request.filters
-    # 4. Return top_k results
+    search_filters = {"owner_id": current_user.id}
+    if request.filters and isinstance(request.filters, dict):
+        if "group_id" in request.filters:
+            search_filters["group_id"] = request.filters["group_id"]
+    
+    chroma_result = embedding_service.query_embeddings(
+        query_embedding=query_embedding,
+        where=search_filters,
+        top_k=request.top_k
+    )
+    
+    doc_ids = []
+    if chroma_result and chroma_result.get("metadatas"):
+        for metas in chroma_result["metadatas"]:
+            for meta in metas:
+                doc_id = meta.get("doc_id")
+                if doc_id:
+                    doc_ids.append(doc_id)
+    
+    docs = []
+    if doc_ids:
+        docs_result = await session.execute(
+            select(Document).where(
+                and_(
+                    Document.id.in_(doc_ids),
+                    Document.owner_id == current_user.id,
+                    Document.deleted_at.is_(None)
+                )
+            )
+        )
+        docs = docs_result.scalars().all()
+    
+    results = [{
+        "id": doc.id,
+        "title": doc.title,
+        "mime": doc.mime,
+        "size": doc.size,
+        "created_at": doc.created_at.isoformat(),
+        "snippet": doc.title
+    } for doc in docs]
     
     return success_response({
-        "results": [],
-        "total": 0
+        "results": results,
+        "total": len(results)
     })
 
 
@@ -150,6 +205,8 @@ async def reindex_all(
     session: AsyncSession = Depends(get_session)
 ):
     """Reindex all documents (admin only)."""
+    # Note: Existing pgvector data is no longer used; this triggers fresh
+    # embedding jobs to populate the Chroma vector store.
     # Get all documents that need reindexing
     result = await session.execute(
         select(Document).where(

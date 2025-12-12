@@ -105,15 +105,15 @@ class TestPaddleOcrProvider:
     
     def test_paddle_ocr_provider_initialization(self):
         """Test PaddleOCR provider initialization."""
-        with patch('src.app.services.ai.ocr_service.settings') as mock_settings:
-            mock_settings.ocr_lang_list = ["en"]
+        with patch('paddleocr.PaddleOCR') as mock_paddle_class:
+            mock_paddle_instance = MagicMock()
+            mock_paddle_class.return_value = mock_paddle_instance
             
-            with patch('src.app.services.ai.ocr_service.PaddleOCR') as mock_paddle:
-                provider = PaddleOcrProvider()
-                
-                # Should attempt to initialize PaddleOCR
-                # (may fail if not installed, but that's OK for tests)
-                assert provider is not None
+            provider = PaddleOcrProvider()
+            
+            # Should attempt to initialize PaddleOCR
+            # (may fail if not installed, but that's OK for tests)
+            assert provider is not None
     
     def test_paddle_ocr_process_image_not_available(self):
         """Test PaddleOCR when not available."""
@@ -134,4 +134,7 @@ class TestPaddleOcrProvider:
         
         assert "error" in result
         assert result["text"] == ""
+
+
+
 

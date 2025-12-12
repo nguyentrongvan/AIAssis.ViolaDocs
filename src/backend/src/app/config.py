@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     # OCR
     ocr_provider: str = "paddle"
     ocr_languages: str = "en,vi"
+    
+    # Embedding - Local model name (sentence-transformers)
+    # Options: all-MiniLM-L6-v2 (fast, 384d), paraphrase-multilingual-MiniLM-L12-v2 (multilingual, 384d), all-mpnet-base-v2 (better quality, 768d)
+    embedding_model_name: str = "all-MiniLM-L6-v2"
+    # Chroma vector store config (local persistent by default; can point to HTTP server)
+    chroma_persist_dir: str = "./data/chroma"
+    chroma_collection: str = "embeddings"
+    chroma_server_host: str = ""   # e.g., "localhost" to use HTTP server
+    chroma_server_port: int = 8001
+    chroma_server_ssl: bool = False
 
     @property
     def ocr_lang_list(self) -> List[str]:

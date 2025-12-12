@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from ..db import get_session
 from ..dependencies import get_current_user, get_current_admin_user
 from ..models.users import User
-from ..models.documents import Document, DocumentVersion, Tag, DocumentTag, Share
+from ..models.documents import Document, DocumentVersion, Tag, DocumentTag, Share, Comment
 from ..services.storage import generate_presigned_download_url
 from ..utils.response import success_response, error_response
 from ..config import settings
@@ -357,14 +357,25 @@ async def compare_versions(
     if not v1 or not v2:
         return error_response("Version not found", status_code=status.HTTP_404_NOT_FOUND)
     
-    # Simple diff (can be enhanced later)
+    # Use diff service to compare versions
+    from ..services.diff import compare_versions as diff_compare
+    
+    diff_result = await diff_compare(
+        v1.text_uri,
+        v2.text_uri,
+        v1.metadata_snapshot,
+        v2.metadata_snapshot
+    )
+    
+    # Get ACL changes from audit events (simplified - would need to query audit events)
+    acl_diff = {}
+    
     return success_response({
-        "content_diff": {},
-        "metadata_diff": {
-            "v1": v1.metadata_snapshot or {},
-            "v2": v2.metadata_snapshot or {}
-        },
-        "acl_diff": {}
+        "content_diff": diff_result["content_diff"],
+        "metadata_diff": diff_result["metadata_diff"],
+        "acl_diff": acl_diff,
+        "has_content_diff": diff_result["has_content_diff"],
+        "has_metadata_diff": diff_result["has_metadata_diff"]
     })
 
 
@@ -445,10 +456,11 @@ async def share_document(
         target_id = 0
     elif not target_type:
         # Create share link
-        import uuid
         share_token = str(uuid.uuid4())
         target_type = "link"
         target_id = None
+    else:
+        share_token = None
     
     if request.expires_at:
         expires_at = datetime.fromisoformat(request.expires_at)
@@ -458,6 +470,7 @@ async def share_document(
         document_id=doc_id,
         target_type=target_type,
         target_id=target_id,
+        share_token=share_token,
         expires_at=expires_at,
         permissions=request.permissions or ["read"]
     )
@@ -472,11 +485,17 @@ async def share_document(
     if request.target_role:
         target_response["role"] = request.target_role
     
-    return success_response({
+    response_data = {
         "share_id": share.id,
         "target": target_response,
         "expires_at": share.expires_at.isoformat() if share.expires_at else None
-    })
+    }
+    
+    if share.share_token:
+        response_data["share_token"] = share.share_token
+        response_data["share_url"] = f"/api/v1/documents/shared/{share.share_token}"
+    
+    return success_response(response_data)
 
 
 @router.get("/{doc_id}/renditions/{rendition_type}")
@@ -530,4 +549,246 @@ async def get_rendition(
         "url": download_url,
         "expires_in": 3600
     })
+
+
+class CommentCreate(BaseModel):
+    content: str
+    version_id: Optional[int] = None
+    type: str = "comment"  # comment, annotation
+    position: Optional[dict] = None  # For annotations: page, x, y, width, height, etc.
+
+
+class CommentUpdate(BaseModel):
+    content: Optional[str] = None
+    position: Optional[dict] = None
+
+
+@router.post("/{doc_id}/comments")
+async def create_comment(
+    doc_id: int,
+    payload: CommentCreate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Create a comment or annotation on a document."""
+    # Verify document access
+    doc_result = await session.execute(
+        select(Document).where(and_(Document.id == doc_id, Document.deleted_at.is_(None)))
+    )
+    doc = doc_result.scalar_one_or_none()
+    
+    if not doc:
+        return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Check access via share if not owner
+    has_access = False
+    if doc.owner_id == current_user.id or current_user.role in ["admin", "staff"]:
+        has_access = True
+    else:
+        # Check shares
+        shares_result = await session.execute(
+            select(Share).where(
+                and_(
+                    Share.document_id == doc_id,
+                    or_(
+                        Share.expires_at.is_(None),
+                        Share.expires_at > datetime.utcnow()
+                    )
+                )
+            )
+        )
+        shares = shares_result.scalars().all()
+        for share in shares:
+            if share.target_type == "user" and share.target_id == current_user.id:
+                has_access = True
+                break
+            elif share.target_type == "role" and current_user.role == share.permissions.get("role"):
+                has_access = True
+                break
+    
+    if not has_access:
+        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    
+    # Validate version_id if provided
+    if payload.version_id:
+        version_result = await session.execute(
+            select(DocumentVersion).where(
+                and_(
+                    DocumentVersion.id == payload.version_id,
+                    DocumentVersion.document_id == doc_id
+                )
+            )
+        )
+        version = version_result.scalar_one_or_none()
+        if not version:
+            return error_response("Version not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Validate type
+    if payload.type not in ["comment", "annotation"]:
+        return error_response("Type must be 'comment' or 'annotation'", status_code=status.HTTP_400_BAD_REQUEST)
+    
+    comment = Comment(
+        document_id=doc_id,
+        version_id=payload.version_id,
+        user_id=current_user.id,
+        content=payload.content,
+        type=payload.type,
+        position=payload.position
+    )
+    session.add(comment)
+    await session.commit()
+    await session.refresh(comment)
+    
+    return success_response({
+        "id": comment.id,
+        "document_id": comment.document_id,
+        "version_id": comment.version_id,
+        "user_id": comment.user_id,
+        "content": comment.content,
+        "type": comment.type,
+        "position": comment.position,
+        "created_at": comment.created_at.isoformat()
+    })
+
+
+@router.get("/{doc_id}/comments")
+async def list_comments(
+    doc_id: int,
+    version_id: Optional[int] = None,
+    comment_type: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """List comments and annotations for a document."""
+    # Verify document access
+    doc_result = await session.execute(
+        select(Document).where(and_(Document.id == doc_id, Document.deleted_at.is_(None)))
+    )
+    doc = doc_result.scalar_one_or_none()
+    
+    if not doc:
+        return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Check access (similar to create_comment)
+    has_access = False
+    if doc.owner_id == current_user.id or current_user.role in ["admin", "staff"]:
+        has_access = True
+    else:
+        shares_result = await session.execute(
+            select(Share).where(
+                and_(
+                    Share.document_id == doc_id,
+                    or_(
+                        Share.expires_at.is_(None),
+                        Share.expires_at > datetime.utcnow()
+                    )
+                )
+            )
+        )
+        shares = shares_result.scalars().all()
+        for share in shares:
+            if share.target_type == "user" and share.target_id == current_user.id:
+                has_access = True
+                break
+    
+    if not has_access:
+        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    
+    # Build query
+    query = select(Comment).where(Comment.document_id == doc_id)
+    
+    if version_id:
+        query = query.where(Comment.version_id == version_id)
+    
+    if comment_type:
+        query = query.where(Comment.type == comment_type)
+    
+    query = query.order_by(Comment.created_at.desc())
+    
+    result = await session.execute(query)
+    comments = result.scalars().all()
+    
+    return success_response([{
+        "id": c.id,
+        "document_id": c.document_id,
+        "version_id": c.version_id,
+        "user_id": c.user_id,
+        "content": c.content,
+        "type": c.type,
+        "position": c.position,
+        "created_at": c.created_at.isoformat()
+    } for c in comments])
+
+
+@router.patch("/{doc_id}/comments/{comment_id}")
+async def update_comment(
+    doc_id: int,
+    comment_id: int,
+    payload: CommentUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update a comment or annotation."""
+    result = await session.execute(
+        select(Comment).where(
+            and_(
+                Comment.id == comment_id,
+                Comment.document_id == doc_id
+            )
+        )
+    )
+    comment = result.scalar_one_or_none()
+    
+    if not comment:
+        return error_response("Comment not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Only owner or admin can update
+    if comment.user_id != current_user.id and current_user.role not in ["admin", "staff"]:
+        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    
+    if payload.content is not None:
+        comment.content = payload.content
+    if payload.position is not None:
+        comment.position = payload.position
+    
+    await session.commit()
+    await session.refresh(comment)
+    
+    return success_response({
+        "id": comment.id,
+        "content": comment.content,
+        "position": comment.position,
+        "updated_at": comment.updated_at.isoformat()
+    })
+
+
+@router.delete("/{doc_id}/comments/{comment_id}")
+async def delete_comment(
+    doc_id: int,
+    comment_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Delete a comment or annotation."""
+    result = await session.execute(
+        select(Comment).where(
+            and_(
+                Comment.id == comment_id,
+                Comment.document_id == doc_id
+            )
+        )
+    )
+    comment = result.scalar_one_or_none()
+    
+    if not comment:
+        return error_response("Comment not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Only owner or admin can delete
+    if comment.user_id != current_user.id and current_user.role not in ["admin", "staff"]:
+        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    
+    await session.delete(comment)
+    await session.commit()
+    
+    return success_response({"id": comment_id, "deleted": True})
 

@@ -191,14 +191,28 @@ class TestSearchReindex:
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
     
-    async def test_reindex_single_document_success(self, client, admin_token, test_document):
+    async def test_reindex_single_document_success(self, client, admin_token, test_document, test_db, regular_user):
         """Test reindexing single document."""
+        # Ensure document has a version with text_uri
+        from src.app.models.documents import DocumentVersion
+        version = DocumentVersion(
+            document_id=test_document.id,
+            version_no=1,
+            blob_uri="test/blob.pdf",
+            text_uri="test/text.txt",  # Add text_uri for reindex to work
+            created_by=regular_user.id,
+            size=1024,
+            status="ready"
+        )
+        test_db.add(version)
+        await test_db.commit()
+        
         response = client.post(
             f"/api/v1/search/index/reindex/{test_document.id}",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         # Note: This may trigger async job
-        assert response.status_code in [status.HTTP_200_OK, status.HTTP_202_ACCEPTED, status.HTTP_404_NOT_FOUND]
+        assert response.status_code in [status.HTTP_200_OK, status.HTTP_202_ACCEPTED, status.HTTP_400_BAD_REQUEST]
     
     async def test_reindex_single_document_not_found(self, client, admin_token):
         """Test reindexing non-existent document."""
@@ -215,4 +229,7 @@ class TestSearchReindex:
             headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+
 

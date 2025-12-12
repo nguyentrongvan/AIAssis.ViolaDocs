@@ -9,11 +9,14 @@ from .routers import (
     chat,
     devices,
     documents,
+    folders,
     groups,
     health,
     reports,
+    roles,
     scan_jobs,
     search,
+    settings as settings_router,
     tasks,
     uploads,
     users,
@@ -49,12 +52,15 @@ def create_app() -> FastAPI:
     app.include_router(reports.router, prefix=api_prefix)
     app.include_router(audit.router, prefix=api_prefix)
     app.include_router(documents.router, prefix=api_prefix)
+    app.include_router(folders.router, prefix=api_prefix)
     app.include_router(groups.router, prefix=api_prefix)
     app.include_router(users.router, prefix=api_prefix)
+    app.include_router(roles.router, prefix=api_prefix)
     app.include_router(devices.router, prefix=api_prefix)
     app.include_router(workflows.router, prefix=api_prefix)
     app.include_router(tasks.router, prefix=api_prefix)
     app.include_router(ai.router, prefix=api_prefix)
+    app.include_router(settings_router.router, prefix=api_prefix)
     return app
 
 

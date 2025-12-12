@@ -14,8 +14,9 @@ from app.config import settings
 
 # Import all models to register them with Base.metadata
 from app.models import (
-    User, Document, DocumentVersion, Tag, DocumentTag, Share,
-    Device, DocumentGroup, Workflow, Task, AuditEvent, AIJob, Embedding
+    User, Document, DocumentVersion, Tag, DocumentTag, Share, Folder, Comment,
+    Device, DocumentGroup, Workflow, Task, AuditEvent, AIJob, Embedding,
+    RetentionPolicy, Role, ChatSession
 )
 
 config = context.config

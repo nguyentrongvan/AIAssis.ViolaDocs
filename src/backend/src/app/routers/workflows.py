@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 
 from ..db import get_session
 from ..dependencies import get_current_user

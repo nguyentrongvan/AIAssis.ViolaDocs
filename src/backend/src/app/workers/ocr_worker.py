@@ -154,7 +154,6 @@ async def process_embedding_job(job_id: int):
         
         try:
             from ..services.ai import get_embedding_service
-            from ..models.ai import Embedding
             
             embedding_service = get_embedding_service()
             if not embedding_service:
@@ -174,6 +173,12 @@ async def process_embedding_job(job_id: int):
             
             if not version:
                 raise ValueError(f"Version {version_id} not found")
+            
+            # Get document for metadata (owner, group, etc.)
+            doc_result = await session.execute(
+                select(Document).where(Document.id == version.document_id)
+            )
+            document = doc_result.scalar_one_or_none()
             
             # Get text from OCR result
             if not version.text_uri:
@@ -196,20 +201,24 @@ async def process_embedding_job(job_id: int):
             # Generate embedding
             embedding_vector = embedding_service.generate_embedding(text)
             
-            # Save embedding
-            embedding = Embedding(
-                doc_id=version.document_id,
-                version_id=version_id,
-                vector=embedding_vector,
-                provider=job.provider,
-                chunk_ref={"text_length": len(text)}
+            # Save embedding to vector store
+            embed_id = f"embed-{job.id}"
+            embedding_service.upsert_embeddings(
+                ids=[embed_id],
+                embeddings=[embedding_vector],
+                metadatas=[{
+                    "doc_id": version.document_id,
+                    "version_id": version_id,
+                    "owner_id": document.owner_id if document else None,
+                    "provider": job.provider,
+                    "text_length": len(text)
+                }]
             )
-            session.add(embedding)
             
             # Update job
             job.status = "completed"
             job.output_ref = {
-                "embedding_id": embedding.id,
+                "embedding_id": embed_id,
                 "vector_dimension": len(embedding_vector)
             }
             

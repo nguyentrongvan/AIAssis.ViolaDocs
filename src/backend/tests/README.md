@@ -111,3 +111,6 @@ Required packages (already in requirements.txt):
 
 5. Worker tests use mocks for external dependencies (MinIO, AI services) to avoid requiring actual services during testing.
 
+
+
+

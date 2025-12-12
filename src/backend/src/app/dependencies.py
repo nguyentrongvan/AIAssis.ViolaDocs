@@ -7,13 +7,18 @@ from .db import get_session
 from .services.auth import decode_token, get_user_by_id
 from .models.users import User
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     session: AsyncSession = Depends(get_session)
 ) -> User:
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
     token = credentials.credentials
     payload = decode_token(token)
     if not payload:
@@ -50,6 +55,9 @@ async def get_current_admin_user(
             detail="Admin or staff access required"
         )
     return current_user
+
+
+
 
 
 

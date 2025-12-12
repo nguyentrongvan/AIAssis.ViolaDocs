@@ -123,7 +123,8 @@ class TestAuditExport:
         assert response.status_code in [status.HTTP_200_OK, status.HTTP_202_ACCEPTED, status.HTTP_404_NOT_FOUND]
         if response.status_code == status.HTTP_200_OK:
             # Should return file download
-            assert response.headers.get("content-type") in ["text/csv", "application/csv", "application/json"]
+            content_type = response.headers.get("content-type", "")
+        assert "text/csv" in content_type or "application/csv" in content_type or content_type == "application/json"
     
     async def test_export_audit_logs_json_format(self, client, admin_token):
         """Test exporting audit logs in JSON format."""
@@ -175,4 +176,7 @@ class TestAuditExport:
             json={"format": "csv"}
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+
 

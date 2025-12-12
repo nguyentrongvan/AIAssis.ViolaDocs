@@ -8,9 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_session
 from ..dependencies import get_current_user
 from ..models.users import User
-from ..services.ai import get_llm_service
+from ..models.chat import ChatSession
+from ..models.groups import DocumentGroup
+from ..models.documents import Document
+from ..services.ai import get_llm_service, get_embedding_service
 from ..utils.response import success_response, error_response
 from ..config import settings
+from sqlalchemy import select, and_, or_
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -70,31 +74,140 @@ async def chat(
     session_id = request.session_id or str(uuid.uuid4())
     context = []
     
-    if redis_client:
-        session_key = f"chat:session:{session_id}"
-        # Get chat history from cache
-        history = await redis_client.lrange(session_key, 0, -1)
-        context = [msg.decode() if isinstance(msg, bytes) else msg for msg in history[-10:]]  # Last 10 messages
+    try:
+        if redis_client:
+            session_key = f"chat:session:{session_id}"
+            # Get chat history from cache
+            history = await redis_client.lrange(session_key, 0, -1)
+            context = [msg.decode() if isinstance(msg, bytes) else msg for msg in history[-10:]]  # Last 10 messages
+    except Exception as e:
+        # Redis not available or error - continue without cache
+        print(f"Redis error (continuing without cache): {e}")
+        context = []
     
-    # TODO: Retrieve relevant documents from vector store based on query and group_id
-    # For now, use empty context
+    # Retrieve relevant documents from vector store based on query and group_id
     doc_contexts = []
+    citations = []
+    
+    if request.group_id:
+        # Verify group access
+        group_result = await session.execute(
+            select(DocumentGroup).where(DocumentGroup.id == request.group_id)
+        )
+        group = group_result.scalar_one_or_none()
+        
+        if not group:
+            return error_response("Document group not found", status_code=status.HTTP_404_NOT_FOUND)
+        
+        # Check access to group
+        has_access = False
+        if current_user.id in (group.owners or []):
+            has_access = True
+        elif current_user.role in (group.allowed_roles or []):
+            has_access = True
+        elif current_user.id in (group.allowed_users or []):
+            has_access = True
+        elif current_user.role in ["admin", "staff"]:
+            has_access = True
+        
+        if not has_access:
+            return error_response("Access denied to document group", status_code=status.HTTP_403_FORBIDDEN)
+        
+        # Use vector search to retrieve relevant documents
+        embedding_service = get_embedding_service()
+        if embedding_service:
+            query_embedding = embedding_service.generate_embedding(request.message)
+            search_filters = {"group_id": request.group_id}
+            
+            chroma_result = embedding_service.query_embeddings(
+                query_embedding=query_embedding,
+                where=search_filters,
+                top_k=5
+            )
+            
+            if chroma_result and chroma_result.get("metadatas"):
+                doc_ids = []
+                for metas in chroma_result["metadatas"]:
+                    for meta in metas:
+                        doc_id = meta.get("doc_id")
+                        if doc_id:
+                            doc_ids.append(doc_id)
+                
+                if doc_ids:
+                    docs_result = await session.execute(
+                        select(Document).where(
+                            and_(
+                                Document.id.in_(doc_ids),
+                                Document.deleted_at.is_(None),
+                                Document.status == "ready"
+                            )
+                        )
+                    )
+                    docs = docs_result.scalars().all()
+                    
+                    for doc in docs:
+                        # Get text content for context
+                        from ..models.documents import DocumentVersion
+                        version_result = await session.execute(
+                            select(DocumentVersion)
+                            .where(DocumentVersion.document_id == doc.id)
+                            .order_by(DocumentVersion.version_no.desc())
+                            .limit(1)
+                        )
+                        version = version_result.scalar_one_or_none()
+                        
+                        if version and version.text_uri:
+                            from ..services.diff import get_text_from_uri
+                            text_content = await get_text_from_uri(version.text_uri)
+                            if text_content:
+                                # Use first 500 chars as context
+                                doc_contexts.append(text_content[:500])
+                                citations.append({
+                                    "document_id": doc.id,
+                                    "title": doc.title,
+                                    "snippet": text_content[:200]
+                                })
     
     # Generate response using LLM service with prompts
     answer = llm_service.chat(request.message, context=doc_contexts)
     
     # Store in cache
-    if redis_client:
-        session_key = f"chat:session:{session_id}"
-        await redis_client.lpush(session_key, f"user:{request.message}", f"assistant:{answer}")
-        await redis_client.expire(session_key, 3600 * 24)  # 24 hours
+    try:
+        if redis_client:
+            session_key = f"chat:session:{session_id}"
+            await redis_client.lpush(session_key, f"user:{request.message}", f"assistant:{answer}")
+            await redis_client.expire(session_key, 3600 * 24)  # 24 hours
+    except Exception as e:
+        # Redis not available or error - continue without cache
+        print(f"Redis error (continuing without cache): {e}")
     
-    # TODO: Store in database for audit
-    # TODO: Extract citations from retrieved documents
+    # Store in database for audit
+    chat_session_result = await session.execute(
+        select(ChatSession).where(ChatSession.session_id == session_id)
+    )
+    chat_session = chat_session_result.scalar_one_or_none()
+    
+    if not chat_session:
+        chat_session = ChatSession(
+            user_id=current_user.id,
+            group_id=request.group_id,
+            session_id=session_id,
+            messages=[]
+        )
+        session.add(chat_session)
+    
+    # Add messages to session
+    messages = chat_session.messages or []
+    messages.append({"role": "user", "content": request.message, "timestamp": datetime.utcnow().isoformat()})
+    messages.append({"role": "assistant", "content": answer, "citations": citations, "timestamp": datetime.utcnow().isoformat()})
+    chat_session.messages = messages[-20:]  # Keep last 20 messages
+    
+    await session.commit()
+    await session.refresh(chat_session)
     
     return success_response({
         "answer": answer,
-        "citations": [],
+        "citations": citations,
         "session_id": session_id
     })
 
@@ -105,37 +218,56 @@ async def get_chat_history(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    # TODO: Load chat history from database
-    return success_response({
-        "sessions": [],
-        "messages": []
-    })
+    """Load chat history from database."""
+    query = select(ChatSession).where(ChatSession.user_id == current_user.id)
+    
+    if group_id:
+        query = query.where(ChatSession.group_id == group_id)
+    
+    query = query.order_by(ChatSession.created_at.desc()).limit(50)
+    
+    result = await session.execute(query)
+    sessions = result.scalars().all()
+    
+    sessions_list = [{
+        "session_id": s.session_id,
+        "group_id": s.group_id,
+        "message_count": len(s.messages or []),
+        "created_at": s.created_at.isoformat(),
+        "updated_at": s.updated_at.isoformat()
+    } for s in sessions]
+    
+    return success_response(sessions_list)
 
 
 @router.get("/session/{session_id}")
 async def get_session_history(
     session_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
 ):
-    """Get session history."""
-    redis_client = await get_redis()
-    messages = []
+    """Get session history from database."""
+    chat_session_result = await session.execute(
+        select(ChatSession).where(ChatSession.session_id == session_id)
+    )
+    chat_session = chat_session_result.scalar_one_or_none()
     
-    if redis_client:
-        session_key = f"chat:session:{session_id}"
-        history = await redis_client.lrange(session_key, 0, -1)
-        
-        # Reverse to get chronological order
-        for msg in reversed(history):
-            msg_str = msg.decode() if isinstance(msg, bytes) else msg
-            if msg_str.startswith("user:"):
-                messages.append({"role": "user", "content": msg_str[5:]})
-            elif msg_str.startswith("assistant:"):
-                messages.append({"role": "assistant", "content": msg_str[10:]})
+    if not chat_session:
+        return error_response("Chat session not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    if chat_session.user_id != current_user.id:
+        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    
+    messages = chat_session.messages or []
     
     return success_response({
         "session_id": session_id,
-        "messages": messages
+        "group_id": chat_session.group_id,
+        "messages": messages,
+        "feedback": chat_session.feedback,
+        "handoff_id": chat_session.handoff_id,
+        "created_at": chat_session.created_at.isoformat(),
+        "updated_at": chat_session.updated_at.isoformat()
     })
 
 
@@ -169,8 +301,27 @@ async def submit_feedback(
             status_code=status.HTTP_400_BAD_REQUEST
         )
     
-    # TODO: Store feedback in database
-    # For now, just return success
+    # Store feedback in database
+    chat_session_result = await session.execute(
+        select(ChatSession).where(ChatSession.session_id == session_id)
+    )
+    chat_session = chat_session_result.scalar_one_or_none()
+    
+    if not chat_session:
+        return error_response("Chat session not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    if chat_session.user_id != current_user.id:
+        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    
+    chat_session.feedback = {
+        "rating": request.rating,
+        "comment": request.comment,
+        "submitted_at": datetime.utcnow().isoformat()
+    }
+    
+    await session.commit()
+    await session.refresh(chat_session)
+    
     return success_response({
         "session_id": session_id,
         "rating": request.rating,

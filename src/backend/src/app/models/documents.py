@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Boolean, JSON
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Boolean, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
@@ -12,12 +12,12 @@ class Document(BaseModel):
     source = Column(String(50), nullable=False)  # web, scan, api
     device_id = Column(Integer, ForeignKey("devices.id"), nullable=True)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    folder_id = Column(Integer, nullable=True)
+    folder_id = Column(Integer, ForeignKey("folders.id"), nullable=True)
     mime = Column(String(100), nullable=False)
     size = Column(Integer, nullable=False)
     checksum = Column(String(64), nullable=True)
     status = Column(String(50), default="processing")  # processing, ready, failed
-    retention_policy_id = Column(Integer, nullable=True)
+    retention_policy_id = Column(Integer, ForeignKey("retention_policies.id"), nullable=True)
     sensitivity = Column(String(50), nullable=True)
     
     # Soft delete
@@ -68,14 +68,46 @@ class DocumentTag(BaseModel):
     tag_id = Column(Integer, ForeignKey("tags.id"), nullable=False)
 
 
+class Folder(BaseModel):
+    __tablename__ = "folders"
+    
+    name = Column(String(255), nullable=False)
+    parent_id = Column(Integer, ForeignKey("folders.id"), nullable=True)  # Hierarchical structure
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    # Self-referential relationship for parent-child
+    parent = relationship("Folder", remote_side="Folder.id", backref="children")
+    documents = relationship("Document", backref="folder")
+
+
 class Share(BaseModel):
     __tablename__ = "shares"
     
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
     target_type = Column(String(50), nullable=False)  # user, role, link
     target_id = Column(Integer, nullable=True)
+    share_token = Column(String(64), unique=True, nullable=True)  # Token for share links
     expires_at = Column(DateTime, nullable=True)
     permissions = Column(JSON, nullable=True)  # read, write, delete
+
+
+class Comment(BaseModel):
+    __tablename__ = "comments"
+    
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
+    version_id = Column(Integer, ForeignKey("document_versions.id"), nullable=True)  # Optional: comment on specific version
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    type = Column(String(50), default="comment", nullable=False)  # comment, annotation
+    position = Column(JSON, nullable=True)  # For annotations: page, x, y, width, height, etc.
+
+
+# Annotation uses the same table as Comment, differentiated by type field
+# No separate class needed - use Comment with type='annotation'
+
+
+
 
 
 

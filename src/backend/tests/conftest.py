@@ -57,6 +57,24 @@ async def test_db() -> AsyncGenerator[AsyncSession, None]:
     await engine.dispose()
 
 
+@pytest.fixture(autouse=True)
+def reset_upload_metadata():
+    """Reset upload metadata before each test."""
+    from src.app.routers import uploads
+    uploads._upload_metadata.clear()
+    yield
+    uploads._upload_metadata.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_minio_client():
+    """Reset MinIO client before each test."""
+    from src.app.services import storage
+    storage._minio_client = None
+    yield
+    storage._minio_client = None
+
+
 @pytest.fixture
 def client(test_db: AsyncSession) -> Generator[TestClient, None, None]:
     """Create a test client with overridden database session."""
@@ -221,4 +239,7 @@ async def test_device(test_db: AsyncSession) -> Device:
     await test_db.commit()
     await test_db.refresh(device)
     return device
+
+
+
 
