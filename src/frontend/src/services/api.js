@@ -151,6 +151,7 @@ export const aiAPI = {
   embed: (data) => api.post('/ai/embed', data),
   classify: (data) => api.post('/ai/classify', data),
   qa: (data) => api.post('/ai/qa', data),
+  listJobs: (params) => api.get('/ai/jobs', { params }),
   jobStatus: (id) => api.get(`/ai/jobs/${id}`)
 }
 

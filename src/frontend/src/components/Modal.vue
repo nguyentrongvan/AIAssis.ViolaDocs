@@ -1,7 +1,8 @@
 <template>
   <Teleport to="body">
-    <div v-if="show" class="modal-overlay" @click="handleOverlayClick">
-      <div class="modal-container" @click.stop>
+    <Transition name="modal">
+      <div v-if="show" class="modal-overlay" @click="handleOverlayClick">
+        <div class="modal-container glass-strong" @click.stop>
         <div class="modal-header">
           <h2>{{ title }}</h2>
           <button @click="close" class="modal-close">
@@ -14,8 +15,9 @@
         <div v-if="$slots.footer" class="modal-footer">
           <slot name="footer" />
         </div>
+        </div>
       </div>
-    </div>
+    </Transition>
   </Teleport>
 </template>
 
@@ -58,23 +60,39 @@ const handleOverlayClick = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  padding: 1rem;
+  z-index: var(--z-modal-backdrop);
+  padding: var(--space-lg);
 }
 
 .modal-container {
-  background: white;
-  border-radius: 12px;
+  background: var(--bg-white);
+  border-radius: var(--radius-xl);
   max-width: 600px;
   width: 100%;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-2xl), var(--shadow-glow);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.modal-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient-ai);
+  z-index: 1;
 }
 
 .modal-header {
@@ -87,7 +105,12 @@ const handleOverlayClick = () => {
 
 .modal-header h2 {
   margin: 0;
-  color: var(--primary);
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
+  font-size: 1.5rem;
 }
 
 .modal-close {
@@ -114,11 +137,32 @@ const handleOverlayClick = () => {
 }
 
 .modal-footer {
-  padding: 1.5rem;
-  border-top: 1px solid #eee;
+  padding: var(--space-lg);
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
   display: flex;
   justify-content: flex-end;
-  gap: 0.75rem;
+  gap: var(--space-md);
+}
+
+/* Modal Transitions */
+.modal-enter-active,
+.modal-leave-active {
+  transition: all var(--transition-base) var(--ease-out);
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-enter-from .modal-container,
+.modal-leave-to .modal-container {
+  transform: scale(0.9) translateY(-20px);
+}
+
+.modal-enter-to .modal-container,
+.modal-leave-from .modal-container {
+  transform: scale(1) translateY(0);
 }
 </style>
 

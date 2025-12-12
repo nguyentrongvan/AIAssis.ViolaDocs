@@ -92,6 +92,12 @@ const routes = [
         name: 'AdminSystemConfig',
         component: () => import('../views/admin/SystemConfig.vue'),
         meta: { requiresMaintainer: true }
+      },
+      {
+        path: 'admin/ai-jobs',
+        name: 'AdminAIJobs',
+        component: () => import('../views/admin/AIJobs.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true }
       }
     ]
   }

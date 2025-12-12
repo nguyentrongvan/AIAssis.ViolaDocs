@@ -1,8 +1,8 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, desc, func
 from datetime import datetime
 
 from ..db import get_session
@@ -211,6 +211,62 @@ async def rag_qa(
         "document_id": document.id,
         "question": request.question,
         "answer": answer
+    })
+
+
+@router.get("/jobs")
+async def list_jobs(
+    job_type: Optional[str] = Query(None, description="Filter by job type (ocr, embed, classify, qa)"),
+    status_filter: Optional[str] = Query(None, description="Filter by status (queued, processing, completed, failed)"),
+    provider: Optional[str] = Query(None, description="Filter by provider"),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """List AI jobs with filters (admin only)."""
+    query = select(AIJob)
+    
+    if job_type:
+        query = query.where(AIJob.job_type == job_type)
+    if status_filter:
+        query = query.where(AIJob.status == status_filter)
+    if provider:
+        query = query.where(AIJob.provider == provider)
+    
+    query = query.order_by(desc(AIJob.created_at)).limit(limit).offset(offset)
+    
+    result = await session.execute(query)
+    jobs = result.scalars().all()
+    
+    # Get total count
+    count_query = select(func.count(AIJob.id))
+    if job_type:
+        count_query = count_query.where(AIJob.job_type == job_type)
+    if status_filter:
+        count_query = count_query.where(AIJob.status == status_filter)
+    if provider:
+        count_query = count_query.where(AIJob.provider == provider)
+    
+    count_result = await session.execute(count_query)
+    total = count_result.scalar() or 0
+    
+    return success_response({
+        "jobs": [{
+            "id": job.id,
+            "job_type": job.job_type,
+            "target": job.target,
+            "provider": job.provider,
+            "status": job.status,
+            "input_ref": job.input_ref,
+            "output_ref": job.output_ref,
+            "error": job.error,
+            "created_at": job.created_at.isoformat() if job.created_at else None,
+            "updated_at": job.updated_at.isoformat() if job.updated_at else None
+        } for job in jobs],
+        "total": total,
+        "limit": limit,
+        "offset": offset
     })
 
 

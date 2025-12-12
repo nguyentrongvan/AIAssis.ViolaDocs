@@ -427,9 +427,46 @@ const formatSize = (bytes) => {
 
 .filter-group input,
 .filter-group select {
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  padding: var(--space-md) var(--space-lg);
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg);
+  background: var(--bg-white);
+  font-size: 0.95rem;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-sm);
+}
+
+.filter-group input[type="date"] {
+  padding-right: var(--space-xl);
+  cursor: pointer;
+  position: relative;
+}
+
+.filter-group input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  filter: grayscale(1);
+  transition: all var(--transition-base);
+  padding: var(--space-xs);
+  border-radius: var(--radius-sm);
+}
+
+.filter-group input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  filter: grayscale(0);
+  background: var(--gradient-ai-soft);
+}
+
+.filter-group input:focus,
+.filter-group select:focus {
+  outline: none;
+  border-color: var(--ai-cyan);
+  box-shadow: var(--shadow-md), 0 0 0 3px rgba(0, 217, 255, 0.1);
+}
+
+.filter-group input[type="date"]:focus::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  filter: grayscale(0);
 }
 
 .filter-actions {

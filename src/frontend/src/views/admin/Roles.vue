@@ -143,7 +143,8 @@ const editRole = (role) => {
 
 const saveRole = async () => {
   try {
-    if (editingRole.value) {
+    const isEditing = !!editingRole.value
+    if (isEditing) {
       await rolesStore.updateRole(editingRole.value.id, roleForm.value)
     } else {
       await rolesStore.createRole(roleForm.value)
@@ -154,7 +155,7 @@ const saveRole = async () => {
     roleForm.value = { name: '', permissions: [] }
     if (window.$toast) {
       window.$toast.show(
-        editingRole.value ? 'Role updated' : 'Role created',
+        isEditing ? 'Role updated' : 'Role created',
         'success'
       )
     }

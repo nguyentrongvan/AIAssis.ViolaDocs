@@ -1,9 +1,12 @@
 <template>
   <div class="chatbot-page">
-    <h1 class="page-header">Chatbot Assistant</h1>
+    <div class="particles-background"></div>
+    <h1 class="page-header">
+      <span class="gradient-text">Chatbot Assistant</span>
+    </h1>
 
     <div class="chat-container">
-      <div class="chat-sidebar">
+      <div class="chat-sidebar glass">
         <div class="sidebar-section">
           <h3>Document Groups</h3>
           <div class="group-selector">
@@ -109,20 +112,29 @@
 
         <div class="messages" ref="messagesContainer">
           <div v-if="messages.length === 0" class="welcome-message">
-            <MessageSquare :size="48" />
-            <h3>Ask me anything about your documents</h3>
+            <div class="welcome-icon-wrapper">
+              <MessageSquare class="welcome-icon" :size="64" />
+              <div class="welcome-glow"></div>
+            </div>
+            <h3 class="gradient-text">Ask me anything about your documents</h3>
             <p>Select a document group and start asking questions</p>
           </div>
-          <div
-            v-for="(msg, idx) in messages"
-            :key="idx"
-            :class="['message', msg.role]"
-          >
-            <div class="message-avatar">
-              <User v-if="msg.role === 'user'" :size="20" />
-              <MessageSquare v-else :size="20" />
-            </div>
-            <div class="message-content">
+          <transition-group name="message" tag="div">
+            <div
+              v-for="(msg, idx) in messages"
+              :key="msg.id || idx"
+              :class="['message', msg.role]"
+            >
+              <div class="message-avatar">
+                <div v-if="msg.role === 'user'" class="avatar-circle user-avatar">
+                  <User :size="20" />
+                </div>
+                <div v-else class="avatar-circle ai-avatar">
+                  <MessageSquare :size="20" />
+                  <div class="avatar-pulse"></div>
+                </div>
+              </div>
+              <div class="message-content">
               <div class="message-text" v-html="formatMessage(msg.content)"></div>
               <div v-if="msg.citations && msg.citations.length > 0" class="citations">
                 <div class="citations-header">Sources:</div>
@@ -164,22 +176,28 @@
                 {{ msg.warning }}
               </div>
             </div>
-          </div>
-          <div v-if="sending" class="message assistant">
-            <div class="message-avatar">
-              <MessageSquare :size="20" />
             </div>
-            <div class="message-content">
-              <div class="typing-indicator">
-                <span></span>
-                <span></span>
-                <span></span>
+          </transition-group>
+          <transition name="fade">
+            <div v-if="sending" class="message assistant">
+              <div class="message-avatar">
+                <div class="avatar-circle ai-avatar">
+                  <MessageSquare :size="20" />
+                  <div class="avatar-pulse animate-pulse"></div>
+                </div>
+              </div>
+              <div class="message-content">
+                <div class="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
               </div>
             </div>
-          </div>
+          </transition>
         </div>
 
-        <div class="chat-input-area">
+        <div class="chat-input-area glass">
           <div class="input-options">
             <button
               @click="requestSourceAccess"
@@ -205,6 +223,7 @@
               class="btn-primary send-btn"
             >
               <Send :size="20" />
+              <div class="send-glow"></div>
             </button>
           </div>
         </div>
@@ -526,24 +545,63 @@ const formatDate = (dateStr) => {
 .chatbot-page {
   max-width: 1600px;
   margin: 0 auto;
+  position: relative;
+  min-height: calc(100vh - 200px);
+}
+
+.particles-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--gradient-ai-soft);
+  opacity: 0.4;
+  z-index: 0;
+  pointer-events: none;
+  animation: shimmer 8s ease-in-out infinite;
+}
+
+.particles-background::before,
+.particles-background::after {
+  content: '';
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 217, 255, 0.3) 0%, transparent 70%);
+  animation: float 6s ease-in-out infinite;
+}
+
+.particles-background::before {
+  top: 20%;
+  left: 10%;
+  animation-delay: 0s;
+}
+
+.particles-background::after {
+  bottom: 20%;
+  right: 10%;
+  animation-delay: 3s;
 }
 
 .chat-container {
   display: grid;
   grid-template-columns: 350px 1fr;
-  gap: 2rem;
+  gap: var(--space-xl);
   height: calc(100vh - 200px);
+  position: relative;
+  z-index: 1;
 }
 
 .chat-sidebar {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  padding: var(--space-lg);
+  border-radius: var(--radius-xl);
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: var(--space-xl);
   overflow-y: auto;
+  position: relative;
 }
 
 .sidebar-section h3 {
@@ -554,28 +612,78 @@ const formatDate = (dateStr) => {
 
 .group-selector select {
   width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  padding: var(--space-md) var(--space-lg);
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg);
+  background: var(--bg-white);
+  font-size: 0.95rem;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.group-selector select:focus {
+  outline: none;
+  border-color: var(--ai-cyan);
+  box-shadow: var(--shadow-md), 0 0 0 3px rgba(0, 217, 255, 0.1);
 }
 
 .filter-group {
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-lg);
 }
 
 .filter-group label {
   display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
+  margin-bottom: var(--space-sm);
+  font-weight: 600;
   font-size: 0.9rem;
+  color: var(--text-dark);
 }
 
 .filter-group input,
 .filter-group select {
   width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  padding: var(--space-md) var(--space-lg);
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg);
+  background: var(--bg-white);
+  font-size: 0.95rem;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+}
+
+.filter-group input[type="date"] {
+  padding-right: var(--space-xl);
+  cursor: pointer;
+  position: relative;
+}
+
+.filter-group input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  filter: grayscale(1);
+  transition: all var(--transition-base);
+  padding: var(--space-xs);
+  border-radius: var(--radius-sm);
+}
+
+.filter-group input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  filter: grayscale(0);
+  background: var(--gradient-ai-soft);
+}
+
+.filter-group input:focus,
+.filter-group select:focus {
+  outline: none;
+  border-color: var(--ai-cyan);
+  box-shadow: var(--shadow-md), 0 0 0 3px rgba(0, 217, 255, 0.1);
+}
+
+.filter-group input[type="date"]:focus::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  filter: grayscale(0);
 }
 
 .selected-tags {
@@ -647,27 +755,42 @@ const formatDate = (dateStr) => {
 }
 
 .chat-main {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  background: var(--bg-white);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.chat-main::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient-ai);
+  z-index: 1;
 }
 
 .chat-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid #eee;
+  padding: var(--space-lg) var(--space-xl);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  background: var(--bg-white);
 }
 
 .session-indicator {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   font-size: 0.9rem;
-  color: #666;
+  font-weight: 500;
+  color: var(--text-medium);
 }
 
 .session-indicator.new {
@@ -676,7 +799,36 @@ const formatDate = (dateStr) => {
 
 .chat-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-sm);
+}
+
+.btn-small {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-white);
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-dark);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-small:hover {
+  background: var(--gradient-ai-soft);
+  border-color: var(--ai-cyan);
+  color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-small:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
 }
 
 .messages {
@@ -690,20 +842,68 @@ const formatDate = (dateStr) => {
 
 .welcome-message {
   text-align: center;
-  padding: 4rem 2rem;
-  color: #666;
+  padding: var(--space-3xl) var(--space-xl);
+  color: var(--text-medium);
+  animation: fadeInUp var(--transition-slow) var(--ease-out);
 }
 
-.welcome-message svg {
-  margin-bottom: 1rem;
+.welcome-icon-wrapper {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto var(--space-xl);
+}
+
+.welcome-icon {
+  width: 80px;
+  height: 80px;
   color: var(--primary);
-  opacity: 0.5;
+  position: relative;
+  z-index: 2;
+  animation: float 3s var(--ease-in-out) infinite;
+  filter: drop-shadow(0 0 20px rgba(0, 217, 255, 0.4));
+}
+
+.welcome-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  background: var(--gradient-cyan-purple);
+  border-radius: var(--radius-full);
+  transform: translate(-50%, -50%);
+  opacity: 0.3;
+  filter: blur(20px);
+  animation: glow-pulse 2s var(--ease-in-out) infinite;
+}
+
+.welcome-message h3 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 var(--space-md) 0;
+}
+
+.welcome-message p {
+  font-size: 1rem;
+  color: var(--text-light);
+  margin: 0;
 }
 
 .message {
   display: flex;
-  gap: 1rem;
+  gap: var(--space-md);
   align-items: flex-start;
+  animation: fadeInUp var(--transition-base) var(--ease-out);
+}
+
+.message-enter-active {
+  transition: all var(--transition-base) var(--ease-out);
+}
+
+.message-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
 }
 
 .message.user {
@@ -712,24 +912,48 @@ const formatDate = (dateStr) => {
 
 .message-avatar {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--primary-light);
+}
+
+.avatar-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--primary);
+  position: relative;
+  transition: all var(--transition-base);
 }
 
-.message.user .message-avatar {
-  background: var(--primary);
+.user-avatar {
+  background: var(--gradient-primary);
   color: white;
+  box-shadow: var(--shadow-glow);
+}
+
+.ai-avatar {
+  background: var(--gradient-cyan-purple);
+  color: white;
+  box-shadow: var(--shadow-glow-cyan);
+}
+
+.avatar-pulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--gradient-cyan-purple);
+  transform: translate(-50%, -50%);
+  opacity: 0.6;
+  animation: pulse 2s var(--ease-in-out) infinite;
 }
 
 .message-content {
   flex: 1;
   max-width: 70%;
+  position: relative;
 }
 
 .message.user .message-content {
@@ -738,14 +962,43 @@ const formatDate = (dateStr) => {
 
 .message-text {
   background: var(--bg-light);
-  padding: 1rem;
-  border-radius: 12px;
-  line-height: 1.6;
+  padding: var(--space-lg);
+  border-radius: var(--radius-xl);
+  line-height: 1.7;
+  position: relative;
+  box-shadow: var(--shadow-md);
+  transition: all var(--transition-base);
+}
+
+.message-text::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: var(--radius-xl);
+  padding: 1px;
+  background: var(--gradient-ai-soft);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.message.assistant .message-text::before {
+  opacity: 1;
 }
 
 .message.user .message-text {
-  background: var(--primary);
+  background: var(--gradient-primary);
   color: white;
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+
+.message.user .message-text::before {
+  display: none;
 }
 
 .citations {
@@ -828,16 +1081,18 @@ const formatDate = (dateStr) => {
 
 .typing-indicator {
   display: flex;
-  gap: 0.25rem;
-  padding: 1rem;
+  gap: 0.5rem;
+  padding: var(--space-lg);
+  align-items: center;
 }
 
 .typing-indicator span {
-  width: 8px;
-  height: 8px;
-  background: #999;
-  border-radius: 50%;
-  animation: typing 1.4s infinite;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--gradient-cyan-purple);
+  animation: typing 1.4s var(--ease-in-out) infinite;
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.5);
 }
 
 .typing-indicator span:nth-child(2) {
@@ -850,45 +1105,104 @@ const formatDate = (dateStr) => {
 
 @keyframes typing {
   0%, 60%, 100% {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
     opacity: 0.7;
   }
   30% {
-    transform: translateY(-10px);
+    transform: translateY(-12px) scale(1.2);
     opacity: 1;
   }
 }
 
 .chat-input-area {
-  padding: 1.5rem;
-  border-top: 1px solid #eee;
+  padding: var(--space-lg);
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  position: relative;
 }
 
 .input-options {
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-md);
+}
+
+.btn-link-small {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-white);
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-dark);
+  cursor: pointer;
+  text-decoration: none;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-link-small:hover {
+  background: var(--gradient-ai-soft);
+  border-color: var(--ai-cyan);
+  color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .input-group {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-md);
   align-items: flex-end;
+  position: relative;
 }
 
 .chat-input {
   flex: 1;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  padding: var(--space-lg);
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-xl);
   font-size: 1rem;
   font-family: inherit;
   resize: none;
+  background: var(--bg-white);
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-sm);
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: var(--ai-cyan);
+  box-shadow: var(--shadow-md), 0 0 0 3px rgba(0, 217, 255, 0.1);
 }
 
 .send-btn {
-  padding: 0.75rem 1.5rem;
+  padding: var(--space-lg) var(--space-xl);
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  overflow: hidden;
+  min-width: 56px;
+  height: 56px;
+}
+
+.send-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  background: var(--gradient-cyan-purple);
+  border-radius: var(--radius-full);
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 0;
+  transition: all var(--transition-base);
+  filter: blur(10px);
+}
+
+.send-btn:hover:not(:disabled) .send-glow {
+  transform: translate(-50%, -50%) scale(1.5);
+  opacity: 0.6;
 }
 
 .send-btn:disabled {
@@ -922,5 +1236,75 @@ const formatDate = (dateStr) => {
 
 .form-group input[type="checkbox"] {
   width: auto;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .chat-container {
+    grid-template-columns: 300px 1fr;
+    gap: var(--space-lg);
+  }
+  
+  .chat-sidebar {
+    padding: var(--space-md);
+  }
+}
+
+@media (max-width: 768px) {
+  .chat-container {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: calc(100vh - 200px);
+  }
+  
+  .chat-sidebar {
+    order: 2;
+    max-height: 400px;
+  }
+  
+  .chat-main {
+    order: 1;
+  }
+  
+  .messages {
+    padding: var(--space-md);
+    gap: var(--space-md);
+  }
+  
+  .message-content {
+    max-width: 85%;
+  }
+  
+  .chat-input-area {
+    padding: var(--space-md);
+  }
+  
+  .input-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .chat-input {
+    width: 100%;
+    margin-bottom: var(--space-sm);
+  }
+  
+  .send-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-sidebar {
+    padding: var(--space-sm);
+  }
+  
+  .sidebar-section {
+    margin-bottom: var(--space-md);
+  }
+  
+  .message-content {
+    max-width: 90%;
+  }
 }
 </style>

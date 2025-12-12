@@ -507,31 +507,66 @@ const getFolderName = (folderId) => {
 }
 
 .upload-zone {
-  border: 2px dashed var(--primary);
-  border-radius: 12px;
-  padding: 3rem;
+  border: 3px dashed transparent;
+  border-radius: var(--radius-xl);
+  padding: var(--space-3xl);
   text-align: center;
-  background: var(--bg-light);
-  margin-bottom: 2rem;
+  background: var(--bg-white);
+  margin-bottom: var(--space-xl);
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all var(--transition-base);
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  background-clip: padding-box;
+}
+
+.upload-zone::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: var(--radius-xl);
+  padding: 3px;
+  background: var(--gradient-cyan-purple);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: shimmer 3s ease-in-out infinite;
+  z-index: -1;
+}
+
+.upload-zone:hover::before {
+  animation: shimmer 1s ease-in-out infinite;
 }
 
 .upload-zone:hover {
-  border-color: var(--primary-dark);
-  background: var(--bg-light-hover);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-2xl), var(--shadow-glow-cyan);
+}
+
+.upload-zone.dragover {
+  border-color: var(--ai-cyan);
+  background: var(--gradient-ai-soft);
+  animation: pulse 1s ease-in-out infinite;
 }
 
 .upload-content {
   pointer-events: none;
+  position: relative;
+  z-index: 1;
 }
 
 .upload-icon {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 1rem;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto var(--space-lg);
   color: var(--primary);
   stroke-width: 1.5;
+  animation: float 3s var(--ease-in-out) infinite;
+  filter: drop-shadow(0 0 20px rgba(0, 217, 255, 0.3));
 }
 
 .hint {
@@ -545,11 +580,38 @@ const getFolderName = (folderId) => {
 }
 
 .file-item {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  background: var(--bg-white);
+  padding: var(--space-xl);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  position: relative;
+  overflow: hidden;
+  animation: fadeInUp var(--transition-base) var(--ease-out) both;
+  border: 2px solid transparent;
+  transition: all var(--transition-base);
+  margin-bottom: var(--space-lg);
+}
+
+.file-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient-cyan-purple);
+  transform: scaleX(0);
+  transition: transform var(--transition-base);
+}
+
+.file-item:hover::before {
+  transform: scaleX(1);
+}
+
+.file-item:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-2xl), var(--shadow-glow);
+  border-color: var(--ai-cyan);
 }
 
 .file-header {
@@ -647,10 +709,24 @@ const getFolderName = (folderId) => {
 
 .progress-bar {
   flex: 1;
-  height: 8px;
-  background: var(--primary);
-  border-radius: 4px;
-  transition: width 0.3s;
+  height: 10px;
+  background: var(--gradient-cyan-purple);
+  border-radius: var(--radius-full);
+  transition: width var(--transition-base);
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.4);
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: shimmer 2s ease-in-out infinite;
 }
 
 .file-status {

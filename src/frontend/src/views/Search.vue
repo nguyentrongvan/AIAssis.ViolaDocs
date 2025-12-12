@@ -4,16 +4,23 @@
 
     <div class="search-container">
       <div class="search-main">
-        <div class="search-bar">
+        <div class="search-bar glass">
           <div class="search-input-group">
-            <Search :size="20" class="search-icon" />
+            <div class="search-icon-wrapper">
+              <Search :size="24" class="search-icon" />
+            </div>
             <input
               v-model="query"
               @keyup.enter="doSearch"
+              @focus="onSearchFocus"
+              @blur="onSearchBlur"
               placeholder="Search documents..."
               class="search-input"
             />
-            <button @click="doSearch" class="btn-primary">Search</button>
+            <button @click="doSearch" class="btn-primary search-btn">
+              <Search :size="18" />
+              Search
+            </button>
           </div>
           <div class="search-mode">
             <label>
@@ -372,6 +379,14 @@ const allSelected = computed(() => {
 
 const folderTree = computed(() => foldersStore.folderTree)
 
+const onSearchFocus = () => {
+  // Add focus animation if needed
+}
+
+const onSearchBlur = () => {
+  // Add blur animation if needed
+}
+
 onMounted(async () => {
   await loadFolders()
   await loadUsers()
@@ -609,30 +624,71 @@ const formatDate = (dateStr) => {
 }
 
 .search-bar {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  padding: var(--space-xl);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  position: relative;
+  overflow: hidden;
+}
+
+.search-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient-ai);
+  z-index: 1;
 }
 
 .search-input-group {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+  position: relative;
+}
+
+.search-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  background: var(--gradient-cyan-purple);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-glow-cyan);
+  transition: all var(--transition-base);
+  flex-shrink: 0;
 }
 
 .search-icon {
-  color: #666;
+  color: white;
   flex-shrink: 0;
+  animation: float 3s var(--ease-in-out) infinite;
 }
 
 .search-input {
   flex: 1;
-  padding: 0.75rem;
-  font-size: 1rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  padding: var(--space-lg);
+  font-size: 1.1rem;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-xl);
+  background: var(--bg-white);
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-sm);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--ai-cyan);
+  box-shadow: var(--shadow-md), 0 0 0 3px rgba(0, 217, 255, 0.1);
+}
+
+.search-btn {
+  position: relative;
+  overflow: hidden;
 }
 
 .search-mode {
@@ -692,29 +748,54 @@ const formatDate = (dateStr) => {
 
 .results-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-xl);
+  animation: fadeIn var(--transition-base) var(--ease-out);
 }
 
 .result-card {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  background: var(--bg-white);
+  padding: var(--space-xl);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
   border: 2px solid transparent;
   position: relative;
+  overflow: hidden;
+  animation: fadeInUp var(--transition-base) var(--ease-out) both;
+}
+
+.result-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient-cyan-purple);
+  transform: scaleX(0);
+  transition: transform var(--transition-base);
+}
+
+.result-card:hover::before {
+  transform: scaleX(1);
 }
 
 .result-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: var(--shadow-2xl), var(--shadow-glow);
+  border-color: var(--ai-cyan);
 }
 
 .result-card.selected {
   border-color: var(--primary);
-  background: var(--primary-light);
+  background: var(--gradient-ai-soft);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+
+.result-card.selected::before {
+  transform: scaleX(1);
 }
 
 .card-checkbox {
@@ -831,13 +912,24 @@ const formatDate = (dateStr) => {
 }
 
 .filters-sidebar {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  padding: var(--space-xl);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
   height: fit-content;
   position: sticky;
-  top: 2rem;
+  top: var(--space-xl);
+  background: var(--bg-white);
+}
+
+.filters-sidebar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient-ai);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
 }
 
 .filters-header {
@@ -903,10 +995,47 @@ const formatDate = (dateStr) => {
 .filter-section input[type="text"],
 .filter-section input[type="date"] {
   width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 0.9rem;
+  padding: var(--space-md) var(--space-lg);
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg);
+  background: var(--bg-white);
+  font-size: 0.95rem;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-sm);
+}
+
+.filter-section input[type="date"] {
+  padding-right: var(--space-xl);
+  cursor: pointer;
+  position: relative;
+}
+
+.filter-section input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  filter: grayscale(1);
+  transition: all var(--transition-base);
+  padding: var(--space-xs);
+  border-radius: var(--radius-sm);
+}
+
+.filter-section input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  filter: grayscale(0);
+  background: var(--gradient-ai-soft);
+}
+
+.filter-section select:focus,
+.filter-section input[type="text"]:focus,
+.filter-section input[type="date"]:focus {
+  outline: none;
+  border-color: var(--ai-cyan);
+  box-shadow: var(--shadow-md), 0 0 0 3px rgba(0, 217, 255, 0.1);
+}
+
+.filter-section input[type="date"]:focus::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  filter: grayscale(0);
 }
 
 .selected-tags {

@@ -2,24 +2,68 @@
   <div class="tasks-page">
     <h1 class="page-header">Tasks</h1>
       <div class="task-filters">
-        <button @click="filter = 'pending'" :class="['filter-btn', { active: filter === 'pending' }]">Pending</button>
-        <button @click="filter = 'completed'" :class="['filter-btn', { active: filter === 'completed' }]">Completed</button>
-        <button @click="filter = 'all'" :class="['filter-btn', { active: filter === 'all' }]">All</button>
+        <button 
+          v-for="filterOption in filterOptions" 
+          :key="filterOption.value"
+          @click="filter = filterOption.value" 
+          :class="['filter-btn', { active: filter === filterOption.value }]"
+        >
+          {{ filterOption.label }}
+        </button>
       </div>
       <div v-if="tasks.length === 0" class="empty-state">
-        No tasks found
+        <div class="empty-icon">
+          <CheckSquare :size="64" />
+        </div>
+        <h3>No tasks found</h3>
+        <p>You don't have any tasks matching the selected filter.</p>
       </div>
       <div v-else class="task-list">
         <div v-for="task in filteredTasks" :key="task.id" class="task-item">
           <div class="task-info">
-            <h3>{{ task.document?.title || 'Untitled' }}</h3>
-            <p class="meta">Workflow: {{ task.workflow?.template }} • Due: {{ formatDate(task.due_at) }}</p>
-            <p class="description">{{ task.description }}</p>
+            <div class="task-header">
+              <h3>{{ task.document?.title || 'Untitled' }}</h3>
+              <StatusBadge :status="task.state || 'pending'" :label="getStatusLabel(task.state)" />
+            </div>
+            <p class="meta">
+              <span>Workflow: {{ task.workflow?.template || 'N/A' }}</span>
+              <span v-if="task.due_at">• Due: {{ formatDate(task.due_at) }}</span>
+              <span v-if="task.assignee">• Assignee: {{ task.assignee.name }}</span>
+            </p>
+            <p v-if="task.description" class="description">{{ task.description }}</p>
+            <div v-if="task.comment" class="task-comment">
+              <strong>Comment:</strong> {{ task.comment }}
+            </div>
           </div>
           <div class="task-actions">
-            <button @click="approveTask(task)" class="btn-primary">Approve</button>
-            <button @click="rejectTask(task)" class="btn-danger">Reject</button>
-            <button @click="viewDocument(task.document_id)" class="btn-secondary">View Doc</button>
+            <button 
+              v-if="task.state === 'pending' || task.state === 'changes_requested'"
+              @click="approveTask(task)" 
+              class="btn-primary"
+            >
+              <Check :size="16" />
+              Approve
+            </button>
+            <button 
+              v-if="task.state === 'pending' || task.state === 'changes_requested'"
+              @click="rejectTask(task)" 
+              class="btn-danger"
+            >
+              <X :size="16" />
+              Reject
+            </button>
+            <button 
+              v-if="task.state === 'pending'"
+              @click="requestChanges(task)" 
+              class="btn-secondary"
+            >
+              <Edit :size="16" />
+              Request Changes
+            </button>
+            <button @click="viewDocument(task.document_id)" class="btn-secondary">
+              <FileText :size="16" />
+              View Doc
+            </button>
           </div>
         </div>
       </div>
@@ -30,15 +74,39 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../services/api'
+import { StatusBadge } from '../components'
+import { CheckSquare, Check, X, Edit, FileText } from 'lucide-vue-next'
 
 const router = useRouter()
 const tasks = ref([])
-const filter = ref('pending')
+const filter = ref('all')
+
+const filterOptions = [
+  { value: 'all', label: 'All' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'changes_requested', label: 'Changes Requested' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'completed', label: 'Completed' }
+]
 
 const filteredTasks = computed(() => {
   if (filter.value === 'all') return tasks.value
-  return tasks.value.filter(t => t.status === filter.value)
+  return tasks.value.filter(t => (t.state || 'pending') === filter.value)
 })
+
+const getStatusLabel = (state) => {
+  const labels = {
+    'pending': 'Pending',
+    'approved': 'Approved',
+    'rejected': 'Rejected',
+    'changes_requested': 'Changes Requested',
+    'in_progress': 'In Progress',
+    'completed': 'Completed'
+  }
+  return labels[state] || state
+}
 
 onMounted(async () => {
   await loadTasks()
@@ -59,17 +127,50 @@ const approveTask = async (task) => {
   try {
     await api.post(`/tasks/${task.id}/action`, { action: 'approve' })
     await loadTasks()
+    if (window.$toast) {
+      window.$toast.show('Task approved', 'success')
+    }
   } catch (e) {
     console.error('Failed to approve task', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to approve task', 'error')
+    }
   }
 }
 
 const rejectTask = async (task) => {
   try {
-    await api.post(`/tasks/${task.id}/action`, { action: 'reject' })
-    await loadTasks()
+    const comment = prompt('Please provide a reason for rejection:')
+    if (comment !== null) {
+      await api.post(`/tasks/${task.id}/action`, { action: 'reject', comment })
+      await loadTasks()
+      if (window.$toast) {
+        window.$toast.show('Task rejected', 'success')
+      }
+    }
   } catch (e) {
     console.error('Failed to reject task', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to reject task', 'error')
+    }
+  }
+}
+
+const requestChanges = async (task) => {
+  try {
+    const comment = prompt('Please describe the changes needed:')
+    if (comment !== null) {
+      await api.post(`/tasks/${task.id}/action`, { action: 'request_changes', comment })
+      await loadTasks()
+      if (window.$toast) {
+        window.$toast.show('Changes requested', 'success')
+      }
+    }
+  } catch (e) {
+    console.error('Failed to request changes', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to request changes', 'error')
+    }
   }
 }
 
@@ -84,62 +185,230 @@ const formatDate = (dateStr) => {
 
 <style scoped>
 .tasks-page {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
+  animation: fadeIn var(--transition-base) var(--ease-out);
 }
+
 .task-filters {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 2rem;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xl);
+  flex-wrap: wrap;
 }
+
 .filter-btn {
-  padding: 0.5rem 1rem;
-  border: 1px solid #ddd;
-  background: white;
-  border-radius: 6px;
+  padding: var(--space-md) var(--space-lg);
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
+  font-weight: 500;
+  font-size: 0.95rem;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
 }
+
+.filter-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: var(--gradient-ai-soft);
+  transition: left var(--transition-base);
+  z-index: 0;
+}
+
+.filter-btn:hover::before {
+  left: 0;
+}
+
+.filter-btn:hover {
+  border-color: var(--ai-cyan);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
 .filter-btn.active {
-  background: var(--primary);
+  background: var(--gradient-primary);
   color: white;
   border-color: var(--primary);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  position: relative;
+  z-index: 1;
 }
+
+.filter-btn.active::before {
+  display: none;
+}
+
 .task-list {
   display: grid;
-  gap: 1.5rem;
+  gap: var(--space-xl);
 }
+
 .task-item {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  background: var(--bg-white);
+  padding: var(--space-xl);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 1.5rem;
+  gap: var(--space-xl);
+  align-items: flex-start;
+  border: 2px solid transparent;
+  transition: all var(--transition-base);
+  position: relative;
+  overflow: hidden;
+  animation: fadeInUp var(--transition-base) var(--ease-out) both;
+}
+
+.task-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient-cyan-purple);
+  transform: scaleX(0);
+  transition: transform var(--transition-base);
+}
+
+.task-item:hover::before {
+  transform: scaleX(1);
+}
+
+.task-item:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-2xl), var(--shadow-glow);
+  border-color: var(--ai-cyan);
+}
+
+.task-info {
+  flex: 1;
+}
+
+.task-header {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+  flex-wrap: wrap;
 }
+
 .task-info h3 {
-  margin: 0 0 0.5rem 0;
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  flex: 1;
+  min-width: 0;
 }
+
 .meta {
-  color: #666;
+  color: var(--text-medium);
   font-size: 0.9rem;
-  margin: 0.25rem 0;
+  margin: var(--space-sm) 0;
+  display: flex;
+  gap: var(--space-md);
+  flex-wrap: wrap;
 }
+
+.meta span {
+  white-space: nowrap;
+}
+
 .description {
-  margin-top: 0.5rem;
-  color: #333;
+  margin-top: var(--space-md);
+  color: var(--text-dark);
+  line-height: 1.6;
 }
+
+.task-comment {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  background: var(--gradient-ai-soft);
+  border-radius: var(--radius-lg);
+  border-left: 3px solid var(--ai-cyan);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.task-comment strong {
+  color: var(--primary);
+}
+
 .task-actions {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-sm);
+  min-width: 150px;
 }
+
+.task-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  white-space: nowrap;
+}
+
 .empty-state {
   text-align: center;
-  padding: 3rem;
-  color: #666;
+  padding: var(--space-3xl);
+  color: var(--text-medium);
+  animation: fadeInUp var(--transition-base) var(--ease-out);
+}
+
+.empty-icon {
+  margin: 0 auto var(--space-lg);
+  width: 120px;
+  height: 120px;
+  border-radius: var(--radius-full);
+  background: var(--gradient-ai-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  opacity: 0.5;
+}
+
+.empty-state h3 {
+  margin: 0 0 var(--space-sm) 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-light);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .task-item {
+    grid-template-columns: 1fr;
+    gap: var(--space-lg);
+  }
+  
+  .task-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    min-width: auto;
+  }
+  
+  .task-actions button {
+    flex: 1;
+    min-width: 120px;
+  }
 }
 </style>
 
