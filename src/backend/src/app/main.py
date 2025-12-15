@@ -1,7 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+import logging
 
 from .config import settings
+from .db import AsyncSessionLocal
+from .models.users import User
+from .services.auth import get_password_hash
+from sqlalchemy import select
+
+logger = logging.getLogger(__name__)
 from .routers import (
     ai,
     audit,
@@ -25,8 +33,70 @@ from .routers import (
 )
 
 
+async def ensure_root_user():
+    """Ensure root user exists, create if not"""
+    try:
+        async with AsyncSessionLocal() as session:
+            # Check if root user exists
+            result = await session.execute(
+                select(User).where(User.email == settings.root_user_email)
+            )
+            existing = result.scalar_one_or_none()
+            
+            if existing:
+                logger.info(f"Root user already exists: {settings.root_user_email}")
+                return
+            
+            # Check if any maintainer exists
+            result = await session.execute(
+                select(User).where(User.is_maintainer == True)
+            )
+            maintainer_exists = result.scalar_one_or_none()
+            
+            if maintainer_exists:
+                logger.info("Maintainer user already exists, skipping root user creation")
+                return
+            
+            # Create root user
+            root_user = User(
+                name=settings.root_user_name,
+                email=settings.root_user_email,
+                password_hash=get_password_hash(settings.root_user_password),
+                role="admin",
+                status="active",
+                is_maintainer=True,  # Root user is maintainer
+                created_by=None
+            )
+            session.add(root_user)
+            await session.commit()
+            logger.info(f"✅ Root user created: {settings.root_user_email}")
+            logger.warning(f"⚠️  Default password: {settings.root_user_password} - Please change after first login!")
+    except Exception as e:
+        # Check if error is due to missing tables (database not migrated yet)
+        error_str = str(e).lower()
+        if "does not exist" in error_str or "undefinedtable" in error_str or "relation" in error_str:
+            logger.warning("⚠️  Database tables not found. Please run migrations first:")
+            logger.warning("   cd src/backend && alembic upgrade head")
+            logger.warning("   Root user will be created automatically after migrations.")
+        else:
+            logger.error(f"Failed to create root user: {e}", exc_info=True)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Create root user if not exists
+    await ensure_root_user()
+    yield
+    # Shutdown: cleanup if needed
+    pass
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title=settings.app_name, version="0.1.0")
+    app = FastAPI(
+        title=settings.app_name,
+        version="0.1.0",
+        lifespan=lifespan
+    )
     
     # Configure CORS
     app.add_middleware(

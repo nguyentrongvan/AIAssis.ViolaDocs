@@ -47,9 +47,16 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
 
-    # LLM - Support multiple keys (comma-separated) for quota distribution
-    gemini_api_key: str = ""  # Single key or comma-separated keys
-    openai_api_key: str = ""  # Single key or comma-separated keys
+    # Root User - Auto-create on startup if not exists
+    root_user_email: str = "admin@example.com"
+    root_user_password: str = "admin123"
+    root_user_name: str = "Admin"
+
+    # Ollama - Local LLM with OpenAI-compatible API
+    ollama_base_url: str = "http://localhost:11434"  # Default to localhost, use http://ollama:11434 in docker
+    ollama_api_key: str = ""  # Optional API key for OpenAI-compatible endpoints
+    ollama_llm_model: str = "llama3.2"  # Default LLM model for chat
+    ollama_embedding_model: str = "nomic-text-embedding"  # Default embedding model
 
     # OCR
     ocr_provider: str = "paddle"
@@ -84,20 +91,6 @@ class Settings(BaseSettings):
     @property
     def allowed_mime_list(self) -> List[str]:
         return [mime.strip() for mime in self.allowed_mime_types.split(",")]
-    
-    @property
-    def gemini_api_keys(self) -> List[str]:
-        """Get list of Gemini API keys"""
-        if not self.gemini_api_key:
-            return []
-        return [key.strip() for key in self.gemini_api_key.split(",") if key.strip()]
-    
-    @property
-    def openai_api_keys(self) -> List[str]:
-        """Get list of OpenAI API keys"""
-        if not self.openai_api_key:
-            return []
-        return [key.strip() for key in self.openai_api_key.split(",") if key.strip()]
 
     class Config:
         env_file = ".env"

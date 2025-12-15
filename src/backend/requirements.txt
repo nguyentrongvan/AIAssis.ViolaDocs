@@ -16,19 +16,17 @@ redis==5.0.1
 # AI/OCR dependencies - numpy must be <2.0 for PaddleOCR compatibility
 numpy<2.0
 paddleocr==2.7.0
-paddlepaddle>=2.6.0
+paddlepaddle==2.6.2
 PyMuPDF
-Pillow>=11.0.0
+Pillow==11.0.0
 pgvector==0.2.4
 openai==1.6.0
 google-generativeai==0.3.0
-sentence-transformers>=2.2.0
-torch>=2.0.0
-chromadb>=0.5.3
+chromadb==0.5.3
 # Testing dependencies
 pytest==7.4.3
 pytest-asyncio==0.21.1
 pytest-cov==4.1.0
-httpx==0.25.2
+httpx==0.28.0
 aiosqlite==0.19.0
 

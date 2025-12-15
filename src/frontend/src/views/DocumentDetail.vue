@@ -585,8 +585,8 @@ const viewVersion = (version) => {
 const compareWithVersion = (version) => {
   const latest = versions.value.find(v => v.version_no === latestVersion.value)
   if (latest && version.id !== latest.id) {
-    compareV1 = latest.version_no
-    compareV2 = version.version_no
+    compareV1.value = latest.version_no
+    compareV2.value = version.version_no
     showCompareModal.value = true
   }
 }

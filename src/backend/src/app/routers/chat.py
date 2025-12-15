@@ -168,8 +168,10 @@ async def chat(
                                     "snippet": text_content[:200]
                                 })
     
-    # Generate response using LLM service with prompts
-    answer = llm_service.chat(request.message, context=doc_contexts)
+    # Generate response using LLM service with prompts and get token usage
+    answer, token_usage = llm_service.chat_with_usage(request.message, context=doc_contexts)
+    token_in = token_usage.get("token_in", 0)
+    token_out = token_usage.get("token_out", 0)
     
     # Store in cache
     try:
@@ -192,15 +194,34 @@ async def chat(
             user_id=current_user.id,
             group_id=request.group_id,
             session_id=session_id,
-            messages=[]
+            messages=[],
+            token_in_total=0,
+            token_out_total=0
         )
         session.add(chat_session)
     
-    # Add messages to session
+    # Add messages to session with token tracking
     messages = chat_session.messages or []
-    messages.append({"role": "user", "content": request.message, "timestamp": datetime.utcnow().isoformat()})
-    messages.append({"role": "assistant", "content": answer, "citations": citations, "timestamp": datetime.utcnow().isoformat()})
+    messages.append({
+        "role": "user",
+        "content": request.message,
+        "timestamp": datetime.utcnow().isoformat(),
+        "token_in": 0,  # User messages don't count as input tokens for LLM
+        "token_out": 0
+    })
+    messages.append({
+        "role": "assistant",
+        "content": answer,
+        "citations": citations,
+        "timestamp": datetime.utcnow().isoformat(),
+        "token_in": token_in,
+        "token_out": token_out
+    })
     chat_session.messages = messages[-20:]  # Keep last 20 messages
+    
+    # Update total token counts for session
+    chat_session.token_in_total = (chat_session.token_in_total or 0) + token_in
+    chat_session.token_out_total = (chat_session.token_out_total or 0) + token_out
     
     await session.commit()
     await session.refresh(chat_session)

@@ -35,8 +35,7 @@
         <select v-model="filters.provider">
           <option value="">All Providers</option>
           <option value="paddle">Paddle</option>
-          <option value="openai">OpenAI</option>
-          <option value="gemini">Gemini</option>
+          <option value="ollama">Ollama</option>
         </select>
       </div>
       <div class="filter-actions">

@@ -158,6 +158,81 @@
         <div v-else class="loading">Loading providers...</div>
       </div>
 
+      <!-- LLM Settings Tab -->
+      <div v-if="activeTab === 'llm'" class="tab-content">
+        <div class="section-header">
+          <h2>LLM Settings (Ollama)</h2>
+        </div>
+        <div class="llm-settings-form">
+          <div class="config-warning">
+            <AlertTriangle :size="20" />
+            <div>
+              <strong>Note:</strong> Changes require server restart to take effect. 
+              API key is optional for local Ollama instances.
+            </div>
+          </div>
+          
+          <div v-if="llmSettings" class="form-section">
+            <div class="form-group">
+              <label for="ollama_base_url">Ollama Base URL *</label>
+              <input
+                id="ollama_base_url"
+                v-model="llmForm.ollama_base_url"
+                type="text"
+                placeholder="http://localhost:11434"
+              />
+              <small>Use http://ollama:11434 in docker, http://localhost:11434 for local</small>
+            </div>
+            
+            <div class="form-group">
+              <label for="ollama_api_key">Ollama API Key (Optional)</label>
+              <input
+                id="ollama_api_key"
+                v-model="llmForm.ollama_api_key"
+                type="password"
+                placeholder="Leave empty for local Ollama"
+              />
+              <small>Current value is hidden. Enter new value to update.</small>
+            </div>
+            
+            <div class="form-group">
+              <label for="ollama_llm_model">LLM Model *</label>
+              <input
+                id="ollama_llm_model"
+                v-model="llmForm.ollama_llm_model"
+                type="text"
+                placeholder="llama3.2"
+              />
+              <small>Model name for chat (e.g., llama3.2, mistral, qwen2.5)</small>
+            </div>
+            
+            <div class="form-group">
+              <label for="ollama_embedding_model">Embedding Model *</label>
+              <input
+                id="ollama_embedding_model"
+                v-model="llmForm.ollama_embedding_model"
+                type="text"
+                placeholder="nomic-text-embedding"
+              />
+              <small>Model name for embeddings (default: nomic-text-embedding)</small>
+            </div>
+            
+            <div class="form-actions">
+              <button @click="saveLLMSettings" class="btn-primary" :disabled="savingLLM">
+                <Save :size="16" />
+                {{ savingLLM ? 'Saving...' : 'Save LLM Settings' }}
+              </button>
+              <button @click="loadLLMSettings" class="btn-secondary" :disabled="savingLLM">
+                <RefreshCw :size="16" />
+                Reset
+              </button>
+            </div>
+          </div>
+          
+          <div v-else class="loading">Loading LLM settings...</div>
+        </div>
+      </div>
+
       <!-- Chatbot Policies Tab -->
       <div v-if="activeTab === 'chatbot'" class="tab-content">
         <div class="section-header">
@@ -245,7 +320,7 @@ import { useSettingsStore } from '../../store/settings'
 import { useGroupsStore } from '../../store/groups'
 import { settingsAPI } from '../../services/api'
 import { Modal, StatusBadge } from '../../components'
-import { Plus, Edit, Trash2, Activity } from 'lucide-vue-next'
+import { Plus, Edit, Trash2, Activity, Save, RefreshCw, AlertTriangle } from 'lucide-vue-next'
 
 const settingsStore = useSettingsStore()
 const groupsStore = useGroupsStore()
@@ -256,10 +331,19 @@ const providers = ref(null)
 const chatbotPolicies = ref([])
 const showRetentionModal = ref(false)
 const editingRetentionPolicy = ref(null)
+const llmSettings = ref(null)
+const llmForm = ref({
+  ollama_base_url: '',
+  ollama_api_key: '',
+  ollama_llm_model: '',
+  ollama_embedding_model: ''
+})
+const savingLLM = ref(false)
 
 const tabs = [
   { id: 'retention', label: 'Retention Policies' },
   { id: 'providers', label: 'OCR/AI Providers' },
+  { id: 'llm', label: 'LLM Settings' },
   { id: 'chatbot', label: 'Chatbot Policies' }
 ]
 
@@ -275,6 +359,7 @@ onMounted(async () => {
   await loadProviders()
   await loadChatbotPolicies()
   await loadGroups()
+  await loadLLMSettings()
 })
 
 const loadRetentionPolicies = async () => {
@@ -434,6 +519,53 @@ const editChatbotPolicy = (policy) => {
 const getGroupName = (groupId) => {
   const group = groupsStore.groups.find(g => g.id === groupId)
   return group ? group.name : `Group ${groupId}`
+}
+
+const loadLLMSettings = async () => {
+  try {
+    const res = await settingsAPI.llm.get()
+    if (res.is_success) {
+      llmSettings.value = res.data
+      llmForm.value = {
+        ollama_base_url: res.data.ollama_base_url || '',
+        ollama_api_key: '', // Always empty, user needs to enter new value
+        ollama_llm_model: res.data.ollama_llm_model || '',
+        ollama_embedding_model: res.data.ollama_embedding_model || ''
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load LLM settings', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to load LLM settings', 'error')
+    }
+  }
+}
+
+const saveLLMSettings = async () => {
+  savingLLM.value = true
+  try {
+    // Only send fields that have values
+    const payload = {}
+    if (llmForm.value.ollama_base_url) payload.ollama_base_url = llmForm.value.ollama_base_url
+    if (llmForm.value.ollama_api_key) payload.ollama_api_key = llmForm.value.ollama_api_key
+    if (llmForm.value.ollama_llm_model) payload.ollama_llm_model = llmForm.value.ollama_llm_model
+    if (llmForm.value.ollama_embedding_model) payload.ollama_embedding_model = llmForm.value.ollama_embedding_model
+    
+    const res = await settingsAPI.llm.update(payload)
+    if (res.is_success) {
+      if (window.$toast) {
+        window.$toast.show('LLM settings saved. Server restart required.', 'success')
+      }
+      await loadLLMSettings()
+    }
+  } catch (e) {
+    console.error('Failed to save LLM settings', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to save LLM settings', 'error')
+    }
+  } finally {
+    savingLLM.value = false
+  }
 }
 </script>
 
@@ -651,5 +783,108 @@ const getGroupName = (groupId) => {
   text-align: center;
   padding: 3rem;
   color: #666;
+}
+
+.llm-settings-form {
+  max-width: 800px;
+}
+
+.config-warning {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+  color: #856404;
+}
+
+.config-warning strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-weight: 600;
+  color: #333;
+  font-size: 0.95rem;
+}
+
+.form-group input {
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1);
+}
+
+.form-group small {
+  font-size: 0.85rem;
+  color: #666;
+  font-style: italic;
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #eee;
+}
+
+.form-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.form-actions .btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.form-actions .btn-primary:hover:not(:disabled) {
+  background: var(--primary-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.form-actions .btn-secondary {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.form-actions .btn-secondary:hover:not(:disabled) {
+  background: #e5e5e5;
+}
+
+.form-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

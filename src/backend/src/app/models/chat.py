@@ -14,6 +14,8 @@ class ChatSession(BaseModel):
     messages = Column(JSON, nullable=False, default=[])  # Array of message objects
     feedback = Column(JSON, nullable=True)  # User feedback if provided
     handoff_id = Column(String(100), nullable=True)  # Support ticket ID if escalated
+    token_in_total = Column(Integer, nullable=False, default=0)  # Total input tokens for session
+    token_out_total = Column(Integer, nullable=False, default=0)  # Total output tokens for session
     
     user = relationship("User", backref="chat_sessions")
     group = relationship("DocumentGroup", backref="chat_sessions")

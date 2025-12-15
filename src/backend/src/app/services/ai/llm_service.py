@@ -1,4 +1,3 @@
-import random
 from typing import List, Optional
 from ...config import settings
 from ...prompts import (
@@ -19,93 +18,42 @@ class LLMProvider:
     def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """Generate response from prompt"""
         raise NotImplementedError
+    
+    def generate_response_with_usage(self, prompt: str, system_prompt: Optional[str] = None) -> tuple[str, dict]:
+        """
+        Generate response from prompt and return token usage.
+        Returns: (response_text, {"token_in": int, "token_out": int})
+        Default implementation calls generate_response and returns 0 tokens.
+        """
+        response = self.generate_response(prompt, system_prompt)
+        return response, {"token_in": 0, "token_out": 0}
 
 
-class GeminiLLMProvider(LLMProvider):
-    """Google Gemini implementation with multiple key support"""
+class OllamaLLMProvider(LLMProvider):
+    """Ollama LLM implementation using OpenAI-compatible API"""
     
-    def __init__(self, api_keys: List[str]):
-        self.api_keys = api_keys
-        self.models = {}
-        self._init_models()
+    def __init__(self, base_url: str, api_key: Optional[str] = None, model: str = "llama3.2"):
+        self.base_url = base_url
+        self.api_key = api_key
+        self.model = model
+        self.client = None
+        self._init_client()
     
-    def _init_models(self):
-        """Initialize models for all API keys"""
-        try:
-            import google.generativeai as genai
-            for key in self.api_keys:
-                try:
-                    genai.configure(api_key=key)
-                    self.models[key] = genai.GenerativeModel('gemini-pro')
-                except Exception as e:
-                    print(f"Failed to initialize Gemini with key: {e}")
-        except ImportError:
-            print("google-generativeai not installed")
-    
-    def _get_random_model(self):
-        """Get a random model from available keys"""
-        if not self.models:
-            return None
-        key = random.choice(list(self.models.keys()))
-        return self.models[key]
-    
-    def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        model = self._get_random_model()
-        if not model:
-            return "LLM provider not available. Please configure API key."
-        
-        try:
-            full_prompt = prompt
-            if system_prompt:
-                full_prompt = f"{system_prompt}\n\n{prompt}"
-            
-            response = model.generate_content(full_prompt)
-            return response.text
-        except Exception as e:
-            # Retry with another key if quota exceeded
-            if "quota" in str(e).lower() or "429" in str(e):
-                if len(self.models) > 1:
-                    model = self._get_random_model()
-                    if model:
-                        try:
-                            response = model.generate_content(full_prompt)
-                            return response.text
-                        except:
-                            pass
-            return f"Error generating response: {str(e)}"
-
-
-class OpenAILLMProvider(LLMProvider):
-    """OpenAI GPT implementation with multiple key support"""
-    
-    def __init__(self, api_keys: List[str]):
-        self.api_keys = api_keys
-        self.clients = {}
-        self._init_clients()
-    
-    def _init_clients(self):
-        """Initialize clients for all API keys"""
+    def _init_client(self):
+        """Initialize OpenAI client with Ollama base URL"""
         try:
             import openai
-            for key in self.api_keys:
-                try:
-                    self.clients[key] = openai.OpenAI(api_key=key)
-                except Exception as e:
-                    print(f"Failed to initialize OpenAI with key: {e}")
+            self.client = openai.OpenAI(
+                base_url=self.base_url,
+                api_key=self.api_key or "ollama"  # Ollama doesn't require key, but OpenAI client needs one
+            )
         except ImportError:
             print("openai not installed")
-    
-    def _get_random_client(self):
-        """Get a random client from available keys"""
-        if not self.clients:
-            return None
-        key = random.choice(list(self.clients.keys()))
-        return self.clients[key]
+            self.client = None
     
     def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        client = self._get_random_client()
-        if not client:
-            return "LLM provider not available. Please configure API key."
+        if not self.client:
+            return "Ollama LLM provider not available. Please check configuration."
         
         try:
             messages = []
@@ -113,26 +61,38 @@ class OpenAILLMProvider(LLMProvider):
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
             
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+            response = self.client.chat.completions.create(
+                model=self.model,
                 messages=messages
             )
             return response.choices[0].message.content
         except Exception as e:
-            # Retry with another key if quota exceeded
-            if "quota" in str(e).lower() or "429" in str(e) or "rate limit" in str(e).lower():
-                if len(self.clients) > 1:
-                    client = self._get_random_client()
-                    if client:
-                        try:
-                            response = client.chat.completions.create(
-                                model="gpt-3.5-turbo",
-                                messages=messages
-                            )
-                            return response.choices[0].message.content
-                        except:
-                            pass
             return f"Error generating response: {str(e)}"
+    
+    def generate_response_with_usage(self, prompt: str, system_prompt: Optional[str] = None) -> tuple[str, dict]:
+        """Generate response and return token usage"""
+        if not self.client:
+            return "Ollama LLM provider not available. Please check configuration.", {"token_in": 0, "token_out": 0}
+        
+        try:
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+            
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages
+            )
+            
+            # Extract token usage from response
+            usage = response.usage
+            token_in = usage.prompt_tokens if usage else 0
+            token_out = usage.completion_tokens if usage else 0
+            
+            return response.choices[0].message.content, {"token_in": token_in, "token_out": token_out}
+        except Exception as e:
+            return f"Error generating response: {str(e)}", {"token_in": 0, "token_out": 0}
 
 
 class LLMService:
@@ -142,16 +102,18 @@ class LLMService:
         self.provider = provider or self._get_default_provider()
     
     def _get_default_provider(self) -> Optional[LLMProvider]:
-        """Get default LLM provider"""
-        gemini_keys = settings.gemini_api_keys
-        openai_keys = settings.openai_api_keys
+        """Get default LLM provider (Ollama only)"""
+        if settings.ollama_base_url:
+            try:
+                return OllamaLLMProvider(
+                    base_url=settings.ollama_base_url,
+                    api_key=settings.ollama_api_key if settings.ollama_api_key else None,
+                    model=settings.ollama_llm_model
+                )
+            except Exception as e:
+                print(f"Failed to initialize Ollama provider: {e}")
         
-        if gemini_keys:
-            return GeminiLLMProvider(gemini_keys)
-        elif openai_keys:
-            return OpenAILLMProvider(openai_keys)
-        else:
-            return None
+        return None
     
     def chat(self, question: str, context: Optional[List[str]] = None) -> str:
         """Chat with context (RAG)"""
@@ -167,6 +129,21 @@ class LLMService:
             prompt = CHATBOT_NO_CONTEXT_PROMPT.format(question=question)
         
         return self.provider.generate_response(prompt, system_prompt=CHATBOT_SYSTEM_PROMPT)
+    
+    def chat_with_usage(self, question: str, context: Optional[List[str]] = None) -> tuple[str, dict]:
+        """Chat with context (RAG) and return token usage"""
+        if not self.provider:
+            return "LLM provider not configured", {"token_in": 0, "token_out": 0}
+        
+        if context:
+            prompt = CHATBOT_CONTEXT_PROMPT.format(
+                context="\n\n".join([f"Document {i+1}:\n{ctx}" for i, ctx in enumerate(context)]),
+                question=question
+            )
+        else:
+            prompt = CHATBOT_NO_CONTEXT_PROMPT.format(question=question)
+        
+        return self.provider.generate_response_with_usage(prompt, system_prompt=CHATBOT_SYSTEM_PROMPT)
     
     def classify_document(self, content: str) -> str:
         """Classify document content"""

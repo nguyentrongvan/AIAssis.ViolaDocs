@@ -156,18 +156,30 @@ async def get_system_config(
         "sensitive": False
     }
     
-    # LLM settings
-    config_dict["gemini_api_key"] = {
-        "value": "***" if settings.gemini_api_key else "",
+    # Ollama settings
+    config_dict["ollama_base_url"] = {
+        "value": settings.ollama_base_url,
+        "type": "string",
+        "category": "ai",
+        "sensitive": False
+    }
+    config_dict["ollama_api_key"] = {
+        "value": "***" if settings.ollama_api_key else "",
         "type": "string",
         "category": "ai",
         "sensitive": True
     }
-    config_dict["openai_api_key"] = {
-        "value": "***" if settings.openai_api_key else "",
+    config_dict["ollama_llm_model"] = {
+        "value": settings.ollama_llm_model,
         "type": "string",
         "category": "ai",
-        "sensitive": True
+        "sensitive": False
+    }
+    config_dict["ollama_embedding_model"] = {
+        "value": settings.ollama_embedding_model,
+        "type": "string",
+        "category": "ai",
+        "sensitive": False
     }
     
     # OCR settings
@@ -341,7 +353,7 @@ async def update_system_config(
     
     return success_response({
         "key": payload.key,
-        "value": "***" if payload.key in ["postgres_password", "minio_secret_key", "jwt_secret_key", "gemini_api_key", "openai_api_key"] else payload.value,
+        "value": "***" if payload.key in ["postgres_password", "minio_secret_key", "jwt_secret_key", "ollama_api_key"] else payload.value,
         "message": "Configuration updated. Server restart may be required."
     })
 

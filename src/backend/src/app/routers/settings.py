@@ -162,10 +162,10 @@ async def get_provider_settings(
         ],
         "embedding": [
             {
-                "name": "openai",
-                "enabled": bool(settings.openai_api_key),
+                "name": "ollama",
+                "enabled": bool(settings.ollama_base_url),
                 "health": "unknown",
-                "model": "text-embedding-3-small"
+                "model": settings.ollama_embedding_model
             },
             {
                 "name": "local",
@@ -176,16 +176,10 @@ async def get_provider_settings(
         ],
         "llm": [
             {
-                "name": "openai",
-                "enabled": bool(settings.openai_api_key),
+                "name": "ollama",
+                "enabled": bool(settings.ollama_base_url),
                 "health": "unknown",
-                "models": ["gpt-4", "gpt-3.5-turbo"]
-            },
-            {
-                "name": "gemini",
-                "enabled": bool(settings.gemini_api_key),
-                "health": "unknown",
-                "models": ["gemini-pro"]
+                "models": [settings.ollama_llm_model]
             }
         ],
         "search": [
@@ -276,3 +270,122 @@ async def update_chatbot_policy(
         "chatbot_policy": group.chatbot_policy
     })
 
+
+# LLM Settings Models
+class LLMSettingsUpdate(BaseModel):
+    ollama_base_url: Optional[str] = None
+    ollama_api_key: Optional[str] = None
+    ollama_llm_model: Optional[str] = None
+    ollama_embedding_model: Optional[str] = None
+
+
+@router.get("/llm")
+async def get_llm_settings(
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get LLM settings (Ollama configuration)."""
+    from ..config import settings
+    from pathlib import Path
+    
+    # Get .env file path
+    BACKEND_DIR = Path(__file__).parent.parent.parent.parent
+    ENV_FILE_PATH = BACKEND_DIR / ".env"
+    
+    # Read current values from settings
+    return success_response({
+        "ollama_base_url": settings.ollama_base_url,
+        "ollama_api_key": "***" if settings.ollama_api_key else "",
+        "ollama_llm_model": settings.ollama_llm_model,
+        "ollama_embedding_model": settings.ollama_embedding_model,
+        "note": "API key is masked. Changes require server restart to take effect."
+    })
+
+
+@router.post("/llm")
+async def update_llm_settings(
+    payload: LLMSettingsUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update LLM settings (Ollama configuration)."""
+    from pathlib import Path
+    
+    # Get .env file path
+    BACKEND_DIR = Path(__file__).parent.parent.parent.parent
+    ENV_FILE_PATH = BACKEND_DIR / ".env"
+    
+    # Read current .env file
+    try:
+        with open(ENV_FILE_PATH, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        return error_response(
+            ".env file not found",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    
+    # Update or add the keys
+    updated_keys = []
+    new_lines = []
+    existing_keys = set()
+    
+    # Map of setting names to env variable names
+    setting_map = {
+        "ollama_base_url": "OLLAMA_BASE_URL",
+        "ollama_api_key": "OLLAMA_API_KEY",
+        "ollama_llm_model": "OLLAMA_LLM_MODEL",
+        "ollama_embedding_model": "OLLAMA_EMBEDDING_MODEL"
+    }
+    
+    # First pass: update existing keys
+    for line in lines:
+        line_stripped = line.strip()
+        if "=" in line_stripped and not line_stripped.startswith("#"):
+            key = line_stripped.split("=")[0].strip()
+            existing_keys.add(key)
+            
+            # Check if this key should be updated
+            updated = False
+            for setting_name, env_key in setting_map.items():
+                if key == env_key:
+                    value = getattr(payload, setting_name, None)
+                    if value is not None:
+                        new_lines.append(f"{env_key}={value}\n")
+                        updated_keys.append(setting_name)
+                        updated = True
+                        break
+            
+            if not updated:
+                new_lines.append(line)
+        else:
+            new_lines.append(line)
+    
+    # Second pass: add new keys
+    for setting_name, env_key in setting_map.items():
+        if setting_name not in updated_keys:
+            value = getattr(payload, setting_name, None)
+            if value is not None and env_key not in existing_keys:
+                new_lines.append(f"{env_key}={value}\n")
+                updated_keys.append(setting_name)
+    
+    # Write back to .env file
+    try:
+        with open(ENV_FILE_PATH, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+    except Exception as e:
+        return error_response(
+            f"Failed to write .env file: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    
+    # Return updated settings (mask API key)
+    from ..config import settings
+    return success_response({
+        "ollama_base_url": payload.ollama_base_url or settings.ollama_base_url,
+        "ollama_api_key": "***" if (payload.ollama_api_key or settings.ollama_api_key) else "",
+        "ollama_llm_model": payload.ollama_llm_model or settings.ollama_llm_model,
+        "ollama_embedding_model": payload.ollama_embedding_model or settings.ollama_embedding_model,
+        "updated_keys": updated_keys,
+        "message": "LLM settings updated. Server restart required to take effect."
+    })

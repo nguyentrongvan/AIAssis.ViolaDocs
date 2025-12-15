@@ -179,6 +179,10 @@ export const settingsAPI = {
   chatbot: {
     list: () => api.get('/settings/chatbot'),
     update: (data) => api.post('/settings/chatbot', data)
+  },
+  llm: {
+    get: () => api.get('/settings/llm'),
+    update: (data) => api.post('/settings/llm', data)
   }
 }
 
