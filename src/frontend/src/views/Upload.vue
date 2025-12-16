@@ -13,7 +13,7 @@
           <span class="separator">|</span>
           <button @click.stop="openFolderDialog" class="btn-link">browse folder</button>
         </p>
-        <p class="hint">Supports: PDF, DOCX, XLSX, Images</p>
+        <p class="hint">Supports: PDF, DOCX, XLSX, CSV, TXT, Images</p>
       </div>
     </div>
 
@@ -293,6 +293,8 @@ const getFileTypeLabel = (mimeType) => {
   if (mimeType === 'application/pdf') return 'PDF'
   if (mimeType.includes('wordprocessingml')) return 'DOCX'
   if (mimeType.includes('spreadsheetml')) return 'XLSX'
+  if (mimeType === 'text/csv' || mimeType === 'application/csv') return 'CSV'
+  if (mimeType === 'text/plain') return 'TXT'
   if (mimeType.startsWith('image/')) return 'IMAGE'
   return 'FILE'
 }
@@ -301,6 +303,8 @@ const getFileTypeClass = (mimeType) => {
   if (mimeType === 'application/pdf') return 'type-pdf'
   if (mimeType.includes('wordprocessingml')) return 'type-docx'
   if (mimeType.includes('spreadsheetml')) return 'type-xlsx'
+  if (mimeType === 'text/csv' || mimeType === 'application/csv') return 'type-csv'
+  if (mimeType === 'text/plain') return 'type-txt'
   if (mimeType.startsWith('image/')) return 'type-image'
   return 'type-other'
 }

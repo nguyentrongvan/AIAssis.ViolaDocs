@@ -200,8 +200,12 @@ async def finalize_upload(
         await session.flush()
     
     # Create OCR job if file type supports OCR
+    # Create text extraction job for office/text files
     from ..models.ai import AIJob
-    if metadata["mime"].startswith("image/") or metadata["mime"] == "application/pdf":
+    mime = metadata["mime"]
+    
+    if mime.startswith("image/") or mime == "application/pdf":
+        # Create OCR job for images and PDFs
         ocr_job = AIJob(
             job_type="ocr",
             target={"document_id": doc.id, "version_id": version.id},
@@ -213,6 +217,24 @@ async def finalize_upload(
         
         # Job will be automatically processed by OCR worker service (Docker)
         # The worker will claim and process this job using SELECT FOR UPDATE SKIP LOCKED
+    elif mime in [
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # DOCX
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # XLSX
+        "text/csv",
+        "application/csv",
+        "text/plain"
+    ]:
+        # Create text extraction job for office/text files
+        text_extract_job = AIJob(
+            job_type="text_extract",
+            target={"document_id": doc.id, "version_id": version.id},
+            provider="native",
+            status="queued"
+        )
+        session.add(text_extract_job)
+        await session.flush()
+        
+        # Job will be automatically processed by worker service
     
     await session.commit()
     

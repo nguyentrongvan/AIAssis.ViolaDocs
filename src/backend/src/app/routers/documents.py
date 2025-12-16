@@ -21,6 +21,49 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
+def _get_file_extension_from_mime(mime: str) -> str:
+    """Extract short file extension from MIME type"""
+    if not mime:
+        return ""
+    
+    mime_lower = mime.lower()
+    
+    # Map common MIME types to extensions
+    mime_to_ext = {
+        "application/pdf": "pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+        "text/csv": "csv",
+        "application/csv": "csv",
+        "text/plain": "txt",
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/gif": "gif",
+        "image/webp": "webp",
+        "image/tiff": "tiff"
+    }
+    
+    if mime_lower in mime_to_ext:
+        return mime_to_ext[mime_lower]
+    
+    # Fallback: try to extract from MIME type
+    if '/' in mime:
+        subtype = mime.split('/')[-1].split('+')[0]
+        # Handle vnd.openxmlformats... cases
+        if 'wordprocessingml' in subtype:
+            return "docx"
+        elif 'spreadsheetml' in subtype:
+            return "xlsx"
+        elif 'presentationml' in subtype:
+            return "pptx"
+        # For simple cases like "pdf", "png", etc.
+        if len(subtype) <= 5 and '.' not in subtype:
+            return subtype
+    
+    return ""
+
+
 class DocumentCreate(BaseModel):
     title: str
     mime: str
@@ -140,7 +183,7 @@ async def list_documents(
             "deleted_at": doc.deleted_at.isoformat() if doc.deleted_at else None,
             "purge_at": doc.purge_at.isoformat() if doc.purge_at else None,
             "document_type": doc.mime.split('/')[0] if '/' in doc.mime else doc.mime,  # e.g., "application" -> "PDF", "image" -> "Image"
-            "file_extension": doc.mime.split('/')[-1].split('+')[0] if '/' in doc.mime else ""  # e.g., "pdf", "png" (handle vnd.openxmlformats...)
+            "file_extension": _get_file_extension_from_mime(doc.mime)  # Extract short extension from MIME type
         }
         
         # Get tags from DocumentTag join

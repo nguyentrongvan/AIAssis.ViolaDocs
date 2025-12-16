@@ -248,6 +248,132 @@ async def process_embedding_job(job_id: int):
             print(f"Embedding job {job_id} failed: {e}")
 
 
+async def process_text_extract_job(job_id: int):
+    """Process a single text extraction job"""
+    async with AsyncSessionLocal() as session:
+        # Get job
+        result = await session.execute(select(AIJob).where(AIJob.id == job_id))
+        job = result.scalar_one_or_none()
+        
+        if not job or job.status != "queued":
+            return
+        
+        # Update status
+        job.status = "processing"
+        await session.commit()
+        
+        try:
+            # Get document version
+            target = job.target
+            version_id = target.get("version_id")
+            
+            if not version_id:
+                raise ValueError("No version_id in target")
+            
+            result = await session.execute(
+                select(DocumentVersion).where(DocumentVersion.id == version_id)
+            )
+            version = result.scalar_one_or_none()
+            
+            if not version:
+                raise ValueError(f"Version {version_id} not found")
+            
+            # Download file from MinIO
+            minio_client = get_minio_client()
+            object_name = version.blob_uri
+            if object_name.startswith(f"minio://{settings.minio_bucket}/"):
+                object_name = object_name.replace(f"minio://{settings.minio_bucket}/", "")
+            
+            try:
+                file_data = minio_client.get_object(settings.minio_bucket, object_name)
+                file_bytes = file_data.read()
+                file_data.close()
+                file_data.release_conn()
+            except Exception as e:
+                raise ValueError(f"Failed to download file: {e}")
+            
+            # Get document to access mime type
+            doc_result = await session.execute(
+                select(Document).where(Document.id == version.document_id)
+            )
+            document = doc_result.scalar_one_or_none()
+            if not document:
+                raise ValueError(f"Document {version.document_id} not found")
+            mime = document.mime
+            
+            # Extract text using TextExtractionService
+            from ..services.text_extraction_service import TextExtractionService
+            
+            extract_result = await TextExtractionService.extract_text(mime, file_bytes)
+            
+            if extract_result.get("error"):
+                raise ValueError(extract_result["error"])
+            
+            extracted_text = extract_result.get("text", "")
+            
+            if not extracted_text:
+                raise ValueError("No text extracted from file")
+            
+            # Save extracted text to MinIO
+            text_object_name = f"renditions/{document.id}/{version_id}/text.txt"
+            from io import BytesIO
+            text_bytes = extracted_text.encode('utf-8')
+            try:
+                minio_client.put_object(
+                    settings.minio_bucket,
+                    text_object_name,
+                    BytesIO(text_bytes),
+                    length=len(text_bytes),
+                    content_type="text/plain"
+                )
+            except Exception as e:
+                raise ValueError(f"Failed to save extracted text: {e}")
+            
+            # Update version with text URI
+            version.text_uri = text_object_name
+            version.provider_info = {
+                "text_extraction": {
+                    "provider": "native",
+                    "mime": mime
+                }
+            }
+            
+            # Update document status
+            document.status = "ready"
+            
+            # Update job
+            job.status = "completed"
+            job.output_ref = {
+                "text_uri": version.text_uri,
+                "text_length": len(extracted_text)
+            }
+            
+            await session.commit()
+            
+            # Trigger embedding job after text extraction completes
+            try:
+                from ..models.ai import AIJob as EmbeddingJob
+                embed_job = EmbeddingJob(
+                    job_type="embed",
+                    target={"document_id": document.id, "version_id": version.id},
+                    provider="ollama",
+                    status="queued"
+                )
+                session.add(embed_job)
+                await session.commit()
+                
+                # Process embedding immediately in background
+                asyncio.create_task(process_embedding_job(embed_job.id))
+            except Exception as e:
+                pass
+            
+        except Exception as e:
+            job.status = "failed"
+            job.error = str(e)
+            await session.commit()
+            print(f"Text extraction job {job_id} failed: {e}")
+
+
 async def worker_loop():
     """Main worker loop to process queued jobs with parallel processing"""
     from ..config import settings
@@ -260,16 +386,25 @@ async def worker_loop():
     # Semaphores to limit concurrent processing
     ocr_semaphore = asyncio.Semaphore(MAX_CONCURRENT_OCR)
     embed_semaphore = asyncio.Semaphore(MAX_CONCURRENT_EMBED)
+    text_extract_semaphore = asyncio.Semaphore(MAX_CONCURRENT_OCR)  # Use same limit as OCR
     
     # Track active tasks
     active_tasks = set()
     
     async def process_job_with_semaphore(job_id: int, job_type: str):
         """Process a job with appropriate semaphore"""
-        semaphore = ocr_semaphore if job_type == "ocr" else embed_semaphore
+        if job_type == "ocr":
+            semaphore = ocr_semaphore
+        elif job_type == "text_extract":
+            semaphore = text_extract_semaphore
+        else:
+            semaphore = embed_semaphore
+        
         async with semaphore:
             if job_type == "ocr":
                 await process_ocr_job(job_id)
+            elif job_type == "text_extract":
+                await process_text_extract_job(job_id)
             elif job_type == "embed":
                 await process_embedding_job(job_id)
     

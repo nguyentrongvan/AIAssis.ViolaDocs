@@ -55,10 +55,13 @@
                 <div class="table-title">
                   <FileText :size="16" />
                   <div class="table-title-content">
-                    <span class="table-title-text">{{ doc.title || 'Untitled Document' }}</span>
-                    <span v-if="doc.document_type || doc.file_extension" class="doc-type-badge-small">
+                    <span 
+                      v-if="doc.document_type || doc.file_extension" 
+                      :class="['doc-type-badge-small', getDocumentTypeClass(doc)]"
+                    >
                       {{ getDocumentTypeLabel(doc) }}
                     </span>
+                    <span class="table-title-text">{{ doc.title || 'Untitled Document' }}</span>
                   </div>
                 </div>
               </td>
@@ -198,6 +201,7 @@ const formatDate = (dateString) => {
 }
 
 const getDocumentTypeLabel = (doc) => {
+  // First try file_extension if available
   if (doc.file_extension) {
     const ext = doc.file_extension.toUpperCase()
     const typeMap = {
@@ -212,23 +216,84 @@ const getDocumentTypeLabel = (doc) => {
       'JPG': 'JPG',
       'JPEG': 'JPG',
       'GIF': 'GIF',
-      'WEBP': 'WEBP'
+      'WEBP': 'WEBP',
+      'CSV': 'CSV',
+      'TXT': 'TXT'
     }
     return typeMap[ext] || ext
   }
   
+  // If no file_extension, try to extract from MIME type
+  if (doc.mime) {
+    const mime = doc.mime.toLowerCase()
+    if (mime === 'application/pdf') return 'PDF'
+    if (mime.includes('wordprocessingml')) return 'DOCX'
+    if (mime.includes('spreadsheetml')) return 'XLSX'
+    if (mime.includes('presentationml')) return 'PPTX'
+    if (mime === 'text/csv' || mime === 'application/csv') return 'CSV'
+    if (mime === 'text/plain') return 'TXT'
+    if (mime.startsWith('image/')) {
+      const imgType = mime.split('/')[1]
+      if (imgType === 'jpeg') return 'JPG'
+      return imgType.toUpperCase()
+    }
+  }
+  
+  // Fallback to document_type
   if (doc.document_type) {
     const typeMap = {
-      'application': 'Document',
-      'image': 'Image',
-      'video': 'Video',
-      'audio': 'Audio',
-      'text': 'Text'
+      'application': 'DOC',
+      'image': 'IMG',
+      'video': 'VID',
+      'audio': 'AUD',
+      'text': 'TXT'
     }
     return typeMap[doc.document_type] || doc.document_type
   }
   
-  return 'File'
+  return 'FILE'
+}
+
+const getDocumentTypeClass = (doc) => {
+  // Get file extension or extract from MIME
+  let ext = ''
+  if (doc.file_extension) {
+    ext = doc.file_extension.toLowerCase()
+  } else if (doc.mime) {
+    const mime = doc.mime.toLowerCase()
+    if (mime === 'application/pdf') ext = 'pdf'
+    else if (mime.includes('wordprocessingml')) ext = 'docx'
+    else if (mime.includes('spreadsheetml')) ext = 'xlsx'
+    else if (mime.includes('presentationml')) ext = 'pptx'
+    else if (mime === 'text/csv' || mime === 'application/csv') ext = 'csv'
+    else if (mime === 'text/plain') ext = 'txt'
+    else if (mime.startsWith('image/')) {
+      const imgType = mime.split('/')[1]
+      if (imgType === 'jpeg') ext = 'jpg'
+      else ext = imgType
+    }
+  }
+  
+  // Return color class based on extension
+  const colorMap = {
+    'pdf': 'type-pdf',        // Red
+    'docx': 'type-docx',      // Blue
+    'doc': 'type-docx',       // Blue
+    'xlsx': 'type-xlsx',      // Green
+    'xls': 'type-xlsx',       // Green
+    'pptx': 'type-pptx',      // Orange
+    'ppt': 'type-pptx',       // Orange
+    'csv': 'type-csv',        // Gray
+    'txt': 'type-txt',        // Gray
+    'jpg': 'type-image',      // Purple
+    'jpeg': 'type-image',     // Purple
+    'png': 'type-image',      // Purple
+    'gif': 'type-image',      // Purple
+    'webp': 'type-image',     // Purple
+    'tiff': 'type-image'      // Purple
+  }
+  
+  return colorMap[ext] || 'type-default'
 }
 
 const loadDocuments = async () => {
@@ -484,11 +549,13 @@ onMounted(async () => {
   color: var(--text-medium);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  vertical-align: middle;
 }
 
 .documents-table td {
   padding: var(--space-md);
   border-top: 1px solid #e5e7eb;
+  vertical-align: middle;
 }
 
 .table-row {
@@ -508,21 +575,66 @@ onMounted(async () => {
 
 .table-title-content {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: var(--space-xs);
+  flex-wrap: wrap;
 }
 
 .table-title-text {
   font-weight: 500;
   color: var(--text-dark);
+  flex: 1;
+  min-width: 0;
 }
 
 .doc-type-badge-small {
   font-size: 0.75rem;
-  padding: 0.125rem 0.5rem;
-  background: var(--bg-light);
+  padding: 0.25rem 0.5rem;
   border-radius: var(--radius-sm);
-  color: var(--text-medium);
+  color: white;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: 0.5rem;
+  margin-left: 0;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* PDF - Red */
+.doc-type-badge-small.type-pdf {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+}
+
+/* Word (DOCX) - Blue */
+.doc-type-badge-small.type-docx {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+}
+
+/* Excel (XLSX) - Green */
+.doc-type-badge-small.type-xlsx {
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+}
+
+/* PowerPoint (PPTX) - Orange */
+.doc-type-badge-small.type-pptx {
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+}
+
+/* CSV/TXT - Gray */
+.doc-type-badge-small.type-csv,
+.doc-type-badge-small.type-txt {
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+}
+
+/* Images - Purple */
+.doc-type-badge-small.type-image {
+  background: linear-gradient(135deg, #9333ea 0%, #7e22ce 100%);
+}
+
+/* Default - Primary gradient */
+.doc-type-badge-small.type-default {
+  background: var(--gradient-primary);
 }
 
 .table-actions {

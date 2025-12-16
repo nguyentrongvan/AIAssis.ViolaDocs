@@ -125,6 +125,15 @@ class OCRWorkerService:
                 )
             )
         )
+        text_extract_count_result = await session.execute(
+            select(AIJob)
+            .where(
+                and_(
+                    AIJob.job_type == "text_extract",
+                    AIJob.status == "queued"
+                )
+            )
+        )
         embed_count_result = await session.execute(
             select(AIJob)
             .where(
@@ -135,13 +144,14 @@ class OCRWorkerService:
             )
         )
         ocr_count = len(ocr_count_result.scalars().all())
+        text_extract_count = len(text_extract_count_result.scalars().all())
         embed_count = len(embed_count_result.scalars().all())
         
-        if ocr_count > 0 or embed_count > 0:
-            print(f"[{self.worker_id}] Found {ocr_count} OCR job(s) and {embed_count} EMBED job(s) in queue")
+        if ocr_count > 0 or text_extract_count > 0 or embed_count > 0:
+            print(f"[{self.worker_id}] Found {ocr_count} OCR, {text_extract_count} TEXT_EXTRACT, and {embed_count} EMBED job(s) in queue")
         
-        # Try to claim OCR job first (priority), then EMBED job
-        for job_type in ["ocr", "embed"]:
+        # Try to claim OCR job first (priority), then TEXT_EXTRACT, then EMBED job
+        for job_type in ["ocr", "text_extract", "embed"]:
             result = await session.execute(
                 select(AIJob)
                 .where(
@@ -162,7 +172,7 @@ class OCRWorkerService:
                 print(f"[{self.worker_id}] Successfully claimed {job_type.upper()} job {job.id}")
                 return job
         
-        if ocr_count > 0 or embed_count > 0:
+        if ocr_count > 0 or text_extract_count > 0 or embed_count > 0:
             print(f"[{self.worker_id}] Could not claim job (may be locked by another worker)")
         
         return None
@@ -172,12 +182,12 @@ class OCRWorkerService:
         timeout = timedelta(minutes=self.stuck_job_timeout_minutes)
         cutoff_time = datetime.utcnow() - timeout
         
-        # Find stuck jobs (both OCR and EMBED)
+        # Find stuck jobs (OCR, TEXT_EXTRACT, and EMBED)
         result = await session.execute(
             select(AIJob)
             .where(
                 and_(
-                    AIJob.job_type.in_(["ocr", "embed"]),
+                    AIJob.job_type.in_(["ocr", "text_extract", "embed"]),
                     AIJob.status == "processing",
                     or_(
                         AIJob.last_heartbeat < cutoff_time,
@@ -391,6 +401,151 @@ class OCRWorkerService:
                             job.release()
                         await session.commit()
     
+    async def process_text_extract_job(self, job: AIJob):
+        """Process a single text extraction job"""
+        async with self.semaphore:
+            try:
+                # Update heartbeat periodically during processing
+                heartbeat_task = asyncio.create_task(
+                    self._heartbeat_loop(job.id)
+                )
+                
+                async with AsyncSessionLocal() as session:
+                    # Refresh job to get latest state
+                    result = await session.execute(
+                        select(AIJob).where(AIJob.id == job.id)
+                    )
+                    job = result.scalar_one_or_none()
+                    
+                    if not job or job.status != "processing" or job.worker_id != self.worker_id:
+                        heartbeat_task.cancel()
+                        return
+                    
+                    # Get document version
+                    target = job.target
+                    version_id = target.get("version_id")
+                    
+                    if not version_id:
+                        raise ValueError("No version_id in target")
+                    
+                    result = await session.execute(
+                        select(DocumentVersion).where(DocumentVersion.id == version_id)
+                    )
+                    version = result.scalar_one_or_none()
+                    
+                    if not version:
+                        raise ValueError(f"Version {version_id} not found")
+                    
+                    # Download file from MinIO
+                    minio_client = get_minio_client()
+                    object_name = version.blob_uri
+                    if object_name.startswith(f"minio://{settings.minio_bucket}/"):
+                        object_name = object_name.replace(f"minio://{settings.minio_bucket}/", "")
+                    
+                    try:
+                        file_data = minio_client.get_object(settings.minio_bucket, object_name)
+                        file_bytes = file_data.read()
+                        file_data.close()
+                        file_data.release_conn()
+                    except Exception as e:
+                        raise ValueError(f"Failed to download file: {e}")
+                    
+                    # Get document to access mime type
+                    doc_result = await session.execute(
+                        select(Document).where(Document.id == version.document_id)
+                    )
+                    document = doc_result.scalar_one_or_none()
+                    if not document:
+                        raise ValueError(f"Document {version.document_id} not found")
+                    mime = document.mime
+                    
+                    # Extract text using TextExtractionService
+                    from ..services.text_extraction_service import TextExtractionService
+                    
+                    extract_result = await TextExtractionService.extract_text(mime, file_bytes)
+                    
+                    if extract_result.get("error"):
+                        raise ValueError(extract_result["error"])
+                    
+                    extracted_text = extract_result.get("text", "")
+                    
+                    if not extracted_text:
+                        raise ValueError("No text extracted from file")
+                    
+                    # Save extracted text to MinIO
+                    text_object_name = f"renditions/{document.id}/{version_id}/text.txt"
+                    from io import BytesIO
+                    text_bytes = extracted_text.encode('utf-8')
+                    try:
+                        minio_client.put_object(
+                            settings.minio_bucket,
+                            text_object_name,
+                            BytesIO(text_bytes),
+                            length=len(text_bytes),
+                            content_type="text/plain"
+                        )
+                    except Exception as e:
+                        raise ValueError(f"Failed to save extracted text: {e}")
+                    
+                    # Update version with text URI
+                    version.text_uri = text_object_name
+                    version.provider_info = {
+                        "text_extraction": {
+                            "provider": "native",
+                            "mime": mime
+                        }
+                    }
+                    
+                    # Update document status
+                    document.status = "ready"
+                    
+                    # Update job
+                    job.status = "completed"
+                    job.output_ref = {
+                        "text_uri": version.text_uri,
+                        "text_length": len(extracted_text)
+                    }
+                    job.release()  # Clear worker tracking
+                    
+                    await session.commit()
+                    
+                    # Trigger embedding job
+                    try:
+                        embed_job = AIJob(
+                            job_type="embed",
+                            target={"document_id": document.id, "version_id": version.id},
+                            provider="ollama",
+                            status="queued"
+                        )
+                        session.add(embed_job)
+                        await session.commit()
+                    except Exception as e:
+                        print(f"Failed to create embedding job: {e}")
+                    
+                    heartbeat_task.cancel()
+                    print(f"[{self.worker_id}] Text extraction job {job.id} completed")
+                
+            except Exception as e:
+                heartbeat_task.cancel()
+                error_msg = str(e)[:500]
+                print(f"Text extraction job {job.id} failed: {error_msg}")
+                
+                async with AsyncSessionLocal() as session:
+                    result = await session.execute(
+                        select(AIJob).where(AIJob.id == job.id)
+                    )
+                    job = result.scalar_one_or_none()
+                    if job:
+                        if job.can_retry():
+                            job.increment_retry()
+                            job.release()
+                            job.status = "queued"  # Retry
+                        else:
+                            job.status = "failed"
+                            job.error = error_msg
+                            job.release()
+                        await session.commit()
+    
     async def process_embedding_job(self, job: AIJob):
         """Process a single embedding job"""
         async with self.semaphore:
@@ -564,6 +719,8 @@ class OCRWorkerService:
                         if job:
                             if job.job_type == "ocr":
                                 task = asyncio.create_task(self.process_ocr_job(job))
+                            elif job.job_type == "text_extract":
+                                task = asyncio.create_task(self.process_text_extract_job(job))
                             elif job.job_type == "embed":
                                 task = asyncio.create_task(self.process_embedding_job(job))
                             else:

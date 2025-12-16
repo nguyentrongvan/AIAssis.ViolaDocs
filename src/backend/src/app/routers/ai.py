@@ -30,6 +30,11 @@ class EmbedRequest(BaseModel):
     provider: Optional[str] = None
 
 
+class TextExtractRequest(BaseModel):
+    document_id: Optional[int] = None
+    version_id: Optional[int] = None
+
+
 class ClassifyRequest(BaseModel):
     document_id: int
     provider: Optional[str] = None
@@ -61,6 +66,40 @@ async def enqueue_ocr(
         job_type="ocr",
         target=target,
         provider=request.provider or "paddle",
+        status="queued"
+    )
+    session.add(job)
+    await session.commit()
+    await session.refresh(job)
+    
+    return success_response({
+        "job_id": job.id,
+        "status": job.status,
+        "job_type": job.job_type
+    })
+
+
+@router.post("/text-extract")
+async def enqueue_text_extract(
+    request: TextExtractRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Manually trigger text extraction for office/text files"""
+    if not request.version_id and not request.document_id:
+        return error_response("Either version_id or document_id required", status_code=status.HTTP_400_BAD_REQUEST)
+    
+    # Create text extraction job
+    target = {}
+    if request.version_id:
+        target["version_id"] = request.version_id
+    if request.document_id:
+        target["document_id"] = request.document_id
+    
+    job = AIJob(
+        job_type="text_extract",
+        target=target,
+        provider="native",
         status="queued"
     )
     session.add(job)
@@ -216,7 +255,7 @@ async def rag_qa(
 
 @router.get("/jobs")
 async def list_jobs(
-    job_type: Optional[str] = Query(None, description="Filter by job type (ocr, embed, classify, qa)"),
+    job_type: Optional[str] = Query(None, description="Filter by job type (ocr, text_extract, embed, classify, qa)"),
     status_filter: Optional[str] = Query(None, description="Filter by status (queued, processing, completed, failed)"),
     provider: Optional[str] = Query(None, description="Filter by provider"),
     limit: int = Query(100, ge=1, le=1000),

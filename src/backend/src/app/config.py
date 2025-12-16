@@ -81,7 +81,7 @@ class Settings(BaseSettings):
 
     # Upload
     max_upload_size_mb: int = 100
-    allowed_mime_types: str = "application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/jpeg,image/png,image/tiff"
+    allowed_mime_types: str = "application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/jpeg,image/png,image/tiff,text/csv,application/csv,text/plain"
     
     # Worker Configuration
     max_concurrent_ocr_jobs: int = 5  # Max parallel OCR jobs

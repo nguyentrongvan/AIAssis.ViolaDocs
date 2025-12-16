@@ -17,6 +17,50 @@ from ..services.storage import generate_presigned_download_url
 from ..utils.response import success_response, error_response
 from ..config import settings
 
+
+def _get_file_extension_from_mime(mime: str) -> str:
+    """Extract short file extension from MIME type"""
+    if not mime:
+        return ""
+    
+    mime_lower = mime.lower()
+    
+    # Map common MIME types to extensions
+    mime_to_ext = {
+        "application/pdf": "pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+        "text/csv": "csv",
+        "application/csv": "csv",
+        "text/plain": "txt",
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/gif": "gif",
+        "image/webp": "webp",
+        "image/tiff": "tiff"
+    }
+    
+    if mime_lower in mime_to_ext:
+        return mime_to_ext[mime_lower]
+    
+    # Fallback: try to extract from MIME type
+    if '/' in mime:
+        subtype = mime.split('/')[-1].split('+')[0]
+        # Handle vnd.openxmlformats... cases
+        if 'wordprocessingml' in subtype:
+            return "docx"
+        elif 'spreadsheetml' in subtype:
+            return "xlsx"
+        elif 'presentationml' in subtype:
+            return "pptx"
+        # For simple cases like "pdf", "png", etc.
+        if len(subtype) <= 5 and '.' not in subtype:
+            return subtype
+    
+    return ""
+
+
 router = APIRouter(prefix="/recycle-bin", tags=["recycle-bin"])
 
 
@@ -100,7 +144,7 @@ async def list_deleted_documents(
             "purge_at": doc.purge_at.isoformat() if doc.purge_at else None,
             "days_until_purge": days_until_purge,
             "document_type": doc.mime.split('/')[0] if '/' in doc.mime else doc.mime,
-            "file_extension": doc.mime.split('/')[-1].split('+')[0] if '/' in doc.mime else ""
+            "file_extension": _get_file_extension_from_mime(doc.mime)  # Extract short extension from MIME type
         }
         
         # Get folder info

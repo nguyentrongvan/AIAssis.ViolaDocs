@@ -35,6 +35,7 @@
         <div class="preview-controls">
           <div class="preview-options">
             <button
+              v-if="!isOfficeOrTextFile"
               @click="showOcrText = !showOcrText"
               :class="['btn-small', { 'btn-active': showOcrText }]"
             >
@@ -48,20 +49,36 @@
           </div>
         </div>
         <div class="preview-area">
-          <iframe v-if="previewUrl && !showOcrText" :src="previewUrl" class="preview-frame"></iframe>
-          <div v-else-if="showOcrText" class="ocr-text-view">
+          <!-- For PDF and Images: use iframe -->
+          <iframe 
+            v-if="canPreviewInIframe && previewUrl && !showOcrText" 
+            :src="previewUrl" 
+            class="preview-frame"
+          ></iframe>
+          <!-- For Office files and text: show extracted text -->
+          <div v-else-if="showOcrText || isOfficeOrTextFile" class="ocr-text-view">
             <div v-if="ocrText" class="ocr-text-content">
               <div class="ocr-text-header">
-                <span>OCR Text</span>
-                <button @click="copyOcrText" class="btn-small">
-                  <Copy :size="14" />
-                  Copy
-                </button>
+                <span>{{ isOfficeOrTextFile ? 'Document Content' : 'OCR Text' }}</span>
+                <div class="text-actions">
+                  <button @click="copyOcrText" class="btn-small">
+                    <Copy :size="14" />
+                    Copy
+                  </button>
+                  <button 
+                    v-if="isOfficeOrTextFile && previewUrl"
+                    @click="downloadOriginal" 
+                    class="btn-small"
+                  >
+                    <Download :size="14" />
+                    Download Original
+                  </button>
+                </div>
               </div>
               <pre class="ocr-text-pre">{{ ocrText }}</pre>
             </div>
             <div v-else class="ocr-text-empty">
-              <p>OCR text not available for this version</p>
+              <p>{{ isOfficeOrTextFile ? 'Content not available. The document may still be processing.' : 'OCR text not available for this version' }}</p>
             </div>
           </div>
           <div v-else class="preview-placeholder">Preview not available</div>
@@ -451,6 +468,24 @@ const latestVersion = computed(() => {
   return Math.max(...versions.value.map(v => v.version_no))
 })
 
+// Check if file is Office or text file (DOCX, XLSX, CSV, TXT)
+const isOfficeOrTextFile = computed(() => {
+  if (!document.value) return false
+  const mime = document.value.mime || ''
+  return mime.includes('wordprocessingml') || // DOCX
+         mime.includes('spreadsheetml') ||     // XLSX
+         mime === 'text/csv' ||
+         mime === 'application/csv' ||
+         mime === 'text/plain'
+})
+
+// Check if file can be previewed in iframe (PDF, images)
+const canPreviewInIframe = computed(() => {
+  if (!document.value) return false
+  const mime = document.value.mime || ''
+  return mime === 'application/pdf' || mime.startsWith('image/')
+})
+
 onMounted(async () => {
   const docId = parseInt(route.params.id)
   await loadDocument(docId)
@@ -522,8 +557,9 @@ const loadVersionPreview = async () => {
     previewUrl.value = ''
   }
   
-  // Load OCR text if available
-  if (version?.text_uri || version?.ocr_uri) {
+  // For Office/text files, always load extracted text for preview
+  // For PDF/images, load OCR text only if showOcrText is true
+  if (isOfficeOrTextFile.value || version?.text_uri || version?.ocr_uri) {
     try {
       const res = await documentsAPI.rendition(document.value.id, 'text', { version_id: version.id })
       if (res.is_success && res.data) {
@@ -533,12 +569,18 @@ const loadVersionPreview = async () => {
         ocrText.value = ''
       }
     } catch (e) {
-      console.error('Failed to load OCR text', e)
+      console.error('Failed to load text content', e)
       ocrText.value = ''
     }
   } else {
     ocrText.value = ''
   }
+}
+
+const downloadOriginal = () => {
+  if (!document.value || !previewUrl.value) return
+  // Open download URL in new tab
+  window.open(previewUrl.value, '_blank')
 }
 
 const copyOcrText = async () => {
@@ -944,6 +986,12 @@ const deleteDocument = async () => {
 .ocr-text-header span {
   font-weight: 600;
   color: var(--text-dark);
+}
+
+.text-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
 }
 
 .ocr-text-pre {
