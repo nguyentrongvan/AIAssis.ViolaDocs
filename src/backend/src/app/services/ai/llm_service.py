@@ -43,12 +43,29 @@ class OllamaLLMProvider(LLMProvider):
         """Initialize OpenAI client with Ollama base URL"""
         try:
             import openai
-            self.client = openai.OpenAI(
-                base_url=self.base_url,
-                api_key=self.api_key or "ollama"  # Ollama doesn't require key, but OpenAI client needs one
-            )
+            try:
+                # Try with explicit parameters
+                self.client = openai.OpenAI(
+                    base_url=self.base_url,
+                    api_key=self.api_key or "ollama"
+                )
+            except TypeError as e:
+                # Handle proxies error if it occurs
+                if "proxies" in str(e):
+                    try:
+                        # Try without api_key
+                        self.client = openai.OpenAI(base_url=self.base_url)
+                    except Exception as e2:
+                        print(f"Failed to initialize LLM client: {e2}")
+                        self.client = None
+                else:
+                    print(f"Failed to initialize LLM client: {e}")
+                    self.client = None
         except ImportError:
             print("openai not installed")
+            self.client = None
+        except Exception as e:
+            print(f"Failed to initialize Ollama LLM client: {e}")
             self.client = None
     
     def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:

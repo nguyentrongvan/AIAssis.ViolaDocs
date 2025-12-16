@@ -47,7 +47,7 @@ async def process_ocr_job(job_id: int):
             object_name = version.blob_uri
             if object_name.startswith(f"minio://{settings.minio_bucket}/"):
                 object_name = object_name.replace(f"minio://{settings.minio_bucket}/", "")
-            
+
             try:
                 file_data = minio_client.get_object(settings.minio_bucket, object_name)
                 file_bytes = file_data.read()
@@ -58,23 +58,31 @@ async def process_ocr_job(job_id: int):
             
             # Process with OCR service
             ocr_service = get_ocr_service()
+            
+            # Check if OCR provider is available
+            if not ocr_service.provider:
+                raise ValueError("OCR service provider not available")
+            
             # Get document to access mime type
             doc_result = await session.execute(
                 select(Document).where(Document.id == version.document_id)
             )
             document = doc_result.scalar_one_or_none()
-            mime = document.mime if document else "application/pdf"
+            if not document:
+                raise ValueError(f"Document {version.document_id} not found")
+            mime = document.mime
             
             # Get languages from settings
             languages = settings.ocr_lang_list
             
+            # Process OCR
             if mime.startswith("image/"):
                 ocr_result = ocr_service.process_image(file_bytes, languages)
             elif mime == "application/pdf":
                 ocr_result = ocr_service.process_pdf(file_bytes, languages)
             else:
                 raise ValueError(f"Unsupported MIME type for OCR: {mime}")
-            
+
             if ocr_result.get("error"):
                 raise ValueError(ocr_result["error"])
             
@@ -84,13 +92,16 @@ async def process_ocr_job(job_id: int):
             text_object_name = f"renditions/{document.id}/{version_id}/text.txt"
             from io import BytesIO
             text_bytes = extracted_text.encode('utf-8')
-            minio_client.put_object(
-                settings.minio_bucket,
-                text_object_name,
-                BytesIO(text_bytes),
-                length=len(text_bytes),
-                content_type="text/plain"
-            )
+            try:
+                minio_client.put_object(
+                    settings.minio_bucket,
+                    text_object_name,
+                    BytesIO(text_bytes),
+                    length=len(text_bytes),
+                    content_type="text/plain"
+                )
+            except Exception as e:
+                raise ValueError(f"Failed to save OCR text: {e}")
             
             # Update version with OCR URI
             version.text_uri = text_object_name  # Store just object name
@@ -101,10 +112,9 @@ async def process_ocr_job(job_id: int):
                     "languages": settings.ocr_lang_list
                 }
             }
-            
+
             # Update document status to ready after OCR
-            if document:
-                document.status = "ready"
+            document.status = "ready"
             
             # Update job
             job.status = "completed"
@@ -121,22 +131,21 @@ async def process_ocr_job(job_id: int):
                 embed_job = EmbeddingJob(
                     job_type="embed",
                     target={"document_id": document.id, "version_id": version.id},
-                    provider="openai",  # or get from settings
+                    provider="ollama",
                     status="queued"
                 )
                 session.add(embed_job)
                 await session.commit()
                 
-                # Process embedding in background
+                # Process embedding immediately in background
                 asyncio.create_task(process_embedding_job(embed_job.id))
             except Exception as e:
-                print(f"Failed to create embedding job: {e}")
+                pass
             
         except Exception as e:
             job.status = "failed"
             job.error = str(e)
             await session.commit()
-            print(f"OCR job {job_id} failed: {e}")
 
 
 async def process_embedding_job(job_id: int):
@@ -233,6 +242,8 @@ async def process_embedding_job(job_id: int):
 
 async def worker_loop():
     """Main worker loop to process queued jobs"""
+    processed_tasks = set()  # Track tasks being processed to avoid duplicates
+    
     while True:
         try:
             async with AsyncSessionLocal() as session:
@@ -245,19 +256,28 @@ async def worker_loop():
                 )
                 job = result.scalar_one_or_none()
                 
-                if job:
+                if job and job.id not in processed_tasks:
+                    # Mark as being processed
+                    processed_tasks.add(job.id)
+                    
+                    # Process job asynchronously (don't await to allow parallel processing)
                     if job.job_type == "ocr":
-                        await process_ocr_job(job.id)
+                        asyncio.create_task(process_ocr_job(job.id))
                     elif job.job_type == "embed":
-                        await process_embedding_job(job.id)
+                        asyncio.create_task(process_embedding_job(job.id))
                     # Add more job types as needed
+                    
+                    # Small delay to avoid overwhelming the system
+                    await asyncio.sleep(0.1)
                 else:
-                    # No jobs, wait a bit
-                    await asyncio.sleep(5)
+                    # No jobs, wait a bit longer
+                    if processed_tasks:
+                        # Clear processed tasks periodically
+                        processed_tasks.clear()
+                    await asyncio.sleep(2)
                     
         except Exception as e:
-            print(f"Worker error: {e}")
-            await asyncio.sleep(5)
+            await asyncio.sleep(2)
 
 
 if __name__ == "__main__":

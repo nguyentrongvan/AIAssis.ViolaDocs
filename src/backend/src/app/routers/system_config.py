@@ -196,13 +196,7 @@ async def get_system_config(
         "sensitive": False
     }
     
-    # Embedding settings
-    config_dict["embedding_model_name"] = {
-        "value": settings.embedding_model_name,
-        "type": "string",
-        "category": "ai",
-        "sensitive": False
-    }
+    # Chroma vector store settings
     config_dict["chroma_persist_dir"] = {
         "value": settings.chroma_persist_dir,
         "type": "string",

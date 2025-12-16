@@ -151,27 +151,85 @@ async def get_provider_settings(
     # For now, return default settings
     from ..config import settings
     
-    return success_response({
-        "ocr": [
-            {
-                "name": "paddle",
+    # Check OCR provider availability
+    ocr_providers = []
+    
+    # PaddleOCR
+    try:
+        from paddleocr import PaddleOCR
+        ocr_providers.append({
+            "name": "paddle",
+            "enabled": True,
+            "health": "available",
+            "languages": ["en", "vi", "ch"],
+            "description": "Best for Vietnamese, requires GPU for best performance"
+        })
+    except ImportError:
+        ocr_providers.append({
+            "name": "paddle",
+            "enabled": False,
+            "health": "not_installed",
+            "languages": ["en", "vi", "ch"],
+            "description": "Best for Vietnamese, requires GPU for best performance"
+        })
+    
+    # Tesseract
+    try:
+        import pytesseract
+        try:
+            pytesseract.get_tesseract_version()
+            ocr_providers.append({
+                "name": "tesseract",
                 "enabled": True,
-                "health": "unknown",
-                "languages": ["en", "vi"]
-            }
-        ],
+                "health": "available",
+                "languages": ["en", "vi", "zh", "fr", "de", "es"],
+                "description": "Mature, stable, good language support. Requires system installation."
+            })
+        except Exception:
+            ocr_providers.append({
+                "name": "tesseract",
+                "enabled": False,
+                "health": "system_not_found",
+                "languages": ["en", "vi", "zh", "fr", "de", "es"],
+                "description": "Mature, stable, good language support. Requires system installation."
+            })
+    except ImportError:
+        ocr_providers.append({
+            "name": "tesseract",
+            "enabled": False,
+            "health": "not_installed",
+            "languages": ["en", "vi", "zh", "fr", "de", "es"],
+            "description": "Mature, stable, good language support. Requires system installation."
+        })
+    
+    # EasyOCR
+    try:
+        import easyocr
+        ocr_providers.append({
+            "name": "easyocr",
+            "enabled": True,
+            "health": "available",
+            "languages": ["en", "vi", "ch_sim", "fr", "de", "es"],
+            "description": "Easy to use, good accuracy, 80+ languages. Downloads models automatically."
+        })
+    except ImportError:
+        ocr_providers.append({
+            "name": "easyocr",
+            "enabled": False,
+            "health": "not_installed",
+            "languages": ["en", "vi", "ch_sim", "fr", "de", "es"],
+            "description": "Easy to use, good accuracy, 80+ languages. Downloads models automatically."
+        })
+    
+    return success_response({
+        "ocr": ocr_providers,
         "embedding": [
             {
                 "name": "ollama",
                 "enabled": bool(settings.ollama_base_url),
                 "health": "unknown",
-                "model": settings.ollama_embedding_model
-            },
-            {
-                "name": "local",
-                "enabled": True,
-                "health": "unknown",
-                "model": settings.embedding_model_name
+                "model": settings.ollama_embedding_model,
+                "description": "Local embedding via Ollama OpenAI-compatible API"
             }
         ],
         "llm": [
@@ -179,7 +237,8 @@ async def get_provider_settings(
                 "name": "ollama",
                 "enabled": bool(settings.ollama_base_url),
                 "health": "unknown",
-                "models": [settings.ollama_llm_model]
+                "models": [settings.ollama_llm_model],
+                "description": "Local LLM via Ollama OpenAI-compatible API"
             }
         ],
         "search": [

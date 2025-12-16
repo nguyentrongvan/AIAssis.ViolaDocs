@@ -56,15 +56,13 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"  # Default to localhost, use http://ollama:11434 in docker
     ollama_api_key: str = ""  # Optional API key for OpenAI-compatible endpoints
     ollama_llm_model: str = "llama3.2"  # Default LLM model for chat
-    ollama_embedding_model: str = "nomic-text-embedding"  # Default embedding model
+    ollama_embedding_model: str = "nomic-embed-text:latest"  # Default embedding model
 
     # OCR
+    # Options: "paddle" (default, best for Vietnamese), "tesseract", "easyocr", "auto" (try all in order)
     ocr_provider: str = "paddle"
     ocr_languages: str = "en,vi"
     
-    # Embedding - Local model name (sentence-transformers)
-    # Options: all-MiniLM-L6-v2 (fast, 384d), paraphrase-multilingual-MiniLM-L12-v2 (multilingual, 384d), all-mpnet-base-v2 (better quality, 768d)
-    embedding_model_name: str = "all-MiniLM-L6-v2"
     # Chroma vector store config (local persistent by default; can point to HTTP server)
     chroma_persist_dir: str = "./data/chroma"
     chroma_collection: str = "embeddings"

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+import asyncio
 
 from .config import settings
 from .db import AsyncSessionLocal
@@ -69,13 +70,13 @@ async def ensure_root_user():
             )
             session.add(root_user)
             await session.commit()
-            logger.info(f"✅ Root user created: {settings.root_user_email}")
-            logger.warning(f"⚠️  Default password: {settings.root_user_password} - Please change after first login!")
+            logger.info(f"Root user created: {settings.root_user_email}")
+            logger.warning(f"Default password: {settings.root_user_password} - Please change after first login!")
     except Exception as e:
         # Check if error is due to missing tables (database not migrated yet)
         error_str = str(e).lower()
         if "does not exist" in error_str or "undefinedtable" in error_str or "relation" in error_str:
-            logger.warning("⚠️  Database tables not found. Please run migrations first:")
+            logger.warning("Database tables not found. Please run migrations first:")
             logger.warning("   cd src/backend && alembic upgrade head")
             logger.warning("   Root user will be created automatically after migrations.")
         else:
@@ -86,9 +87,20 @@ async def ensure_root_user():
 async def lifespan(app: FastAPI):
     # Startup: Create root user if not exists
     await ensure_root_user()
+    
+    # Start background worker to process queued jobs
+    from .workers.ocr_worker import worker_loop
+    worker_task = asyncio.create_task(worker_loop())
+    logger.info("Background worker started for processing OCR and embedding jobs")
+    
     yield
-    # Shutdown: cleanup if needed
-    pass
+    
+    # Shutdown: Cancel worker task
+    worker_task.cancel()
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        logger.info("Background worker stopped")
 
 
 def create_app() -> FastAPI:

@@ -1,5 +1,6 @@
 import hashlib
 import uuid
+import logging
 from typing import Optional, Dict
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -15,6 +16,8 @@ from ..services.storage import generate_presigned_upload_url
 from ..utils.response import success_response, error_response
 from ..config import settings
 from sqlalchemy import select
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
@@ -208,15 +211,15 @@ async def finalize_upload(
         session.add(ocr_job)
         await session.flush()
         
-        # Trigger OCR processing asynchronously
+        # Trigger OCR processing immediately (worker will also pick it up if this fails)
         try:
             from ..workers.ocr_worker import process_ocr_job
             import asyncio
-            # Run OCR in background
+            # Run OCR immediately in background - don't wait for worker loop
             asyncio.create_task(process_ocr_job(ocr_job.id))
         except Exception as e:
-            print(f"Failed to trigger OCR job: {e}")
-            # Job will be processed by worker later
+            logger.error(f"Failed to trigger OCR job immediately: {e}")
+            # Job will be processed by worker loop
     
     await session.commit()
     

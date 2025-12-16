@@ -21,8 +21,10 @@ PyMuPDF
 Pillow==11.0.0
 pgvector==0.2.4
 openai==1.6.0
-google-generativeai==0.3.0
 chromadb==0.5.3
+# OCR providers
+pytesseract==0.3.10
+easyocr==1.7.0
 # Testing dependencies
 pytest==7.4.3
 pytest-asyncio==0.21.1
