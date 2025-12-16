@@ -12,6 +12,7 @@ from ..models.chat import ChatSession
 from ..models.groups import DocumentGroup
 from ..models.documents import Document
 from ..services.ai import get_llm_service, get_embedding_service
+from ..services.ai.embedding_service import EmbeddingModelUnavailableError
 from ..utils.response import success_response, error_response
 from ..config import settings
 from sqlalchemy import select, and_, or_
@@ -115,15 +116,22 @@ async def chat(
         
         # Use vector search to retrieve relevant documents
         embedding_service = get_embedding_service()
-        if embedding_service:
-            query_embedding = embedding_service.generate_embedding(request.message)
-            search_filters = {"group_id": request.group_id}
-            
-            chroma_result = embedding_service.query_embeddings(
-                query_embedding=query_embedding,
-                where=search_filters,
-                top_k=5
-            )
+        if embedding_service and embedding_service.is_available():
+            try:
+                query_embedding = embedding_service.generate_embedding(request.message)
+                search_filters = {"group_id": request.group_id}
+                
+                chroma_result = embedding_service.query_embeddings(
+                    query_embedding=query_embedding,
+                    where=search_filters,
+                    top_k=5
+                )
+            except EmbeddingModelUnavailableError as e:
+                # If embedding service is unavailable, continue without vector search
+                print(f"Embedding service unavailable: {e}")
+                chroma_result = None
+        else:
+            chroma_result = None
             
             if chroma_result and chroma_result.get("metadatas"):
                 doc_ids = []

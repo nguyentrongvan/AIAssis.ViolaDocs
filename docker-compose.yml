@@ -77,6 +77,37 @@ services:
       timeout: 10s
       retries: 3
 
+  ocr-worker:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile.worker
+    container_name: viadocs_ocr_worker
+    environment:
+      # Database
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: viadocs
+      POSTGRES_PASSWORD: viadocs_pass
+      POSTGRES_DB: viadocs_db
+      # MinIO
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_SECURE: "false"
+      MINIO_BUCKET: documents
+      # Worker config
+      OCR_WORKER_POLL_INTERVAL: 2
+      OCR_WORKER_MAX_CONCURRENT: 2
+      OCR_WORKER_HEARTBEAT_INTERVAL: 30
+      OCR_WORKER_STUCK_TIMEOUT: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    # Scale with: docker-compose up -d --scale ocr-worker=2
+
 volumes:
   postgres_data:
   minio_data:

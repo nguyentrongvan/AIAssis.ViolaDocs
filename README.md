@@ -19,7 +19,7 @@ This project serves as a **practice implementation** demonstrating modern develo
 ## Features
 
 - **Document Management**: Upload, version control, search, and organize documents
-- **OCR Processing**: PaddleOCR support for English and Vietnamese
+- **OCR Processing**: PaddleOCR support for English, Vietnamese, Japanese, Korean, and Chinese
 - **Semantic Search**: Hybrid keyword + vector search
 - **AI Chatbot**: RAG-powered assistant with document group scoping
 - **Workflow Management**: Review and approval workflows

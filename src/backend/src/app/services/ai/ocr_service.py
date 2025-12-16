@@ -3,7 +3,7 @@ import io
 from PIL import Image
 import fitz  # PyMuPDF
 
-from ...config import settings
+from ...config import settings, get_ocr_provider_from_db, get_ocr_languages_from_db
 from ...prompts import *
 
 
@@ -25,14 +25,36 @@ class PaddleOcrProvider(OcrProvider):
     def __init__(self):
         try:
             from paddleocr import PaddleOCR
-            # Support multiple languages
-            lang = 'en'
-            if 'vi' in settings.ocr_lang_list:
-                lang = 'ch'  # Chinese includes Vietnamese support
-            elif len(settings.ocr_lang_list) > 0:
-                lang = settings.ocr_lang_list[0]
+            # Map language codes to PaddleOCR language names
+            lang_map = {
+                'en': 'en',
+                'vi': 'ch',  # Vietnamese uses Chinese model which includes Vietnamese
+                'zh': 'ch',  # Chinese Simplified
+                'ja': 'japan',  # Japanese
+                'ko': 'korean',  # Korean
+            }
             
-            self.ocr = PaddleOCR(use_angle_cls=True, lang=lang)
+            # Priority order: ch (supports vi and zh), then japan, korean, en
+            # PaddleOCR only supports single language string, not list
+            # So we choose the highest priority language from configured languages
+            priority_order = ['ch', 'japan', 'korean', 'en']
+            
+            # Find the first priority language that's in the configured languages
+            selected_lang = 'en'  # Default
+            for lang in settings.ocr_lang_list:
+                if lang in lang_map:
+                    paddle_lang = lang_map[lang]
+                    # If we find 'ch' (which covers vi and zh), use it
+                    if paddle_lang == 'ch':
+                        selected_lang = 'ch'
+                        break
+                    # Otherwise, use the first match in priority order
+                    elif paddle_lang in priority_order and selected_lang not in ['ch']:
+                        if priority_order.index(paddle_lang) < priority_order.index(selected_lang):
+                            selected_lang = paddle_lang
+            
+            self.ocr = PaddleOCR(use_angle_cls=True, lang=selected_lang)
+            print(f"PaddleOCR initialized with language: {selected_lang} (from configured: {settings.ocr_lang_list})")
         except ImportError:
             self.ocr = None
             print("PaddleOCR not installed. Install with: pip install paddleocr")
@@ -131,11 +153,13 @@ class TesseractOcrProvider(OcrProvider):
             self.ocr = None
     
     def _get_lang_code(self, languages: List[str]) -> str:
-        """Convert language list to Tesseract lang code"""
+        """Convert language list to Tesseract lang code (supports multi-language with +)"""
         lang_map = {
             "en": "eng",
             "vi": "vie",
-            "zh": "chi_sim",
+            "zh": "chi_sim",  # Chinese Simplified
+            "ja": "jpn",  # Japanese
+            "ko": "kor",  # Korean
             "fr": "fra",
             "de": "deu",
             "es": "spa"
@@ -143,7 +167,10 @@ class TesseractOcrProvider(OcrProvider):
         codes = []
         for lang in languages:
             if lang in lang_map:
-                codes.append(lang_map[lang])
+                tesseract_code = lang_map[lang]
+                if tesseract_code not in codes:
+                    codes.append(tesseract_code)
+        # Tesseract supports multi-language by joining with +
         return "+".join(codes) if codes else "eng"
     
     def process_image(self, image_data: bytes, languages: List[str]) -> dict:
@@ -212,18 +239,36 @@ class EasyOcrProvider(OcrProvider):
         self._init_reader()
     
     def _init_reader(self):
-        """Initialize EasyOCR reader"""
+        """Initialize EasyOCR reader with multi-language support"""
         try:
             import easyocr
-            # Initialize with languages (downloads models automatically)
-            languages = ['en']
-            if 'vi' in settings.ocr_lang_list:
-                languages.append('vi')
-            if 'zh' in settings.ocr_lang_list:
-                languages.append('ch_sim')
+            # Map language codes to EasyOCR language names
+            lang_map = {
+                'en': 'en',
+                'vi': 'vi',
+                'zh': 'ch_sim',  # Chinese Simplified
+                'ja': 'ja',  # Japanese
+                'ko': 'ko',  # Korean
+                'fr': 'fr',
+                'de': 'de',
+                'es': 'es'
+            }
             
-            self.reader = easyocr.Reader(languages, gpu=False)
-            print(f"EasyOCR initialized with languages: {languages}")
+            # Convert configured languages to EasyOCR format
+            easyocr_langs = []
+            for lang in settings.ocr_lang_list:
+                if lang in lang_map:
+                    easyocr_lang = lang_map[lang]
+                    if easyocr_lang not in easyocr_langs:
+                        easyocr_langs.append(easyocr_lang)
+            
+            # If no valid languages found, default to English
+            if not easyocr_langs:
+                easyocr_langs = ['en']
+            
+            # EasyOCR supports multi-language by passing a list
+            self.reader = easyocr.Reader(easyocr_langs, gpu=False)
+            print(f"EasyOCR initialized with languages: {easyocr_langs} (from configured: {settings.ocr_lang_list})")
         except ImportError:
             print("easyocr not installed. Install with: pip install easyocr")
             self.reader = None
@@ -237,6 +282,8 @@ class EasyOcrProvider(OcrProvider):
             "en": "en",
             "vi": "vi",
             "zh": "ch_sim",
+            "ja": "ja",
+            "ko": "ko",
             "fr": "fr",
             "de": "de",
             "es": "es"
@@ -244,7 +291,9 @@ class EasyOcrProvider(OcrProvider):
         easyocr_langs = []
         for lang in languages:
             if lang in lang_map:
-                easyocr_langs.append(lang_map[lang])
+                easyocr_lang = lang_map[lang]
+                if easyocr_lang not in easyocr_langs:
+                    easyocr_langs.append(easyocr_lang)
         return easyocr_langs if easyocr_langs else ["en"]
     
     def process_image(self, image_data: bytes, languages: List[str]) -> dict:
@@ -390,6 +439,18 @@ class OcrService:
         print("Error: No OCR providers available")
         return PaddleOcrProvider()
     
+    async def process_image_async(self, image_data: bytes, languages: Optional[List[str]] = None) -> dict:
+        """Process image with OCR (async version that reads settings from DB)"""
+        if not self.provider:
+            return {"text": "", "error": "OCR provider not available"}
+        if languages is None:
+            languages = await get_ocr_languages_from_db()
+        try:
+            result = self.provider.process_image(image_data, languages)
+            return result
+        except Exception as e:
+            return {"text": "", "error": str(e)}
+    
     def process_image(self, image_data: bytes, languages: Optional[List[str]] = None) -> dict:
         """Process image with OCR"""
         if not self.provider:
@@ -398,6 +459,18 @@ class OcrService:
             languages = settings.ocr_lang_list
         try:
             result = self.provider.process_image(image_data, languages)
+            return result
+        except Exception as e:
+            return {"text": "", "error": str(e)}
+    
+    async def process_pdf_async(self, pdf_data: bytes, languages: Optional[List[str]] = None) -> dict:
+        """Process PDF with OCR (async version that reads settings from DB)"""
+        if not self.provider:
+            return {"text": "", "error": "OCR provider not available"}
+        if languages is None:
+            languages = await get_ocr_languages_from_db()
+        try:
+            result = self.provider.process_pdf(pdf_data, languages)
             return result
         except Exception as e:
             return {"text": "", "error": str(e)}

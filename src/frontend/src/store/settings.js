@@ -6,6 +6,7 @@ export const useSettingsStore = defineStore('settings', {
     retentionPolicies: [],
     providers: null,
     chatbotPolicies: [],
+    ocrSettings: null,
     loading: false,
     error: null
   }),
@@ -104,6 +105,24 @@ export const useSettingsStore = defineStore('settings', {
         this.loading = false
       }
     },
+    async fixProvider(providerName) {
+      this.loading = true
+      this.error = null
+      try {
+        const res = await settingsAPI.providers.fix(providerName)
+        if (res.is_success) {
+          // Refresh providers after fix
+          await this.fetchProviders()
+          return res.data
+        }
+        throw new Error(res.message || 'Failed to fix provider')
+      } catch (error) {
+        this.error = error.message
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
     async fetchChatbotPolicies() {
       this.loading = true
       this.error = null
@@ -131,6 +150,38 @@ export const useSettingsStore = defineStore('settings', {
           } else {
             this.chatbotPolicies.push(res.data)
           }
+          return res.data
+        }
+      } catch (error) {
+        this.error = error.message
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+    async fetchOCRSettings() {
+      this.loading = true
+      this.error = null
+      try {
+        const res = await settingsAPI.ocr.get()
+        if (res.is_success) {
+          this.ocrSettings = res.data
+        }
+      } catch (error) {
+        this.error = error.message
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+    async updateOCRSettings(data) {
+      this.loading = true
+      this.error = null
+      try {
+        const res = await settingsAPI.ocr.update(data)
+        if (res.is_success) {
+          // Reload OCR settings to get updated values
+          await this.fetchOCRSettings()
           return res.data
         }
       } catch (error) {

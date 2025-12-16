@@ -9,6 +9,7 @@ from .ai import AIJob, Embedding
 from .retention import RetentionPolicy
 from .roles import Role, user_role
 from .chat import ChatSession
+from .settings import SystemSettings
 
 __all__ = [
     "Base",
@@ -32,6 +33,7 @@ __all__ = [
     "Role",
     "user_role",
     "ChatSession",
+    "SystemSettings",
 ]
 
 

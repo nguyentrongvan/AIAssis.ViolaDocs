@@ -60,8 +60,9 @@ class Settings(BaseSettings):
 
     # OCR
     # Options: "paddle" (default, best for Vietnamese), "tesseract", "easyocr", "auto" (try all in order)
+    # Supported languages: en (English), vi (Vietnamese), ja (Japanese), ko (Korean), zh (Chinese)
     ocr_provider: str = "paddle"
-    ocr_languages: str = "en,vi"
+    ocr_languages: str = "en,vi"  # Default: English and Vietnamese. Can add: ja,ko,zh
     
     # Chroma vector store config (local persistent by default; can point to HTTP server)
     chroma_persist_dir: str = "./data/chroma"
@@ -81,6 +82,11 @@ class Settings(BaseSettings):
     # Upload
     max_upload_size_mb: int = 100
     allowed_mime_types: str = "application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/jpeg,image/png,image/tiff"
+    
+    # Worker Configuration
+    max_concurrent_ocr_jobs: int = 5  # Max parallel OCR jobs
+    max_concurrent_embed_jobs: int = 3  # Max parallel embedding jobs
+    worker_batch_size: int = 10  # Number of jobs to fetch per iteration
 
     @property
     def max_upload_size_bytes(self) -> int:
@@ -98,4 +104,54 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+# Helper functions to get settings from DB with fallback to config
+# These are used by services that need to read settings dynamically
+async def get_ocr_provider_from_db() -> str:
+    """Get OCR provider from DB, fallback to config"""
+    try:
+        from .services.settings_service import SettingsService
+        return await SettingsService.get_setting("ocr.provider", settings.ocr_provider)
+    except Exception:
+        return settings.ocr_provider
+
+
+async def get_ocr_languages_from_db() -> List[str]:
+    """Get OCR languages from DB, fallback to config"""
+    try:
+        from .services.settings_service import SettingsService
+        db_langs = await SettingsService.get_setting("ocr.languages", None)
+        if db_langs and isinstance(db_langs, list):
+            return db_langs
+        return settings.ocr_lang_list
+    except Exception:
+        return settings.ocr_lang_list
+
+
+async def get_ollama_base_url_from_db() -> str:
+    """Get Ollama base URL from DB, fallback to config"""
+    try:
+        from .services.settings_service import SettingsService
+        return await SettingsService.get_setting("llm.ollama.base_url", settings.ollama_base_url)
+    except Exception:
+        return settings.ollama_base_url
+
+
+async def get_ollama_llm_model_from_db() -> str:
+    """Get Ollama LLM model from DB, fallback to config"""
+    try:
+        from .services.settings_service import SettingsService
+        return await SettingsService.get_setting("llm.ollama.llm_model", settings.ollama_llm_model)
+    except Exception:
+        return settings.ollama_llm_model
+
+
+async def get_ollama_embedding_model_from_db() -> str:
+    """Get Ollama embedding model from DB, fallback to config"""
+    try:
+        from .services.settings_service import SettingsService
+        return await SettingsService.get_setting("llm.ollama.embedding_model", settings.ollama_embedding_model)
+    except Exception:
+        return settings.ollama_embedding_model
 

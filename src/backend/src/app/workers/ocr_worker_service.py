@@ -1,0 +1,602 @@
+"""
+OCR Worker Service - Standalone service for processing OCR jobs
+Uses database polling with SELECT FOR UPDATE SKIP LOCKED for atomic job claiming
+"""
+import asyncio
+import uuid
+import signal
+import sys
+from typing import Optional, Dict, Any, List
+from datetime import datetime, timedelta
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update, and_, or_
+
+from ..db import AsyncSessionLocal
+from ..models.ai import AIJob
+from ..models.documents import DocumentVersion, Document
+from ..services.ai import get_ocr_service
+from ..services.storage import get_minio_client
+from ..services.settings_service import SettingsService
+from ..config import settings
+
+
+class OCRWorkerService:
+    """OCR Worker Service with DB locking and settings integration"""
+    
+    def __init__(
+        self,
+        worker_id: Optional[str] = None,
+        poll_interval: int = 2,
+        max_concurrent: int = 2,
+        heartbeat_interval: int = 30,
+        stuck_job_timeout_minutes: int = 10
+    ):
+        self.worker_id = worker_id or f"ocr-worker-{uuid.uuid4().hex[:8]}"
+        self.poll_interval = poll_interval
+        self.max_concurrent = max_concurrent
+        self.heartbeat_interval = heartbeat_interval
+        self.stuck_job_timeout_minutes = stuck_job_timeout_minutes
+        
+        self.running = False
+        self.active_tasks = set()
+        self.semaphore = asyncio.Semaphore(max_concurrent)
+        
+        # OCR settings cache
+        self._ocr_settings_cache: Optional[Dict[str, Any]] = None
+        self._ocr_settings_cache_time: Optional[datetime] = None
+        self._ocr_settings_cache_ttl = timedelta(seconds=300)  # 5 minutes
+    
+    async def get_ocr_settings_from_db(self) -> Dict[str, Any]:
+        """Get OCR settings from DB with caching"""
+        now = datetime.utcnow()
+        
+        # Check cache
+        if (self._ocr_settings_cache is not None and 
+            self._ocr_settings_cache_time is not None and
+            now - self._ocr_settings_cache_time < self._ocr_settings_cache_ttl):
+            return self._ocr_settings_cache
+        
+        # Cache miss or expired, fetch from DB
+        return await self._fetch_ocr_settings_from_db()
+    
+    async def _fetch_ocr_settings_from_db(self) -> Dict[str, Any]:
+        """Fetch OCR settings from DB (internal method)"""
+        async with AsyncSessionLocal() as session:
+            provider = await SettingsService.get_setting(
+                "ocr.provider",
+                settings.ocr_provider,
+                session
+            )
+            languages_str = await SettingsService.get_setting(
+                "ocr.languages",
+                settings.ocr_languages,
+                session
+            )
+            
+            # Parse languages
+            if isinstance(languages_str, list):
+                languages = languages_str
+            elif isinstance(languages_str, str):
+                languages = [lang.strip() for lang in languages_str.split(",")]
+            else:
+                languages = settings.ocr_lang_list
+            
+            settings_dict = {
+                "provider": provider or "paddle",
+                "languages": languages
+            }
+            
+            # Update cache
+            self._ocr_settings_cache = settings_dict
+            self._ocr_settings_cache_time = datetime.utcnow()
+            
+            return settings_dict
+    
+    async def refresh_ocr_settings(self):
+        """Force refresh OCR settings from DB (bypass cache)"""
+        self._ocr_settings_cache = None
+        self._ocr_settings_cache_time = None
+        settings = await self._fetch_ocr_settings_from_db()
+        print(f"[{self.worker_id}] OCR settings refreshed: provider={settings['provider']}, languages={settings['languages']}")
+        return settings
+    
+    async def _periodic_settings_refresh(self):
+        """Refresh settings periodically (every 5 minutes)"""
+        try:
+            while self.running:
+                await asyncio.sleep(300)  # 5 minutes
+                if self.running:
+                    await self.refresh_ocr_settings()
+        except asyncio.CancelledError:
+            pass
+    
+    async def claim_job(self, session: AsyncSession) -> Optional[AIJob]:
+        """Atomically claim a queued job (OCR or EMBED) using SELECT FOR UPDATE SKIP LOCKED"""
+        # First, release stuck jobs
+        await self._release_stuck_jobs(session)
+        
+        # Check how many queued jobs exist (for debugging)
+        ocr_count_result = await session.execute(
+            select(AIJob)
+            .where(
+                and_(
+                    AIJob.job_type == "ocr",
+                    AIJob.status == "queued"
+                )
+            )
+        )
+        embed_count_result = await session.execute(
+            select(AIJob)
+            .where(
+                and_(
+                    AIJob.job_type == "embed",
+                    AIJob.status == "queued"
+                )
+            )
+        )
+        ocr_count = len(ocr_count_result.scalars().all())
+        embed_count = len(embed_count_result.scalars().all())
+        
+        if ocr_count > 0 or embed_count > 0:
+            print(f"[{self.worker_id}] Found {ocr_count} OCR job(s) and {embed_count} EMBED job(s) in queue")
+        
+        # Try to claim OCR job first (priority), then EMBED job
+        for job_type in ["ocr", "embed"]:
+            result = await session.execute(
+                select(AIJob)
+                .where(
+                    and_(
+                        AIJob.job_type == job_type,
+                        AIJob.status == "queued"
+                    )
+                )
+                .order_by(AIJob.created_at.asc())
+                .limit(1)
+                .with_for_update(skip_locked=True)
+            )
+            job = result.scalar_one_or_none()
+            
+            if job:
+                job.claim(self.worker_id)
+                await session.commit()
+                print(f"[{self.worker_id}] Successfully claimed {job_type.upper()} job {job.id}")
+                return job
+        
+        if ocr_count > 0 or embed_count > 0:
+            print(f"[{self.worker_id}] Could not claim job (may be locked by another worker)")
+        
+        return None
+    
+    async def _release_stuck_jobs(self, session: AsyncSession):
+        """Release jobs that are stuck (claimed but no heartbeat) - both OCR and EMBED"""
+        timeout = timedelta(minutes=self.stuck_job_timeout_minutes)
+        cutoff_time = datetime.utcnow() - timeout
+        
+        # Find stuck jobs (both OCR and EMBED)
+        result = await session.execute(
+            select(AIJob)
+            .where(
+                and_(
+                    AIJob.job_type.in_(["ocr", "embed"]),
+                    AIJob.status == "processing",
+                    or_(
+                        AIJob.last_heartbeat < cutoff_time,
+                        and_(
+                            AIJob.claimed_at < cutoff_time,
+                            AIJob.last_heartbeat.is_(None)
+                        )
+                    )
+                )
+            )
+        )
+        stuck_jobs = result.scalars().all()
+        
+        for job in stuck_jobs:
+            print(f"Releasing stuck job {job.id} (claimed by {job.worker_id})")
+            job.release()
+            job.status = "queued"  # Reset to queued for retry
+            if job.can_retry():
+                job.increment_retry()
+            else:
+                job.status = "failed"
+                job.error = "Job stuck and max retries exceeded"
+        
+        if stuck_jobs:
+            await session.commit()
+    
+    async def update_heartbeat(self, job_id: int):
+        """Update heartbeat for a job"""
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(AIJob).where(AIJob.id == job_id)
+            )
+            job = result.scalar_one_or_none()
+            if job and job.worker_id == self.worker_id:
+                job.update_heartbeat()
+                await session.commit()
+    
+    async def process_ocr_job(self, job: AIJob):
+        """Process a single OCR job"""
+        async with self.semaphore:
+            try:
+                # Update heartbeat periodically during processing
+                heartbeat_task = asyncio.create_task(
+                    self._heartbeat_loop(job.id)
+                )
+                
+                async with AsyncSessionLocal() as session:
+                    # Refresh job to get latest state
+                    result = await session.execute(
+                        select(AIJob).where(AIJob.id == job.id)
+                    )
+                    job = result.scalar_one_or_none()
+                    
+                    if not job or job.status != "processing" or job.worker_id != self.worker_id:
+                        heartbeat_task.cancel()
+                        return
+                    
+                    # Get OCR settings from DB
+                    ocr_settings = await self.get_ocr_settings_from_db()
+                    provider_name = ocr_settings["provider"]
+                    languages = ocr_settings["languages"]
+                    
+                    # Get document version
+                    target = job.target
+                    version_id = target.get("version_id")
+                    
+                    if not version_id:
+                        raise ValueError("No version_id in target")
+                    
+                    result = await session.execute(
+                        select(DocumentVersion).where(DocumentVersion.id == version_id)
+                    )
+                    version = result.scalar_one_or_none()
+                    
+                    if not version:
+                        raise ValueError(f"Version {version_id} not found")
+                    
+                    # Download file from MinIO
+                    minio_client = get_minio_client()
+                    object_name = version.blob_uri
+                    if object_name.startswith(f"minio://{settings.minio_bucket}/"):
+                        object_name = object_name.replace(f"minio://{settings.minio_bucket}/", "")
+                    
+                    try:
+                        file_data = minio_client.get_object(settings.minio_bucket, object_name)
+                        file_bytes = file_data.read()
+                        file_data.close()
+                        file_data.release_conn()
+                    except Exception as e:
+                        raise ValueError(f"Failed to download file: {e}")
+                    
+                    # Get document to access mime type
+                    doc_result = await session.execute(
+                        select(Document).where(Document.id == version.document_id)
+                    )
+                    document = doc_result.scalar_one_or_none()
+                    if not document:
+                        raise ValueError(f"Document {version.document_id} not found")
+                    mime = document.mime
+                    
+                    # Initialize OCR service with settings from DB
+                    from ..services.ai.ocr_service import OcrService, PaddleOcrProvider, TesseractOcrProvider, EasyOcrProvider
+                    
+                    ocr_provider = None
+                    if provider_name == "paddle":
+                        ocr_provider = PaddleOcrProvider()
+                    elif provider_name == "tesseract":
+                        ocr_provider = TesseractOcrProvider()
+                    elif provider_name == "easyocr":
+                        ocr_provider = EasyOcrProvider()
+                    elif provider_name == "auto":
+                        # Try providers in order
+                        for pname, pclass in [("paddle", PaddleOcrProvider), ("easyocr", EasyOcrProvider), ("tesseract", TesseractOcrProvider)]:
+                            try:
+                                ocr_provider = pclass()
+                                if (hasattr(ocr_provider, 'ocr') and ocr_provider.ocr is not None) or \
+                                   (hasattr(ocr_provider, 'reader') and ocr_provider.reader is not None):
+                                    break
+                            except:
+                                continue
+                    
+                    if not ocr_provider:
+                        raise ValueError(f"OCR provider '{provider_name}' not available")
+                    
+                    ocr_service = OcrService(provider=ocr_provider)
+                    
+                    # Process OCR
+                    if mime.startswith("image/"):
+                        ocr_result = await ocr_service.process_image_async(file_bytes, languages)
+                    elif mime == "application/pdf":
+                        ocr_result = await ocr_service.process_pdf_async(file_bytes, languages)
+                    else:
+                        raise ValueError(f"Unsupported MIME type for OCR: {mime}")
+                    
+                    if ocr_result.get("error"):
+                        raise ValueError(ocr_result["error"])
+                    
+                    extracted_text = ocr_result.get("text", "")
+                    
+                    # Save extracted text to MinIO
+                    text_object_name = f"renditions/{document.id}/{version_id}/text.txt"
+                    from io import BytesIO
+                    text_bytes = extracted_text.encode('utf-8')
+                    try:
+                        minio_client.put_object(
+                            settings.minio_bucket,
+                            text_object_name,
+                            BytesIO(text_bytes),
+                            length=len(text_bytes),
+                            content_type="text/plain"
+                        )
+                    except Exception as e:
+                        raise ValueError(f"Failed to save OCR text: {e}")
+                    
+                    # Update version with OCR URI
+                    version.text_uri = text_object_name
+                    version.ocr_uri = text_object_name
+                    version.provider_info = {
+                        "ocr": {
+                            "provider": ocr_result.get("provider", provider_name),
+                            "languages": languages
+                        }
+                    }
+                    
+                    # Update document status
+                    document.status = "ready"
+                    
+                    # Update job
+                    job.status = "completed"
+                    job.output_ref = {
+                        "text_uri": version.text_uri,
+                        "text_length": len(extracted_text)
+                    }
+                    job.release()  # Clear worker tracking
+                    
+                    await session.commit()
+                    
+                    # Trigger embedding job
+                    try:
+                        embed_job = AIJob(
+                            job_type="embed",
+                            target={"document_id": document.id, "version_id": version.id},
+                            provider="ollama",
+                            status="queued"
+                        )
+                        session.add(embed_job)
+                        await session.commit()
+                    except Exception as e:
+                        print(f"Failed to create embedding job: {e}")
+                
+                heartbeat_task.cancel()
+                
+            except Exception as e:
+                heartbeat_task.cancel()
+                error_msg = str(e)[:500]
+                print(f"OCR job {job.id} failed: {error_msg}")
+                
+                async with AsyncSessionLocal() as session:
+                    result = await session.execute(
+                        select(AIJob).where(AIJob.id == job.id)
+                    )
+                    job = result.scalar_one_or_none()
+                    if job:
+                        if job.can_retry():
+                            job.increment_retry()
+                            job.release()
+                            job.status = "queued"  # Retry
+                        else:
+                            job.status = "failed"
+                            job.error = error_msg
+                            job.release()
+                        await session.commit()
+    
+    async def process_embedding_job(self, job: AIJob):
+        """Process a single embedding job"""
+        async with self.semaphore:
+            try:
+                # Update heartbeat periodically during processing
+                heartbeat_task = asyncio.create_task(
+                    self._heartbeat_loop(job.id)
+                )
+                
+                async with AsyncSessionLocal() as session:
+                    # Refresh job to get latest state
+                    result = await session.execute(
+                        select(AIJob).where(AIJob.id == job.id)
+                    )
+                    job = result.scalar_one_or_none()
+                    
+                    if not job or job.status != "processing" or job.worker_id != self.worker_id:
+                        heartbeat_task.cancel()
+                        return
+                    
+                    from ..services.ai import get_embedding_service
+                    from ..services.ai.embedding_service import EmbeddingModelUnavailableError
+                    
+                    embedding_service = get_embedding_service()
+                    if not embedding_service or not embedding_service.is_available():
+                        raise ValueError(
+                            "Embedding provider not configured or model not available. "
+                            "Please configure Ollama and ensure the embedding model is pulled."
+                        )
+                    
+                    # Get document version
+                    target = job.target
+                    version_id = target.get("version_id")
+                    
+                    if not version_id:
+                        raise ValueError("No version_id in target")
+                    
+                    result = await session.execute(
+                        select(DocumentVersion).where(DocumentVersion.id == version_id)
+                    )
+                    version = result.scalar_one_or_none()
+                    
+                    if not version:
+                        raise ValueError(f"Version {version_id} not found")
+                    
+                    # Get document for metadata
+                    doc_result = await session.execute(
+                        select(Document).where(Document.id == version.document_id)
+                    )
+                    document = doc_result.scalar_one_or_none()
+                    
+                    # Get text from OCR result
+                    if not version.text_uri:
+                        raise ValueError("No OCR text available for embedding")
+                    
+                    minio_client = get_minio_client()
+                    text_object_name = version.text_uri
+                    if text_object_name.startswith(f"minio://{settings.minio_bucket}/"):
+                        text_object_name = text_object_name.replace(f"minio://{settings.minio_bucket}/", "")
+                    
+                    try:
+                        file_data = minio_client.get_object(settings.minio_bucket, text_object_name)
+                        text = file_data.read().decode('utf-8')
+                        file_data.close()
+                        file_data.release_conn()
+                    except Exception as e:
+                        raise ValueError(f"Failed to read OCR text: {e}")
+                    
+                    # Generate embedding
+                    try:
+                        embedding_vector = embedding_service.generate_embedding(text)
+                    except EmbeddingModelUnavailableError as e:
+                        raise ValueError(f"Embedding model unavailable: {str(e)}")
+                    
+                    # Save embedding to vector store
+                    embed_id = f"embed-{job.id}"
+                    embedding_service.upsert_embeddings(
+                        ids=[embed_id],
+                        embeddings=[embedding_vector],
+                        metadatas=[{
+                            "doc_id": version.document_id,
+                            "version_id": version_id,
+                            "owner_id": document.owner_id if document else None,
+                            "provider": job.provider,
+                            "text_length": len(text)
+                        }]
+                    )
+                    
+                    # Update job
+                    job.status = "completed"
+                    job.output_ref = {
+                        "embedding_id": embed_id,
+                        "vector_dimension": len(embedding_vector)
+                    }
+                    job.release()  # Clear worker tracking
+                    
+                    await session.commit()
+                
+                heartbeat_task.cancel()
+                
+            except Exception as e:
+                heartbeat_task.cancel()
+                error_msg = str(e)[:500]
+                print(f"[{self.worker_id}] EMBED job {job.id} failed: {error_msg}")
+                
+                async with AsyncSessionLocal() as session:
+                    result = await session.execute(
+                        select(AIJob).where(AIJob.id == job.id)
+                    )
+                    job = result.scalar_one_or_none()
+                    if job:
+                        if job.can_retry():
+                            job.increment_retry()
+                            job.release()
+                            job.status = "queued"  # Retry
+                        else:
+                            job.status = "failed"
+                            job.error = error_msg
+                            job.release()
+                        await session.commit()
+    
+    async def _heartbeat_loop(self, job_id: int):
+        """Update heartbeat for a job periodically"""
+        try:
+            while True:
+                await asyncio.sleep(self.heartbeat_interval)
+                await self.update_heartbeat(job_id)
+        except asyncio.CancelledError:
+            pass
+    
+    async def worker_loop(self):
+        """Main worker loop"""
+        self.running = True
+        print(f"[{self.worker_id}] OCR Worker started")
+        print(f"[{self.worker_id}]   Poll interval: {self.poll_interval}s")
+        print(f"[{self.worker_id}]   Max concurrent: {self.max_concurrent}")
+        print(f"[{self.worker_id}]   Heartbeat interval: {self.heartbeat_interval}s")
+        print(f"[{self.worker_id}]   Stuck timeout: {self.stuck_job_timeout_minutes} minutes")
+        print(f"[{self.worker_id}] Starting worker loop...")
+        
+        # Load settings when worker starts
+        print(f"[{self.worker_id}] Loading OCR settings...")
+        try:
+            initial_settings = await self.get_ocr_settings_from_db()
+            print(f"[{self.worker_id}] OCR settings loaded: provider={initial_settings['provider']}, languages={initial_settings['languages']}")
+        except Exception as e:
+            print(f"[{self.worker_id}] ERROR: Failed to load OCR settings: {e}")
+            import traceback
+            traceback.print_exc()
+            # Continue anyway, will use defaults
+        
+        # Start periodic settings refresh task
+        settings_refresh_task = asyncio.create_task(self._periodic_settings_refresh())
+        
+        try:
+            while self.running:
+                try:
+                    # Clean up completed tasks
+                    completed = [task for task in self.active_tasks if task.done()]
+                    for task in completed:
+                        self.active_tasks.discard(task)
+                        try:
+                            await task
+                        except Exception as e:
+                            print(f"Task error: {e}")
+                    
+                    # Claim and process jobs
+                    async with AsyncSessionLocal() as session:
+                        job = await self.claim_job(session)
+                        
+                        if job:
+                            if job.job_type == "ocr":
+                                task = asyncio.create_task(self.process_ocr_job(job))
+                            elif job.job_type == "embed":
+                                task = asyncio.create_task(self.process_embedding_job(job))
+                            else:
+                                print(f"[{self.worker_id}] Unknown job type: {job.job_type}, skipping")
+                                await asyncio.sleep(self.poll_interval)
+                                continue
+                            
+                            self.active_tasks.add(task)
+                            print(f"[{self.worker_id}] Claimed {job.job_type.upper()} job {job.id}")
+                        else:
+                            # No jobs, wait (log periodically to show worker is alive)
+                            await asyncio.sleep(self.poll_interval)
+                
+                except Exception as e:
+                    print(f"[{self.worker_id}] Error in worker loop: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    await asyncio.sleep(self.poll_interval)
+        finally:
+            # Cancel settings refresh task
+            settings_refresh_task.cancel()
+            try:
+                await settings_refresh_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Wait for active tasks to complete
+        print("Waiting for active tasks to complete...")
+        if self.active_tasks:
+            await asyncio.gather(*self.active_tasks, return_exceptions=True)
+        print(f"OCR Worker {self.worker_id} stopped")
+    
+    async def run(self):
+        """Run the worker"""
+        await self.worker_loop()
+

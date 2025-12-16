@@ -211,15 +211,8 @@ async def finalize_upload(
         session.add(ocr_job)
         await session.flush()
         
-        # Trigger OCR processing immediately (worker will also pick it up if this fails)
-        try:
-            from ..workers.ocr_worker import process_ocr_job
-            import asyncio
-            # Run OCR immediately in background - don't wait for worker loop
-            asyncio.create_task(process_ocr_job(ocr_job.id))
-        except Exception as e:
-            logger.error(f"Failed to trigger OCR job immediately: {e}")
-            # Job will be processed by worker loop
+        # Job will be automatically processed by OCR worker service (Docker)
+        # The worker will claim and process this job using SELECT FOR UPDATE SKIP LOCKED
     
     await session.commit()
     

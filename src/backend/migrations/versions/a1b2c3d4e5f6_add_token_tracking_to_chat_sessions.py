@@ -32,3 +32,4 @@ def downgrade() -> None:
     op.drop_column('chat_sessions', 'token_in_total')
     # ### end Alembic commands ###
 
+

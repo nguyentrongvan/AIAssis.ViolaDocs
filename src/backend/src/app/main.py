@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 import asyncio
+import os
 
 from .config import settings
 from .db import AsyncSessionLocal
@@ -88,19 +89,27 @@ async def lifespan(app: FastAPI):
     # Startup: Create root user if not exists
     await ensure_root_user()
     
-    # Start background worker to process queued jobs
-    from .workers.ocr_worker import worker_loop
-    worker_task = asyncio.create_task(worker_loop())
-    logger.info("Background worker started for processing OCR and embedding jobs")
+    # Start background worker only if enabled (for backward compatibility)
+    # By default, workers run as separate services (Docker)
+    enable_in_process_worker = os.getenv("ENABLE_IN_PROCESS_WORKER", "false").lower() == "true"
+    worker_task = None
+    
+    if enable_in_process_worker:
+        from .workers.ocr_worker import worker_loop
+        worker_task = asyncio.create_task(worker_loop())
+        logger.info("Background worker started for processing OCR and embedding jobs (in-process mode)")
+    else:
+        logger.info("In-process worker disabled. Use separate OCR worker service for job processing.")
     
     yield
     
-    # Shutdown: Cancel worker task
-    worker_task.cancel()
-    try:
-        await worker_task
-    except asyncio.CancelledError:
-        logger.info("Background worker stopped")
+    # Shutdown: Cancel worker task if running
+    if worker_task:
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            logger.info("Background worker stopped")
 
 
 def create_app() -> FastAPI:
@@ -111,14 +120,19 @@ def create_app() -> FastAPI:
     )
     
     # Configure CORS
+    # Allow common development origins
+    cors_origins = [
+        "http://localhost:3000",
+        "http://localhost:5173",  # Vite default port
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+    ]
+    
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:3000",
-            "http://localhost:5173",  # Vite default port
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:5173",
-        ],
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

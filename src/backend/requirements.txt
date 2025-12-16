@@ -17,7 +17,7 @@ redis==5.0.1
 numpy<2.0
 paddleocr==2.7.0
 paddlepaddle==2.6.2
-PyMuPDF
+PyMuPDF<1.21.0
 Pillow==11.0.0
 pgvector==0.2.4
 openai==1.6.0

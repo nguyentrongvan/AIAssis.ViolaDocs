@@ -65,6 +65,8 @@
               <th>Target</th>
               <th>Provider</th>
               <th>Status</th>
+              <th>Worker</th>
+              <th>Retries</th>
               <th>Output</th>
               <th>Error</th>
               <th>Created At</th>
@@ -88,6 +90,21 @@
               <td>{{ job.provider || 'N/A' }}</td>
               <td>
                 <StatusBadge :status="job.status" />
+              </td>
+              <td>
+                <div v-if="job.worker_id" class="worker-info">
+                  <span class="worker-id">{{ job.worker_id }}</span>
+                  <span v-if="job.claimed_at" class="claimed-time">
+                    {{ formatTime(job.claimed_at) }}
+                  </span>
+                </div>
+                <span v-else class="text-muted">-</span>
+              </td>
+              <td>
+                <span v-if="job.retry_count > 0" class="retry-badge">
+                  {{ job.retry_count }}/{{ job.max_retries }}
+                </span>
+                <span v-else class="text-muted">0</span>
               </td>
               <td>
                 <div v-if="job.output_ref" class="output-preview">
@@ -116,6 +133,24 @@
                   <button @click="viewJobDetails(job)" class="btn-action btn-details">
                     <Eye :size="16" />
                     <span>Details</span>
+                  </button>
+                  <button 
+                    v-if="job.status === 'queued' || job.status === 'processing'"
+                    @click="cancelJob(job.id)" 
+                    class="btn-action btn-cancel"
+                    :disabled="cancellingJobs.includes(job.id)"
+                  >
+                    <X :size="16" />
+                    <span>Cancel</span>
+                  </button>
+                  <button 
+                    v-if="job.status === 'failed' || job.status === 'completed' || job.status === 'cancelled'"
+                    @click="reprocessJob(job.id)" 
+                    class="btn-action btn-reprocess"
+                    :disabled="reprocessingJobs.includes(job.id)"
+                  >
+                    <RefreshCw :size="16" />
+                    <span>Reprocess</span>
                   </button>
                 </div>
               </td>
@@ -161,6 +196,42 @@
               <label>Updated At:</label>
               <span>{{ formatDate(selectedJob.updated_at) }}</span>
             </div>
+            <div v-if="selectedJob.worker_id" class="detail-item">
+              <label>Worker ID:</label>
+              <span>{{ selectedJob.worker_id }}</span>
+            </div>
+            <div v-if="selectedJob.claimed_at" class="detail-item">
+              <label>Claimed At:</label>
+              <span>{{ formatDate(selectedJob.claimed_at) }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Retry Count:</label>
+              <span>{{ selectedJob.retry_count || 0 }} / {{ selectedJob.max_retries || 3 }}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="detail-section">
+          <h3>Actions</h3>
+          <div class="action-buttons-horizontal">
+            <button 
+              v-if="selectedJob.status === 'queued' || selectedJob.status === 'processing'"
+              @click="cancelJob(selectedJob.id); showDetailsModal = false" 
+              class="btn-action btn-cancel"
+              :disabled="cancellingJobs.includes(selectedJob.id)"
+            >
+              <X :size="16" />
+              Cancel Job
+            </button>
+            <button 
+              v-if="selectedJob.status === 'failed' || selectedJob.status === 'completed' || selectedJob.status === 'cancelled'"
+              @click="reprocessJob(selectedJob.id); showDetailsModal = false" 
+              class="btn-action btn-reprocess"
+              :disabled="reprocessingJobs.includes(selectedJob.id)"
+            >
+              <RefreshCw :size="16" />
+              Reprocess Job
+            </button>
           </div>
         </div>
 
@@ -220,6 +291,8 @@ const showDetailsModal = ref(false)
 const showOutputModal = ref(false)
 const selectedJob = ref(null)
 const selectedOutput = ref(null)
+const cancellingJobs = ref([])
+const reprocessingJobs = ref([])
 let refreshInterval = null
 
 const filters = ref({
@@ -336,6 +409,56 @@ const truncateText = (text, maxLength) => {
   if (!text) return ''
   if (text.length <= maxLength) return text
   return text.substring(0, maxLength) + '...'
+}
+
+const cancelJob = async (jobId) => {
+  if (!confirm('Are you sure you want to cancel this job?')) {
+    return
+  }
+  
+  cancellingJobs.value.push(jobId)
+  try {
+    const res = await aiAPI.cancelJob(jobId)
+    if (res.is_success) {
+      if (window.$toast) {
+        window.$toast.show('Job cancelled successfully', 'success')
+      }
+      await loadJobs()
+    }
+  } catch (e) {
+    console.error('Failed to cancel job', e)
+    const errorMsg = e.response?.data?.message || e.message || 'Failed to cancel job'
+    if (window.$toast) {
+      window.$toast.show(errorMsg, 'error')
+    }
+  } finally {
+    cancellingJobs.value = cancellingJobs.value.filter(id => id !== jobId)
+  }
+}
+
+const reprocessJob = async (jobId) => {
+  if (!confirm('Reprocess this job?')) {
+    return
+  }
+  
+  reprocessingJobs.value.push(jobId)
+  try {
+    const res = await aiAPI.reprocessJob(jobId)
+    if (res.is_success) {
+      if (window.$toast) {
+        window.$toast.show('Job queued for reprocessing', 'success')
+      }
+      await loadJobs()
+    }
+  } catch (e) {
+    console.error('Failed to reprocess job', e)
+    const errorMsg = e.response?.data?.message || e.message || 'Failed to reprocess job'
+    if (window.$toast) {
+      window.$toast.show(errorMsg, 'error')
+    }
+  } finally {
+    reprocessingJobs.value = reprocessingJobs.value.filter(id => id !== jobId)
+  }
 }
 </script>
 
@@ -859,8 +982,75 @@ const truncateText = (text, maxLength) => {
   border-color: var(--ai-cyan);
 }
 
+.btn-cancel {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  border-color: #ef4444;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: var(--shadow-lg), 0 0 20px rgba(239, 68, 68, 0.3);
+  border-color: #ef4444;
+}
+
+.btn-reprocess {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border-color: #10b981;
+}
+
+.btn-reprocess:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: var(--shadow-lg), 0 0 20px rgba(16, 185, 129, 0.3);
+  border-color: #10b981;
+}
+
+.btn-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .btn-action span {
   white-space: nowrap;
+}
+
+.worker-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.worker-id {
+  font-weight: 600;
+  color: var(--text-dark);
+  font-family: var(--font-mono);
+}
+
+.claimed-time {
+  font-size: 0.75rem;
+  color: var(--text-medium);
+  opacity: 0.8;
+}
+
+.retry-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(245, 158, 11, 0.2) 100%);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.action-buttons-horizontal {
+  display: flex;
+  gap: var(--space-md);
+  flex-wrap: wrap;
 }
 
 .date-time {

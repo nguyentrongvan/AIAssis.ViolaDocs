@@ -261,6 +261,10 @@ async def list_jobs(
             "input_ref": job.input_ref,
             "output_ref": job.output_ref,
             "error": job.error,
+            "worker_id": job.worker_id,
+            "claimed_at": job.claimed_at.isoformat() if job.claimed_at else None,
+            "retry_count": job.retry_count,
+            "max_retries": job.max_retries,
             "created_at": job.created_at.isoformat() if job.created_at else None,
             "updated_at": job.updated_at.isoformat() if job.updated_at else None
         } for job in jobs],
@@ -289,7 +293,168 @@ async def get_job_status(
         "provider": job.provider,
         "error": job.error,
         "output_ref": job.output_ref,
-        "created_at": job.created_at.isoformat()
+        "worker_id": job.worker_id,
+        "claimed_at": job.claimed_at.isoformat() if job.claimed_at else None,
+        "retry_count": job.retry_count,
+        "max_retries": job.max_retries,
+        "created_at": job.created_at.isoformat(),
+        "updated_at": job.updated_at.isoformat() if job.updated_at else None
+    })
+
+
+class ReprocessRequest(BaseModel):
+    provider: Optional[str] = None  # Optional: change provider for reprocessing
+
+
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_job(
+    job_id: int,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Cancel a job (admin only)"""
+    result = await session.execute(select(AIJob).where(AIJob.id == job_id))
+    job = result.scalar_one_or_none()
+    
+    if not job:
+        return error_response("Job not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    if job.status not in ["queued", "processing"]:
+        return error_response(
+            f"Cannot cancel job with status '{job.status}'. Only queued or processing jobs can be cancelled.",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Release worker lock if processing
+    if job.status == "processing":
+        job.release()
+    
+    job.status = "cancelled"
+    await session.commit()
+    
+    return success_response({
+        "id": job.id,
+        "status": job.status,
+        "message": "Job cancelled successfully"
+    })
+
+
+@router.post("/jobs/{job_id}/reprocess")
+async def reprocess_job(
+    job_id: int,
+    request: Optional[ReprocessRequest] = None,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Reprocess a failed or completed job (admin only)"""
+    result = await session.execute(select(AIJob).where(AIJob.id == job_id))
+    job = result.scalar_one_or_none()
+    
+    if not job:
+        return error_response("Job not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    if job.status not in ["failed", "completed", "cancelled"]:
+        return error_response(
+            f"Cannot reprocess job with status '{job.status}'. Only failed, completed, or cancelled jobs can be reprocessed.",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Reset job
+    job.status = "queued"
+    job.error = None
+    job.retry_count = 0
+    job.release()  # Clear worker tracking
+    
+    # Update provider if specified
+    if request and request.provider:
+        job.provider = request.provider
+    
+    await session.commit()
+    
+    return success_response({
+        "id": job.id,
+        "status": job.status,
+        "provider": job.provider,
+        "message": "Job queued for reprocessing"
+    })
+
+
+class BatchCancelRequest(BaseModel):
+    job_ids: list[int]
+    status_filter: Optional[str] = None
+    job_type: Optional[str] = None
+
+
+class BatchReprocessRequest(BaseModel):
+    job_ids: list[int]
+    provider: Optional[str] = None
+
+
+@router.post("/jobs/batch-cancel")
+async def batch_cancel_jobs(
+    request: BatchCancelRequest,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Cancel multiple jobs (admin only)"""
+    query = select(AIJob).where(AIJob.id.in_(request.job_ids))
+    
+    if request.status_filter:
+        query = query.where(AIJob.status == request.status_filter)
+    if request.job_type:
+        query = query.where(AIJob.job_type == request.job_type)
+    
+    result = await session.execute(query)
+    jobs = result.scalars().all()
+    
+    cancelled_count = 0
+    for job in jobs:
+        if job.status in ["queued", "processing"]:
+            if job.status == "processing":
+                job.release()
+            job.status = "cancelled"
+            cancelled_count += 1
+    
+    await session.commit()
+    
+    return success_response({
+        "cancelled_count": cancelled_count,
+        "total_requested": len(request.job_ids),
+        "message": f"Cancelled {cancelled_count} job(s)"
+    })
+
+
+@router.post("/jobs/batch-reprocess")
+async def batch_reprocess_jobs(
+    request: BatchReprocessRequest,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Reprocess multiple jobs (admin only)"""
+    result = await session.execute(
+        select(AIJob).where(AIJob.id.in_(request.job_ids))
+    )
+    jobs = result.scalars().all()
+    
+    reprocessed_count = 0
+    for job in jobs:
+        if job.status in ["failed", "completed", "cancelled"]:
+            job.status = "queued"
+            job.error = None
+            job.retry_count = 0
+            job.release()
+            
+            if request.provider:
+                job.provider = request.provider
+            
+            reprocessed_count += 1
+    
+    await session.commit()
+    
+    return success_response({
+        "reprocessed_count": reprocessed_count,
+        "total_requested": len(request.job_ids),
+        "message": f"Queued {reprocessed_count} job(s) for reprocessing"
     })
 
 

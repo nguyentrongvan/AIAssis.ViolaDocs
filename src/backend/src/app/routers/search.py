@@ -9,6 +9,7 @@ from ..dependencies import get_current_user, get_current_admin_user
 from ..models.users import User
 from ..models.documents import Document
 from ..services.ai import get_embedding_service
+from ..services.ai.embedding_service import EmbeddingModelUnavailableError
 from ..utils.response import success_response, error_response
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -75,46 +76,60 @@ async def search(
         keyword_results = result.scalars().all()
     
     # Vector search via Chroma
+    vector_results = []
     if request.mode in ["vector", "hybrid"]:
         embedding_service = get_embedding_service()
-        if embedding_service:
-            # Generate query embedding
-            query_embedding = embedding_service.generate_embedding(request.query)
-            search_filters = {"owner_id": current_user.id}
-            if request.group_id:
-                search_filters["group_id"] = request.group_id
-            chroma_result = embedding_service.query_embeddings(
-                query_embedding=query_embedding,
-                where=search_filters,
-                top_k=request.limit
-            )
-            doc_ids = []
-            if chroma_result and chroma_result.get("metadatas"):
-                for metas in chroma_result["metadatas"]:
-                    for meta in metas:
-                        doc_id = meta.get("doc_id")
-                        if doc_id:
-                            doc_ids.append(doc_id)
-            if doc_ids:
-                docs_result = await session.execute(
-                    select(Document).where(
-                        and_(
-                            Document.id.in_(doc_ids),
-                            Document.owner_id == current_user.id,
-                            Document.deleted_at.is_(None)
+        if embedding_service and embedding_service.is_available():
+            try:
+                # Generate query embedding
+                query_embedding = embedding_service.generate_embedding(request.query)
+                search_filters = {"owner_id": current_user.id}
+                if request.group_id:
+                    search_filters["group_id"] = request.group_id
+                chroma_result = embedding_service.query_embeddings(
+                    query_embedding=query_embedding,
+                    where=search_filters,
+                    top_k=request.limit
+                )
+                
+                # Process chroma results
+                doc_ids = []
+                if chroma_result and chroma_result.get("metadatas"):
+                    for metas in chroma_result["metadatas"]:
+                        for meta in metas:
+                            doc_id = meta.get("doc_id")
+                            if doc_id:
+                                doc_ids.append(doc_id)
+                if doc_ids:
+                    docs_result = await session.execute(
+                        select(Document).where(
+                            and_(
+                                Document.id.in_(doc_ids),
+                                Document.owner_id == current_user.id,
+                                Document.deleted_at.is_(None)
+                            )
                         )
                     )
-                )
-                vector_results = docs_result.scalars().all()
-            else:
+                    vector_results = docs_result.scalars().all()
+            except EmbeddingModelUnavailableError as e:
+                # If embedding service is unavailable, return error for vector-only mode
+                if request.mode == "vector":
+                    return error_response(
+                        f"Vector search is unavailable: {str(e)}. "
+                        f"Please use 'hybrid' or 'keyword' mode, or configure Ollama embedding model.",
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+                    )
+                # For hybrid mode, continue with keyword search only
                 vector_results = []
         else:
-            # No embedding service configured
+            # If embedding service not available and mode is vector-only, return error
             if request.mode == "vector":
                 return error_response(
-                    "Vector search not available. Embedding service not configured.",
+                    "Vector search is unavailable. Please configure Ollama embedding model or use 'hybrid' or 'keyword' mode.",
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE
                 )
+            # For hybrid mode, continue with keyword search only
+            vector_results = []
     
     # Merge and deduplicate results
     all_results = {}
@@ -143,14 +158,21 @@ async def vector_search(
 ):
     """Vector search only."""
     embedding_service = get_embedding_service()
-    if not embedding_service:
+    if not embedding_service or not embedding_service.is_available():
         return error_response(
-            "Vector search not available. Embedding service not configured.",
+            "Vector search not available. Embedding service not configured or model not available. "
+            "Please configure Ollama and ensure the embedding model is pulled.",
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE
         )
     
     # Generate query embedding
-    query_embedding = embedding_service.generate_embedding(request.query)
+    try:
+        query_embedding = embedding_service.generate_embedding(request.query)
+    except EmbeddingModelUnavailableError as e:
+        return error_response(
+            f"Vector search unavailable: {str(e)}",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
     
     search_filters = {"owner_id": current_user.id}
     if request.filters and isinstance(request.filters, dict):

@@ -2,24 +2,48 @@
 
 ## Prerequisites
 
-- Docker and Docker Compose
-- Python 3.11+
+- Docker and Docker Compose (recommended for Tesseract OCR)
+- Python 3.11+ (for local development)
 - Node.js 18+
 
 ## Quick Start
+
+### Option 1: Docker Setup (Recommended - Includes Tesseract OCR)
+
+Start all services including backend with Tesseract OCR pre-installed:
+
+```bash
+docker-compose up -d --build
+```
+
+This starts:
+- **Backend** (port 8000) with Tesseract OCR pre-installed
+- **PostgreSQL** (port 5432) with pgvector extension
+- **MinIO** (ports 9000, 9001) - S3-compatible object storage
+- **Redis** (port 6379) - Caching and message queue
+- **Chroma** (port 8001) - Vector database
+- **Ollama** (port 11434) - Local LLM
+
+**✅ Tesseract OCR is automatically installed in the Docker container - no manual installation needed!**
+
+See [DOCKER_SETUP.md](DOCKER_SETUP.md) for detailed Docker setup guide.
+
+### Option 2: Local Development
 
 ### 1. Start Infrastructure Services
 
 Start all required services using Docker Compose:
 
 ```bash
-docker-compose up -d
+docker-compose up -d postgres minio redis chroma ollama
 ```
 
 This starts:
 - **PostgreSQL** (port 5432) with pgvector extension
 - **MinIO** (ports 9000, 9001) - S3-compatible object storage
 - **Redis** (port 6379) - Caching and message queue
+- **Chroma** (port 8001) - Vector database
+- **Ollama** (port 11434) - Local LLM
 
 Verify services are running:
 ```bash
@@ -97,6 +121,7 @@ GEMINI_API_KEY=your-gemini-api-key-1,your-gemini-api-key-2
 OPENAI_API_KEY=your-openai-api-key-1,your-openai-api-key-2
 
 # OCR
+# Supported languages: en (English), vi (Vietnamese), ja (Japanese), ko (Korean), zh (Chinese)
 OCR_PROVIDER=paddle
 OCR_LANGUAGES=en,vi
 

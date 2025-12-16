@@ -1,6 +1,11 @@
 import os
 from typing import List, Optional, Dict, Any
-from ...config import settings
+from ...config import settings, get_ollama_base_url_from_db, get_ollama_embedding_model_from_db
+
+
+class EmbeddingModelUnavailableError(Exception):
+    """Exception raised when embedding model is not available"""
+    pass
 
 # Disable ChromaDB telemetry BEFORE importing chromadb
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
@@ -138,6 +143,26 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
                 traceback.print_exc()
                 self.client = None
     
+    def is_model_available(self) -> bool:
+        """Check if the embedding model is available"""
+        if not self.client:
+            return False
+        try:
+            # Make a minimal test call to check if model exists
+            test_response = self.client.embeddings.create(
+                model=self.model,
+                input="test"
+            )
+            if test_response.data and test_response.data[0].embedding:
+                return True
+            return False
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "404" in error_msg or "not found" in error_msg:
+                return False
+            # For other errors, assume model might be available but there's a connection issue
+            return False
+    
     def _detect_dimension(self):
         """Detect actual embedding dimension by making a test call"""
         if not self.client:
@@ -163,11 +188,21 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
     def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for text"""
         if not self.client:
-            return [0.0] * self.dimension
+            raise EmbeddingModelUnavailableError(
+                f"Ollama embedding client not initialized. "
+                f"Make sure Ollama is running at {self.base_url} and model '{self.model}' is available. "
+                f"Run: ollama pull {self.model}"
+            )
+        
+        if not self.is_model_available():
+            raise EmbeddingModelUnavailableError(
+                f"Ollama embedding model '{self.model}' is not available. "
+                f"Make sure Ollama is running and model is pulled: ollama pull {self.model}"
+            )
         
         try:
             if not text or not text.strip():
-                return [0.0] * self.dimension
+                raise ValueError("Cannot generate embedding for empty text")
             
             response = self.client.embeddings.create(
                 model=self.model,
@@ -178,18 +213,37 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
             if embedding:
                 self.dimension = len(embedding)
             return embedding
+        except EmbeddingModelUnavailableError:
+            raise
         except Exception as e:
-            print(f"Error generating Ollama embedding: {e}")
-            return [0.0] * self.dimension
+            error_msg = str(e).lower()
+            if "404" in error_msg or "not found" in error_msg:
+                raise EmbeddingModelUnavailableError(
+                    f"Ollama embedding model '{self.model}' is not available. "
+                    f"Make sure Ollama is running and model is pulled: ollama pull {self.model}"
+                ) from e
+            raise RuntimeError(f"Error generating Ollama embedding: {e}") from e
     
     def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for multiple texts"""
         if not self.client:
-            return [[0.0] * self.dimension for _ in texts]
+            raise EmbeddingModelUnavailableError(
+                f"Ollama embedding client not initialized. "
+                f"Make sure Ollama is running at {self.base_url} and model '{self.model}' is available. "
+                f"Run: ollama pull {self.model}"
+            )
+        
+        if not self.is_model_available():
+            raise EmbeddingModelUnavailableError(
+                f"Ollama embedding model '{self.model}' is not available. "
+                f"Make sure Ollama is running and model is pulled: ollama pull {self.model}"
+            )
         
         try:
             # Filter empty texts
             valid_texts = [text if text and text.strip() else "" for text in texts]
+            if not valid_texts or all(not t for t in valid_texts):
+                raise ValueError("Cannot generate embeddings for empty text list")
             
             response = self.client.embeddings.create(
                 model=self.model,
@@ -202,9 +256,16 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
                 self.dimension = len(embeddings[0])
             
             return embeddings
+        except EmbeddingModelUnavailableError:
+            raise
         except Exception as e:
-            print(f"Error generating Ollama embeddings batch: {e}")
-            return [[0.0] * self.dimension for _ in texts]
+            error_msg = str(e).lower()
+            if "404" in error_msg or "not found" in error_msg:
+                raise EmbeddingModelUnavailableError(
+                    f"Ollama embedding model '{self.model}' is not available. "
+                    f"Make sure Ollama is running and model is pulled: ollama pull {self.model}"
+                ) from e
+            raise RuntimeError(f"Error generating Ollama embeddings batch: {e}") from e
 
 
 class ChromaVectorStore:
@@ -417,9 +478,14 @@ class EmbeddingService:
                     api_key=settings.ollama_api_key if settings.ollama_api_key else None,
                     model=settings.ollama_embedding_model
                 )
-                # Verify client was initialized
+                # Verify client was initialized and model is available
                 if provider.client is not None:
-                    return provider
+                    if provider.is_model_available():
+                        return provider
+                    else:
+                        print(f"Warning: Ollama embedding model '{settings.ollama_embedding_model}' is not available.")
+                        print(f"  Make sure Ollama is running and model is pulled: ollama pull {settings.ollama_embedding_model}")
+                        return None
                 else:
                     print("Ollama embedding provider client not initialized")
             except Exception as e:
@@ -443,16 +509,82 @@ class EmbeddingService:
             print(f"Chroma store not available: {e}")
             return None
     
+    def is_available(self) -> bool:
+        """Check if embedding service is available and ready"""
+        if not self.embedder:
+            return False
+        if isinstance(self.embedder, OllamaEmbeddingProvider):
+            return self.embedder.is_model_available()
+        # For other providers, assume available if embedder exists
+        return True
+    
+    def health_check(self) -> Dict[str, Any]:
+        """Perform health check on embedding service"""
+        status = {
+            "available": False,
+            "embedder": None,
+            "store": None,
+            "errors": []
+        }
+        
+        # Check embedder
+        if self.embedder:
+            if isinstance(self.embedder, OllamaEmbeddingProvider):
+                if self.embedder.client is None:
+                    status["errors"].append("Ollama client not initialized")
+                elif not self.embedder.is_model_available():
+                    status["errors"].append(
+                        f"Ollama model '{self.embedder.model}' is not available. "
+                        f"Run: ollama pull {self.embedder.model}"
+                    )
+                else:
+                    status["embedder"] = {
+                        "type": "ollama",
+                        "model": self.embedder.model,
+                        "dimension": self.embedder.dimension,
+                        "base_url": self.embedder.base_url
+                    }
+            else:
+                status["embedder"] = {"type": "unknown"}
+        else:
+            status["errors"].append("No embedding provider configured")
+        
+        # Check store
+        if self.store:
+            if self.store.collection is not None:
+                status["store"] = {
+                    "type": "chroma",
+                    "collection": self.store.collection_name,
+                    "persist_dir": self.store.persist_dir if not self.store.server_host else None,
+                    "server": f"{self.store.server_host}:{self.store.server_port}" if self.store.server_host else None
+                }
+            else:
+                status["errors"].append("Chroma vector store not initialized")
+        else:
+            status["errors"].append("No vector store configured")
+        
+        status["available"] = (
+            status["embedder"] is not None and 
+            status["store"] is not None and 
+            len(status["errors"]) == 0
+        )
+        
+        return status
+    
     def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for text"""
         if not self.embedder:
-            return [0.0] * 1536  # Default dimension if everything missing
+            raise EmbeddingModelUnavailableError(
+                "Embedding provider not configured. Please configure Ollama."
+            )
         return self.embedder.generate_embedding(text)
     
     def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for multiple texts"""
         if not self.embedder:
-            return [[0.0] * 1536 for _ in texts]
+            raise EmbeddingModelUnavailableError(
+                "Embedding provider not configured. Please configure Ollama."
+            )
         return self.embedder.generate_embeddings_batch(texts)
     
     def upsert_embeddings(self, ids: List[str], embeddings: List[List[float]], metadatas: List[Dict[str, Any]]):

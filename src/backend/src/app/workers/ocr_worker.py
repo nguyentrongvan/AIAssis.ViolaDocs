@@ -72,14 +72,15 @@ async def process_ocr_job(job_id: int):
                 raise ValueError(f"Document {version.document_id} not found")
             mime = document.mime
             
-            # Get languages from settings
-            languages = settings.ocr_lang_list
+            # Get languages from DB settings (async)
+            from ..config import get_ocr_languages_from_db
+            languages = await get_ocr_languages_from_db()
             
-            # Process OCR
+            # Process OCR (use async methods to get latest settings)
             if mime.startswith("image/"):
-                ocr_result = ocr_service.process_image(file_bytes, languages)
+                ocr_result = await ocr_service.process_image_async(file_bytes, languages)
             elif mime == "application/pdf":
-                ocr_result = ocr_service.process_pdf(file_bytes, languages)
+                ocr_result = await ocr_service.process_pdf_async(file_bytes, languages)
             else:
                 raise ValueError(f"Unsupported MIME type for OCR: {mime}")
 
@@ -163,10 +164,14 @@ async def process_embedding_job(job_id: int):
         
         try:
             from ..services.ai import get_embedding_service
+            from ..services.ai.embedding_service import EmbeddingModelUnavailableError
             
             embedding_service = get_embedding_service()
-            if not embedding_service:
-                raise ValueError("Embedding provider not configured")
+            if not embedding_service or not embedding_service.is_available():
+                raise ValueError(
+                    "Embedding provider not configured or model not available. "
+                    "Please configure Ollama and ensure the embedding model is pulled."
+                )
             
             # Get text from OCR result or document
             target = job.target
@@ -208,7 +213,10 @@ async def process_embedding_job(job_id: int):
                 raise ValueError(f"Failed to read OCR text: {e}")
             
             # Generate embedding
-            embedding_vector = embedding_service.generate_embedding(text)
+            try:
+                embedding_vector = embedding_service.generate_embedding(text)
+            except EmbeddingModelUnavailableError as e:
+                raise ValueError(f"Embedding model unavailable: {str(e)}")
             
             # Save embedding to vector store
             embed_id = f"embed-{job.id}"
@@ -241,42 +249,72 @@ async def process_embedding_job(job_id: int):
 
 
 async def worker_loop():
-    """Main worker loop to process queued jobs"""
-    processed_tasks = set()  # Track tasks being processed to avoid duplicates
+    """Main worker loop to process queued jobs with parallel processing"""
+    from ..config import settings
+    
+    # Configuration: max concurrent jobs per type
+    MAX_CONCURRENT_OCR = settings.max_concurrent_ocr_jobs
+    MAX_CONCURRENT_EMBED = settings.max_concurrent_embed_jobs
+    BATCH_SIZE = settings.worker_batch_size  # Jobs to fetch per iteration
+    
+    # Semaphores to limit concurrent processing
+    ocr_semaphore = asyncio.Semaphore(MAX_CONCURRENT_OCR)
+    embed_semaphore = asyncio.Semaphore(MAX_CONCURRENT_EMBED)
+    
+    # Track active tasks
+    active_tasks = set()
+    
+    async def process_job_with_semaphore(job_id: int, job_type: str):
+        """Process a job with appropriate semaphore"""
+        semaphore = ocr_semaphore if job_type == "ocr" else embed_semaphore
+        async with semaphore:
+            if job_type == "ocr":
+                await process_ocr_job(job_id)
+            elif job_type == "embed":
+                await process_embedding_job(job_id)
+    
+    async def cleanup_completed_tasks():
+        """Remove completed tasks from active_tasks"""
+        completed = [task for task in active_tasks if task.done()]
+        for task in completed:
+            active_tasks.discard(task)
+            try:
+                await task  # Get any exceptions
+            except Exception as e:
+                print(f"Task completed with error: {e}")
     
     while True:
         try:
+            # Clean up completed tasks
+            await cleanup_completed_tasks()
+            
             async with AsyncSessionLocal() as session:
-                # Get next queued job
+                # Get multiple queued jobs (batch processing)
                 result = await session.execute(
                     select(AIJob)
                     .where(AIJob.status == "queued")
                     .order_by(AIJob.created_at.asc())
-                    .limit(1)
+                    .limit(BATCH_SIZE)
                 )
-                job = result.scalar_one_or_none()
+                jobs = result.scalars().all()
                 
-                if job and job.id not in processed_tasks:
-                    # Mark as being processed
-                    processed_tasks.add(job.id)
+                if jobs:
+                    # Process jobs in parallel
+                    for job in jobs:
+                        # Create task for this job (semaphore will handle concurrency limit)
+                        task = asyncio.create_task(
+                            process_job_with_semaphore(job.id, job.job_type)
+                        )
+                        active_tasks.add(task)
                     
-                    # Process job asynchronously (don't await to allow parallel processing)
-                    if job.job_type == "ocr":
-                        asyncio.create_task(process_ocr_job(job.id))
-                    elif job.job_type == "embed":
-                        asyncio.create_task(process_embedding_job(job.id))
-                    # Add more job types as needed
-                    
-                    # Small delay to avoid overwhelming the system
-                    await asyncio.sleep(0.1)
+                    # Small delay before next batch
+                    await asyncio.sleep(0.5)
                 else:
-                    # No jobs, wait a bit longer
-                    if processed_tasks:
-                        # Clear processed tasks periodically
-                        processed_tasks.clear()
+                    # No jobs, wait longer
                     await asyncio.sleep(2)
                     
         except Exception as e:
+            print(f"Error in worker loop: {e}")
             await asyncio.sleep(2)
 
 

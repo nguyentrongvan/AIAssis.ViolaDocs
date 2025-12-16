@@ -72,6 +72,50 @@
             Check Health
           </button>
         </div>
+        
+        <!-- OCR Settings Section -->
+        <div class="ocr-settings-section">
+          <h3>OCR Settings</h3>
+          <div class="form-section">
+            <div class="form-group">
+              <label for="ocr_provider">OCR Provider *</label>
+              <select id="ocr_provider" v-model="ocrForm.provider">
+                <option value="paddle">PaddleOCR</option>
+                <option value="tesseract">Tesseract</option>
+                <option value="easyocr">EasyOCR</option>
+                <option value="auto">Auto (Try all)</option>
+              </select>
+              <small>Select the OCR provider to use for document processing</small>
+            </div>
+            
+            <div class="form-group">
+              <label>Languages *</label>
+              <div class="language-checkboxes">
+                <label v-for="lang in availableLanguages" :key="lang.code" class="language-checkbox">
+                  <input 
+                    type="checkbox" 
+                    :value="lang.code" 
+                    v-model="ocrForm.languages"
+                  />
+                  <span>{{ lang.name }} ({{ lang.code }})</span>
+                </label>
+              </div>
+              <small>Select languages for OCR recognition</small>
+            </div>
+            
+            <div class="form-actions">
+              <button @click="saveOCRSettings" class="btn-primary" :disabled="savingOCR">
+                <Save :size="16" />
+                {{ savingOCR ? 'Saving...' : 'Save OCR Settings' }}
+              </button>
+              <button @click="loadOCRSettings" class="btn-secondary" :disabled="savingOCR">
+                <RefreshCw :size="16" />
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+        
         <div v-if="providers" class="providers-config">
           <div class="provider-section">
             <h3>OCR Providers</h3>
@@ -80,10 +124,15 @@
                 v-for="provider in providers.ocr || []"
                 :key="provider.name"
                 class="provider-item"
+                :class="{ 'provider-error': provider.health === 'error' || provider.health === 'system_not_found' }"
               >
                 <div class="provider-info">
                   <h4>{{ provider.name }}</h4>
                   <StatusBadge :status="provider.health || 'unknown'" />
+                  <div v-if="provider.description && (provider.health === 'error' || provider.health === 'system_not_found')" class="provider-error-message">
+                    <AlertTriangle :size="16" />
+                    <span>{{ provider.description }}</span>
+                  </div>
                 </div>
                 <div class="provider-config">
                   <label>
@@ -92,6 +141,22 @@
                   </label>
                   <div v-if="provider.quota" class="quota-info">
                     Quota: {{ provider.quota.used }} / {{ provider.quota.limit }}
+                  </div>
+                  <div v-if="provider.health === 'error' || provider.health === 'system_not_found'" class="provider-actions">
+                    <button 
+                      v-if="provider.can_auto_fix" 
+                      @click="fixProvider(provider.name)" 
+                      class="btn-small btn-primary"
+                      :disabled="fixingProvider === provider.name"
+                    >
+                      {{ fixingProvider === provider.name ? 'Fixing...' : 'Auto Fix' }}
+                    </button>
+                    <button 
+                      @click="showFixGuide(provider)" 
+                      class="btn-small btn-secondary"
+                    >
+                      View Guide
+                    </button>
                   </div>
                 </div>
               </div>
@@ -311,6 +376,79 @@
         <button type="button" @click="saveRetentionPolicy" class="btn-primary">Save</button>
       </template>
     </Modal>
+
+    <!-- Fix Guide Modal -->
+    <Modal
+      v-model:show="showFixGuideModal"
+      :title="fixGuideModalTitle"
+      size="large"
+    >
+      <div v-if="currentFixGuide" class="fix-guide-content">
+        <div v-if="currentFixGuide.description" class="fix-guide-description">
+          <p>{{ currentFixGuide.description }}</p>
+        </div>
+        
+        <div v-if="currentFixGuide.steps && currentFixGuide.steps.length > 0" class="fix-guide-steps">
+          <h4>Steps to Fix:</h4>
+          <ol class="steps-list">
+            <li v-for="step in currentFixGuide.steps" :key="step.step" class="step-item">
+              <div class="step-header">
+                <strong>{{ step.step }}. {{ step.title }}</strong>
+              </div>
+              <div class="step-description">{{ step.description }}</div>
+              <div v-if="step.action" class="step-action">
+                <strong>Action:</strong> {{ step.action }}
+              </div>
+              <div v-if="step.command" class="step-command">
+                <code>{{ step.command }}</code>
+                <button 
+                  @click="copyToClipboard(step.command)" 
+                  class="btn-copy"
+                  title="Copy to clipboard"
+                >
+                  Copy
+                </button>
+              </div>
+            </li>
+          </ol>
+        </div>
+
+        <div v-if="currentFixGuide.download_link" class="fix-guide-download">
+          <h4>Download Link:</h4>
+          <a :href="currentFixGuide.download_link" target="_blank" rel="noopener noreferrer">
+            {{ currentFixGuide.download_link }}
+          </a>
+        </div>
+
+        <div v-if="currentFixGuide.verify_command" class="fix-guide-verify">
+          <h4>Verify Installation:</h4>
+          <code>{{ currentFixGuide.verify_command }}</code>
+          <button 
+            @click="copyToClipboard(currentFixGuide.verify_command)" 
+            class="btn-copy"
+            title="Copy to clipboard"
+          >
+            Copy
+          </button>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="modal-footer-actions">
+          <button 
+            v-if="currentProvider && currentProvider.can_auto_fix" 
+            @click="fixProvider(currentProvider.name)" 
+            class="btn-primary"
+            :disabled="fixingProvider === currentProvider.name"
+          >
+            {{ fixingProvider === currentProvider.name ? 'Fixing...' : 'Auto Fix' }}
+          </button>
+          <button @click="showFixGuideModal = false" class="btn-secondary">
+            Close
+          </button>
+        </div>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -339,12 +477,34 @@ const llmForm = ref({
   ollama_embedding_model: ''
 })
 const savingLLM = ref(false)
+const ocrSettings = ref(null)
+
+const ocrForm = ref({
+  provider: 'paddle',
+  languages: ['en', 'vi']
+})
+const savingOCR = ref(false)
+
+// Fix guide modal
+const showFixGuideModal = ref(false)
+const currentFixGuide = ref(null)
+const currentProvider = ref(null)
+const fixingProvider = ref(null)
+const fixGuideModalTitle = ref('Fix Guide')
 
 const tabs = [
   { id: 'retention', label: 'Retention Policies' },
   { id: 'providers', label: 'OCR/AI Providers' },
   { id: 'llm', label: 'LLM Settings' },
   { id: 'chatbot', label: 'Chatbot Policies' }
+]
+
+const availableLanguages = [
+  { code: 'en', name: 'English' },
+  { code: 'vi', name: 'Vietnamese' },
+  { code: 'ja', name: 'Japanese' },
+  { code: 'ko', name: 'Korean' },
+  { code: 'zh', name: 'Chinese' }
 ]
 
 const retentionForm = ref({
@@ -360,6 +520,7 @@ onMounted(async () => {
   await loadChatbotPolicies()
   await loadGroups()
   await loadLLMSettings()
+  await loadOCRSettings()
 })
 
 const loadRetentionPolicies = async () => {
@@ -565,6 +726,113 @@ const saveLLMSettings = async () => {
     }
   } finally {
     savingLLM.value = false
+  }
+}
+
+const loadOCRSettings = async () => {
+  try {
+    await settingsStore.fetchOCRSettings()
+    ocrSettings.value = settingsStore.ocrSettings
+    if (ocrSettings.value) {
+      ocrForm.value = {
+        provider: ocrSettings.value.provider || 'paddle',
+        languages: ocrSettings.value.languages || ['en', 'vi']
+      }
+    } else {
+      // Initialize with defaults if no settings in DB
+      ocrForm.value = {
+        provider: 'paddle',
+        languages: ['en', 'vi']
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load OCR settings', e)
+    // Initialize with defaults on error
+    ocrForm.value = {
+      provider: 'paddle',
+      languages: ['en', 'vi']
+    }
+    if (window.$toast) {
+      window.$toast.show('Failed to load OCR settings', 'error')
+    }
+  }
+}
+
+const saveOCRSettings = async () => {
+  savingOCR.value = true
+  try {
+    const payload = {
+      provider: ocrForm.value.provider,
+      languages: ocrForm.value.languages
+    }
+    
+    await settingsStore.updateOCRSettings(payload)
+    if (window.$toast) {
+      window.$toast.show('OCR settings saved', 'success')
+    }
+    await loadOCRSettings()
+  } catch (e) {
+    console.error('Failed to save OCR settings', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to save OCR settings', 'error')
+    }
+  } finally {
+    savingOCR.value = false
+  }
+}
+
+const showFixGuide = (provider) => {
+  currentProvider.value = provider
+  if (provider.fix_guide) {
+    currentFixGuide.value = provider.fix_guide
+    fixGuideModalTitle.value = `Fix Guide: ${provider.name}`
+  } else {
+    // Fallback: create a basic guide from description
+    currentFixGuide.value = {
+      title: `Fix ${provider.name}`,
+      description: provider.description || 'No fix guide available',
+      steps: []
+    }
+    fixGuideModalTitle.value = `Fix Guide: ${provider.name}`
+  }
+  showFixGuideModal.value = true
+}
+
+const fixProvider = async (providerName) => {
+  fixingProvider.value = providerName
+  try {
+    await settingsStore.fixProvider(providerName)
+    if (window.$toast) {
+      window.$toast.show(`${providerName} fix completed successfully`, 'success')
+    }
+    // Refresh providers to see updated health
+    await loadProviders()
+    // Close modal if open
+    if (showFixGuideModal.value && currentProvider.value?.name === providerName) {
+      showFixGuideModal.value = false
+    }
+  } catch (e) {
+    console.error(`Failed to fix ${providerName}`, e)
+    const errorMsg = e.response?.data?.message || e.message || `Failed to fix ${providerName}`
+    if (window.$toast) {
+      window.$toast.show(errorMsg, 'error')
+    }
+  } finally {
+    fixingProvider.value = null
+  }
+}
+
+const copyToClipboard = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    if (window.$toast) {
+      window.$toast.show('Copied to clipboard', 'success')
+    }
+  } catch (e) {
+    console.error('Failed to copy to clipboard', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to copy to clipboard', 'error')
+    }
   }
 }
 </script>
@@ -883,8 +1151,249 @@ const saveLLMSettings = async () => {
   background: #e5e5e5;
 }
 
+.provider-error {
+  border-left: 4px solid #ff6b6b;
+  background: #fff5f5;
+}
+
+.provider-error-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: #fff3cd;
+  border-radius: 4px;
+  color: #856404;
+  font-size: 0.85rem;
+}
+
+.provider-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.btn-small {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-small.btn-primary {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.btn-small.btn-primary:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+
+.btn-small.btn-secondary {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.btn-small.btn-secondary:hover:not(:disabled) {
+  background: #e5e5e5;
+}
+
+.btn-small:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.fix-guide-content {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 1rem 0;
+}
+
+.fix-guide-description {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.fix-guide-steps {
+  margin-bottom: 1.5rem;
+}
+
+.fix-guide-steps h4 {
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.steps-list {
+  list-style: none;
+  padding: 0;
+  counter-reset: step-counter;
+}
+
+.step-item {
+  counter-increment: step-counter;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border-left: 4px solid var(--primary);
+}
+
+.step-header {
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.step-description {
+  margin-bottom: 0.5rem;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.step-action {
+  margin-bottom: 0.5rem;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.step-command {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: #2d2d2d;
+  border-radius: 4px;
+  color: #f8f8f2;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+}
+
+.step-command code {
+  flex: 1;
+  color: #f8f8f2;
+  background: transparent;
+  padding: 0;
+}
+
+.btn-copy {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  background: #444;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-copy:hover {
+  background: #555;
+}
+
+.fix-guide-download,
+.fix-guide-verify {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #e7f3ff;
+  border-radius: 6px;
+}
+
+.fix-guide-download h4,
+.fix-guide-verify h4 {
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.fix-guide-download a {
+  color: var(--primary);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.fix-guide-download a:hover {
+  text-decoration: underline;
+}
+
+.fix-guide-verify {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.fix-guide-verify code {
+  flex: 1;
+  padding: 0.5rem;
+  background: #2d2d2d;
+  color: #f8f8f2;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+}
+
+.modal-footer-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
 .form-actions button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.ocr-settings-section {
+  margin-bottom: 3rem;
+  padding: 1.5rem;
+  background: var(--bg-light);
+  border-radius: 8px;
+  border: 1px solid #eee;
+}
+
+.ocr-settings-section h3 {
+  margin: 0 0 1.5rem 0;
+  color: var(--primary);
+}
+
+.language-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.language-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.language-checkbox:hover {
+  border-color: var(--primary);
+  background: #f9f9f9;
+}
+
+.language-checkbox input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
+.language-checkbox input[type="checkbox"]:checked + span {
+  font-weight: 600;
+  color: var(--primary);
 }
 </style>

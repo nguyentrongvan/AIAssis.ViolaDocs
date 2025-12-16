@@ -152,7 +152,11 @@ export const aiAPI = {
   classify: (data) => api.post('/ai/classify', data),
   qa: (data) => api.post('/ai/qa', data),
   listJobs: (params) => api.get('/ai/jobs', { params }),
-  jobStatus: (id) => api.get(`/ai/jobs/${id}`)
+  getJob: (id) => api.get(`/ai/jobs/${id}`),
+  cancelJob: (id) => api.post(`/ai/jobs/${id}/cancel`),
+  reprocessJob: (id, options) => api.post(`/ai/jobs/${id}/reprocess`, options || {}),
+  batchCancel: (data) => api.post('/ai/jobs/batch-cancel', data),
+  batchReprocess: (data) => api.post('/ai/jobs/batch-reprocess', data)
 }
 
 export const devicesAPI = {
@@ -174,7 +178,8 @@ export const settingsAPI = {
   },
   providers: {
     get: () => api.get('/settings/providers'),
-    update: (data) => api.post('/settings/providers', data)
+    update: (data) => api.post('/settings/providers', data),
+    fix: (providerName) => api.post(`/settings/providers/${providerName}/fix`)
   },
   chatbot: {
     list: () => api.get('/settings/chatbot'),
@@ -183,6 +188,10 @@ export const settingsAPI = {
   llm: {
     get: () => api.get('/settings/llm'),
     update: (data) => api.post('/settings/llm', data)
+  },
+  ocr: {
+    get: () => api.get('/settings/ocr'),
+    update: (data) => api.post('/settings/ocr', data)
   }
 }
 
