@@ -9,68 +9,72 @@
         <div class="logo-tagline">AI-Powered Document Intelligence</div>
       </div>
       <nav>
-        <router-link to="/" class="nav-item">
+        <router-link to="/" :class="['nav-item', { 'router-link-active': isActiveRoute('/') }]" active-class="" exact-active-class="">
           <Library class="nav-icon" />
           <span>Library</span>
         </router-link>
-        <router-link to="/upload" class="nav-item">
+        <router-link to="/documents" :class="['nav-item', { 'router-link-active': isActiveRoute('/documents') }]" active-class="" exact-active-class="">
+          <FileText class="nav-icon" />
+          <span>Documents</span>
+        </router-link>
+        <router-link to="/upload" :class="['nav-item', { 'router-link-active': isActiveRoute('/upload') }]" active-class="" exact-active-class="">
           <Upload class="nav-icon" />
           <span>Upload</span>
         </router-link>
-        <router-link to="/scan" class="nav-item">
+        <router-link to="/scan" :class="['nav-item', { 'router-link-active': isActiveRoute('/scan') }]" active-class="" exact-active-class="">
           <Scan class="nav-icon" />
           <span>Scan Inbox</span>
         </router-link>
-        <router-link to="/folders" class="nav-item">
+        <router-link to="/folders" :class="['nav-item', { 'router-link-active': isActiveRoute('/folders') }]" active-class="" exact-active-class="">
           <Folder class="nav-icon" />
           <span>Folders</span>
         </router-link>
-        <router-link to="/search" class="nav-item">
+        <router-link to="/search" :class="['nav-item', { 'router-link-active': isActiveRoute('/search') }]" active-class="" exact-active-class="">
           <Search class="nav-icon" />
           <span>Search</span>
         </router-link>
-        <router-link to="/tasks" class="nav-item">
+        <router-link to="/tasks" :class="['nav-item', { 'router-link-active': isActiveRoute('/tasks') }]" active-class="" exact-active-class="">
           <CheckSquare class="nav-icon" />
           <span>Tasks</span>
         </router-link>
-        <router-link to="/chatbot" class="nav-item">
+        <router-link to="/chatbot" :class="['nav-item', { 'router-link-active': isActiveRoute('/chatbot') }]" active-class="" exact-active-class="">
           <MessageSquare class="nav-icon" />
           <span>Chatbot</span>
         </router-link>
         <template v-if="authStore.isAdmin || authStore.isStaff">
           <div class="nav-divider">Admin</div>
-          <router-link to="/admin/users" class="nav-item">
+          <router-link to="/admin/users" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/users') }]" active-class="" exact-active-class="">
             <Users class="nav-icon" />
             <span>Users</span>
           </router-link>
-          <router-link to="/admin/devices" class="nav-item">
+          <router-link to="/admin/devices" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/devices') }]" active-class="" exact-active-class="">
             <Printer class="nav-icon" />
             <span>Devices</span>
           </router-link>
-          <router-link to="/admin/groups" class="nav-item">
+          <router-link to="/admin/groups" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/groups') }]" active-class="" exact-active-class="">
             <Folder class="nav-icon" />
             <span>Groups</span>
           </router-link>
-          <router-link to="/admin/settings" class="nav-item">
+          <router-link to="/admin/settings" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/settings') }]" active-class="" exact-active-class="">
             <Settings class="nav-icon" />
             <span>Settings</span>
           </router-link>
-          <router-link to="/admin/reports" class="nav-item">
+          <router-link to="/admin/reports" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/reports') }]" active-class="" exact-active-class="">
             <BarChart3 class="nav-icon" />
             <span>Reports</span>
           </router-link>
-          <router-link to="/admin/roles" class="nav-item">
+          <router-link to="/admin/roles" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/roles') }]" active-class="" exact-active-class="">
             <Shield class="nav-icon" />
             <span>Roles</span>
           </router-link>
-          <router-link to="/admin/ai-jobs" class="nav-item">
+          <router-link to="/admin/ai-jobs" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/ai-jobs') }]" active-class="" exact-active-class="">
             <Activity class="nav-icon" />
             <span>AI Jobs</span>
           </router-link>
         </template>
         <template v-if="authStore.isMaintainer">
           <div class="nav-divider">Maintainer</div>
-          <router-link to="/admin/system-config" class="nav-item">
+          <router-link to="/admin/system-config" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/system-config') }]" active-class="" exact-active-class="">
             <Settings class="nav-icon" />
             <span>System Config</span>
           </router-link>
@@ -104,8 +108,8 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 import {
   Library,
@@ -122,11 +126,30 @@ import {
   User,
   LogOut,
   Shield,
-  Activity
+  Activity,
+  FileText
 } from 'lucide-vue-next'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
+
+const isActiveRoute = (path) => {
+  const currentPath = route.path
+  
+  // Special handling for root path - only match exact "/" or empty
+  if (path === '/') {
+    return currentPath === '/' || currentPath === ''
+  }
+  
+  // If we're on root path, don't match any other paths
+  if (currentPath === '/' || currentPath === '') {
+    return false
+  }
+  
+  // For other paths, match exact or sub-paths (e.g., /documents matches /documents/123)
+  return currentPath === path || currentPath.startsWith(path + '/')
+}
 
 onMounted(async () => {
   // Ensure user data is loaded if we have a token

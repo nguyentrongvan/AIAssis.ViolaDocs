@@ -88,6 +88,12 @@ const statCards = computed(() => [
 
 const actions = [
   {
+    path: '/documents',
+    title: 'Documents',
+    description: 'View all your documents',
+    icon: FileText
+  },
+  {
     path: '/upload',
     title: 'Upload Documents',
     description: 'Add new documents to your library',

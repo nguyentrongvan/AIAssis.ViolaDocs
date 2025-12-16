@@ -37,8 +37,20 @@
         </div>
         <div class="preview-area">
           <iframe v-if="previewUrl && !showOcrText" :src="previewUrl" class="preview-frame"></iframe>
-          <div v-else-if="showOcrText && ocrText" class="ocr-text-view">
-            <pre>{{ ocrText }}</pre>
+          <div v-else-if="showOcrText" class="ocr-text-view">
+            <div v-if="ocrText" class="ocr-text-content">
+              <div class="ocr-text-header">
+                <span>OCR Text</span>
+                <button @click="copyOcrText" class="btn-small">
+                  <Copy :size="14" />
+                  Copy
+                </button>
+              </div>
+              <pre class="ocr-text-pre">{{ ocrText }}</pre>
+            </div>
+            <div v-else class="ocr-text-empty">
+              <p>OCR text not available for this version</p>
+            </div>
           </div>
           <div v-else class="preview-placeholder">Preview not available</div>
         </div>
@@ -343,7 +355,8 @@ import {
   FileText,
   Share2,
   Clock,
-  MessageSquare
+  MessageSquare,
+  Copy
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -427,9 +440,11 @@ const loadDocument = async (docId) => {
       await loadVersionPreview()
     }
 
-    // Load preview URL
-    if (document.value.renditions?.preview) {
-      previewUrl.value = document.value.renditions.preview
+    // Load preview URL from document or latest version
+    if (document.value.preview_url) {
+      previewUrl.value = document.value.preview_url
+    } else if (versions.value.length > 0 && versions.value[0].renditions?.preview) {
+      previewUrl.value = versions.value[0].renditions.preview
     }
 
     // Initialize metadata form
@@ -455,18 +470,45 @@ const loadDocument = async (docId) => {
 const loadVersionPreview = async () => {
   if (!selectedVersion.value) return
   const version = versions.value.find(v => v.id === selectedVersion.value)
+  if (!version) return
+  
+  // Load preview URL
   if (version?.renditions?.preview) {
     previewUrl.value = version.renditions.preview
+  } else {
+    previewUrl.value = ''
   }
+  
   // Load OCR text if available
-  if (version?.text_uri) {
+  if (version?.text_uri || version?.ocr_uri) {
     try {
-      const res = await documentsAPI.rendition(document.value.id, 'text')
+      const res = await documentsAPI.rendition(document.value.id, 'text', { version_id: version.id })
       if (res.is_success && res.data) {
-        ocrText.value = res.data
+        // API now returns content directly in res.data.content
+        ocrText.value = res.data.content || res.data || ''
+      } else {
+        ocrText.value = ''
       }
     } catch (e) {
       console.error('Failed to load OCR text', e)
+      ocrText.value = ''
+    }
+  } else {
+    ocrText.value = ''
+  }
+}
+
+const copyOcrText = async () => {
+  if (!ocrText.value) return
+  try {
+    await navigator.clipboard.writeText(ocrText.value)
+    if (window.$toast) {
+      window.$toast.show('OCR text copied to clipboard', 'success')
+    }
+  } catch (e) {
+    console.error('Failed to copy text', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to copy text', 'error')
     }
   }
 }
@@ -755,13 +797,54 @@ const formatSize = (bytes) => {
 }
 
 .ocr-text-view {
+  padding: 0;
+  background: var(--bg-white);
+  border-radius: 6px;
+  max-height: 600px;
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  overflow-y: auto;
-  padding: 1rem;
-  background: #f8f9fa;
+}
+
+.ocr-text-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ocr-text-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-light);
+  border-radius: 6px 6px 0 0;
+}
+
+.ocr-text-header span {
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.ocr-text-pre {
+  flex: 1;
+  margin: 0;
+  padding: var(--space-lg);
+  white-space: pre-wrap;
+  word-wrap: break-word;
   font-family: 'Courier New', monospace;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   line-height: 1.6;
+  overflow-y: auto;
+  background: var(--bg-white);
+  color: var(--text-dark);
+}
+
+.ocr-text-empty {
+  padding: var(--space-3xl);
+  text-align: center;
+  color: var(--text-medium);
 }
 
 .preview-placeholder {
@@ -1135,22 +1218,72 @@ const formatSize = (bytes) => {
   padding: 3rem;
 }
 
+.btn-small {
+  background: var(--bg-white);
+  border: 1.5px solid #e5e7eb;
+  color: var(--text-dark);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-small:hover {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-small:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-small.btn-active {
+  background: var(--gradient-primary);
+  color: white;
+  border-color: transparent;
+  box-shadow: var(--shadow-md), var(--shadow-glow);
+}
+
+.btn-small.btn-active:hover {
+  background: var(--gradient-primary);
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+
 .btn-link-small {
-  background: none;
+  background: transparent;
   border: none;
   cursor: pointer;
-  color: #666;
-  padding: 0.25rem;
-  display: flex;
+  color: var(--primary);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: inline-flex;
   align-items: center;
+  gap: var(--space-xs);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-base);
+  text-decoration: none;
 }
 
 .btn-link-small:hover {
-  color: #ef4444;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  transform: translateY(-1px);
 }
 
-.btn-active {
-  background: var(--primary);
-  color: white;
+.btn-link-small:active {
+  transform: translateY(0);
 }
 </style>

@@ -47,6 +47,10 @@ export const useDocumentsStore = defineStore('documents', {
         if (res.is_success) {
           this.currentDocument = res.data
           this.versions = res.data.versions || []
+          // Store preview URL if available
+          if (res.data.preview_url) {
+            this.currentDocument.preview_url = res.data.preview_url
+          }
           return res.data
         }
       } catch (error) {

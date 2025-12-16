@@ -122,20 +122,52 @@ async def list_documents(
     total_result = await session.execute(count_query)
     total = total_result.scalar() or 0
     
-    # Get paginated results
-    query = base_query.offset(skip).limit(limit)
+    # Get paginated results with versions and tags for thumbnails
+    # Note: Document.tags relationship needs to be defined in the model
+    query = base_query.options(selectinload(Document.versions)).offset(skip).limit(limit)
     result = await session.execute(query)
     documents = result.scalars().all()
     
-    return success_response({
-        "items": [{
+    from ..services.storage import generate_presigned_download_url
+    
+    items = []
+    for doc in documents:
+        item = {
             "id": doc.id,
             "title": doc.title,
             "mime": doc.mime,
             "size": doc.size,
             "status": doc.status,
-            "created_at": doc.created_at.isoformat()
-        } for doc in documents],
+            "created_at": doc.created_at.isoformat(),
+            "document_type": doc.mime.split('/')[0] if '/' in doc.mime else doc.mime,  # e.g., "application" -> "PDF", "image" -> "Image"
+            "file_extension": doc.mime.split('/')[-1].split('+')[0] if '/' in doc.mime else ""  # e.g., "pdf", "png" (handle vnd.openxmlformats...)
+        }
+        
+        # Get tags from DocumentTag join
+        tags_result = await session.execute(
+            select(Tag.name)
+            .join(DocumentTag, Tag.id == DocumentTag.tag_id)
+            .where(DocumentTag.document_id == doc.id)
+        )
+        tags = tags_result.scalars().all()
+        item["tags"] = list(tags) if tags else []
+        
+        # Get thumbnail from latest version
+        if doc.versions:
+            latest_version = max(doc.versions, key=lambda v: v.version_no)
+            if latest_version.thumbnail_uri:
+                thumb_uri = latest_version.thumbnail_uri
+                if thumb_uri.startswith(f"minio://{settings.minio_bucket}/"):
+                    thumb_uri = thumb_uri.replace(f"minio://{settings.minio_bucket}/", "")
+                try:
+                    item["thumbnail_url"] = generate_presigned_download_url(thumb_uri, expires=timedelta(hours=1))
+                except Exception:
+                    pass  # Skip if thumbnail generation fails
+        
+        items.append(item)
+    
+    return success_response({
+        "items": items,
         "total": total
     })
 
@@ -159,13 +191,44 @@ async def get_document(
     if doc.owner_id != current_user.id and current_user.role not in ["admin", "staff"]:
         return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
     
-    versions = [{
-        "id": v.id,
-        "version_no": v.version_no,
-        "created_at": v.created_at.isoformat(),
-        "created_by": v.created_by,
-        "status": v.status
-    } for v in doc.versions]
+    from ..services.storage import generate_presigned_download_url
+    
+    # Get latest version for preview URL
+    latest_version = max(doc.versions, key=lambda v: v.version_no) if doc.versions else None
+    preview_url = None
+    if latest_version and latest_version.blob_uri:
+        blob_uri = latest_version.blob_uri
+        if blob_uri.startswith(f"minio://{settings.minio_bucket}/"):
+            blob_uri = blob_uri.replace(f"minio://{settings.minio_bucket}/", "")
+        preview_url = generate_presigned_download_url(blob_uri, expires=timedelta(hours=1))
+    
+    versions = []
+    for v in doc.versions:
+        version_data = {
+            "id": v.id,
+            "version_no": v.version_no,
+            "created_at": v.created_at.isoformat(),
+            "created_by": v.created_by,
+            "status": v.status,
+            "text_uri": v.text_uri,
+            "ocr_uri": v.ocr_uri,
+            "thumbnail_uri": v.thumbnail_uri
+        }
+        # Add rendition URLs if available
+        renditions = {}
+        if v.thumbnail_uri:
+            thumb_uri = v.thumbnail_uri
+            if thumb_uri.startswith(f"minio://{settings.minio_bucket}/"):
+                thumb_uri = thumb_uri.replace(f"minio://{settings.minio_bucket}/", "")
+            renditions["thumbnail"] = generate_presigned_download_url(thumb_uri, expires=timedelta(hours=1))
+        if v.blob_uri:
+            blob_uri = v.blob_uri
+            if blob_uri.startswith(f"minio://{settings.minio_bucket}/"):
+                blob_uri = blob_uri.replace(f"minio://{settings.minio_bucket}/", "")
+            renditions["preview"] = generate_presigned_download_url(blob_uri, expires=timedelta(hours=1))
+        if renditions:
+            version_data["renditions"] = renditions
+        versions.append(version_data)
     
     return success_response({
         "id": doc.id,
@@ -175,6 +238,7 @@ async def get_document(
         "status": doc.status,
         "owner_id": doc.owner_id,
         "created_at": doc.created_at.isoformat(),
+        "preview_url": preview_url,
         "versions": versions
     })
 
@@ -313,13 +377,37 @@ async def list_versions(
     )
     versions = versions_result.scalars().all()
     
-    return success_response([{
-        "id": v.id,
-        "version_no": v.version_no,
-        "created_at": v.created_at.isoformat(),
-        "created_by": v.created_by,
-        "status": v.status
-    } for v in versions])
+    from ..services.storage import generate_presigned_download_url
+    
+    version_list = []
+    for v in versions:
+        version_data = {
+            "id": v.id,
+            "version_no": v.version_no,
+            "created_at": v.created_at.isoformat(),
+            "created_by": v.created_by,
+            "status": v.status,
+            "text_uri": v.text_uri,
+            "ocr_uri": v.ocr_uri,
+            "thumbnail_uri": v.thumbnail_uri
+        }
+        # Add rendition URLs if available
+        renditions = {}
+        if v.thumbnail_uri:
+            thumb_uri = v.thumbnail_uri
+            if thumb_uri.startswith(f"minio://{settings.minio_bucket}/"):
+                thumb_uri = thumb_uri.replace(f"minio://{settings.minio_bucket}/", "")
+            renditions["thumbnail"] = generate_presigned_download_url(thumb_uri, expires=timedelta(hours=1))
+        if v.blob_uri:
+            blob_uri = v.blob_uri
+            if blob_uri.startswith(f"minio://{settings.minio_bucket}/"):
+                blob_uri = blob_uri.replace(f"minio://{settings.minio_bucket}/", "")
+            renditions["preview"] = generate_presigned_download_url(blob_uri, expires=timedelta(hours=1))
+        if renditions:
+            version_data["renditions"] = renditions
+        version_list.append(version_data)
+    
+    return success_response(version_list)
 
 
 @router.get("/{doc_id}/versions/{v1_id}/diff/{v2_id}")
@@ -502,6 +590,7 @@ async def share_document(
 async def get_rendition(
     doc_id: int,
     rendition_type: str,
+    version_id: Optional[int] = Query(None, description="Specific version ID (defaults to latest)"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
@@ -518,14 +607,21 @@ async def get_rendition(
     if doc.owner_id != current_user.id and current_user.role not in ["admin", "staff"]:
         return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
     
-    # Get latest version
-    version_result = await session.execute(
-        select(DocumentVersion)
-        .where(DocumentVersion.document_id == doc_id)
-        .order_by(DocumentVersion.version_no.desc())
-        .limit(1)
-    )
-    version = version_result.scalar_one_or_none()
+    # Get version (specific or latest)
+    if version_id:
+        version_result = await session.execute(
+            select(DocumentVersion)
+            .where(and_(DocumentVersion.document_id == doc_id, DocumentVersion.id == version_id))
+        )
+        version = version_result.scalar_one_or_none()
+    else:
+        version_result = await session.execute(
+            select(DocumentVersion)
+            .where(DocumentVersion.document_id == doc_id)
+            .order_by(DocumentVersion.version_no.desc())
+            .limit(1)
+        )
+        version = version_result.scalar_one_or_none()
     
     if not version:
         return error_response("No version found", status_code=status.HTTP_404_NOT_FOUND)
@@ -533,22 +629,41 @@ async def get_rendition(
     # Get rendition URI based on type
     if rendition_type == "thumbnail":
         uri = version.thumbnail_uri
+        if not uri:
+            return error_response(f"{rendition_type} not available", status_code=status.HTTP_404_NOT_FOUND)
+        # Generate presigned URL for thumbnail
+        download_url = generate_presigned_download_url(uri, expires=timedelta(hours=1))
+        return success_response({
+            "rendition_type": rendition_type,
+            "url": download_url,
+            "expires_in": 3600
+        })
     elif rendition_type == "text" or rendition_type == "ocr":
         uri = version.text_uri or version.ocr_uri
+        if not uri:
+            return error_response(f"{rendition_type} not available", status_code=status.HTTP_404_NOT_FOUND)
+        
+        # Return text content directly instead of presigned URL
+        try:
+            from ..services.storage import get_minio_client
+            minio_client = get_minio_client()
+            text_object_name = uri
+            if text_object_name.startswith(f"minio://{settings.minio_bucket}/"):
+                text_object_name = text_object_name.replace(f"minio://{settings.minio_bucket}/", "")
+            
+            file_data = minio_client.get_object(settings.minio_bucket, text_object_name)
+            text_content = file_data.read().decode('utf-8')
+            file_data.close()
+            file_data.release_conn()
+            
+            return success_response({
+                "rendition_type": rendition_type,
+                "content": text_content
+            })
+        except Exception as e:
+            return error_response(f"Failed to read text: {e}", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
     else:
         return error_response("Invalid rendition type", status_code=status.HTTP_400_BAD_REQUEST)
-    
-    if not uri:
-        return error_response(f"{rendition_type} not available", status_code=status.HTTP_404_NOT_FOUND)
-    
-    # Generate presigned URL
-    download_url = generate_presigned_download_url(uri, expires=timedelta(hours=1))
-    
-    return success_response({
-        "rendition_type": rendition_type,
-        "url": download_url,
-        "expires_in": 3600
-    })
 
 
 class CommentCreate(BaseModel):
