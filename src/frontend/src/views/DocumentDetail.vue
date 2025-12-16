@@ -2,9 +2,21 @@
   <div v-if="loading" class="loading">Loading...</div>
   <div v-else-if="document" class="document-detail">
     <div class="page-header">
-      <h1>{{ document?.title || 'Document' }}</h1>
-      <StatusBadge :status="document.status" />
+      <div>
+        <h1>{{ document?.title || 'Document' }}</h1>
+        <StatusBadge :status="document.status" />
+      </div>
+      <div class="header-actions">
+        <button
+          @click="confirmDelete"
+          class="btn-danger"
+        >
+          <Trash2 :size="16" />
+          Delete
+        </button>
+      </div>
     </div>
+
 
     <div class="detail-tabs">
       <button
@@ -332,6 +344,22 @@
       :v2="compareV2"
       @close="showCompareModal = false"
     />
+
+    <!-- Delete Confirmation Modal -->
+    <Modal
+      :show="showDeleteModal"
+      title="Delete Document"
+      @update:show="showDeleteModal = $event"
+    >
+      <p v-if="document">
+        Are you sure you want to delete "{{ document.title }}"? 
+        It will be permanently deleted after {{ purgeGracePeriodDays }} day(s).
+      </p>
+      <template #footer>
+        <button @click="showDeleteModal = false" class="btn-secondary">Cancel</button>
+        <button @click="deleteDocument" class="btn-danger">Delete</button>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -344,7 +372,7 @@ import { useFoldersStore } from '../store/folders'
 import { useSettingsStore } from '../store/settings'
 import { useRolesStore } from '../store/roles'
 import { documentsAPI, foldersAPI, settingsAPI, rolesAPI } from '../services/api'
-import { StatusBadge, VersionCompare } from '../components'
+import { StatusBadge, VersionCompare, Modal } from '../components'
 import {
   User,
   Trash2,
@@ -356,7 +384,8 @@ import {
   Share2,
   Clock,
   MessageSquare,
-  Copy
+  Copy,
+  AlertTriangle
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -384,6 +413,8 @@ const selectedVersion = ref(null)
 const showCompareModal = ref(false)
 const compareV1 = ref(null)
 const compareV2 = ref(null)
+const showDeleteModal = ref(false)
+const purgeGracePeriodDays = ref(1)
 
 const tabs = [
   { id: 'preview', label: 'Preview', icon: FileText },
@@ -459,8 +490,20 @@ const loadDocument = async (docId) => {
     await loadComments(docId)
   } catch (e) {
     console.error('Failed to load document', e)
-    if (window.$toast) {
-      window.$toast.show('Failed to load document', 'error')
+    // Check if document was not found (404) - likely deleted
+    const statusCode = e?.response?.status || e?.status || (e?.message?.includes('404') ? 404 : null)
+    if (statusCode === 404) {
+      if (window.$toast) {
+        window.$toast.show('Document not found. It may have been deleted. Redirecting to Recycle Bin...', 'error')
+      }
+      // Redirect to Recycle Bin after a short delay
+      setTimeout(() => {
+        router.push('/recycle-bin')
+      }, 2000)
+    } else {
+      if (window.$toast) {
+        window.$toast.show('Failed to load document', 'error')
+      }
     }
   } finally {
     loading.value = false
@@ -710,6 +753,47 @@ const formatSize = (bytes) => {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
   return (bytes / 1024 / 1024).toFixed(1) + ' MB'
 }
+
+const confirmDelete = async () => {
+  // Load purge grace period
+  try {
+    const res = await settingsAPI.purgeGracePeriod.get()
+    if (res.is_success && res.data) {
+      purgeGracePeriodDays.value = res.data.days || 1
+    }
+  } catch (e) {
+    console.error('Failed to load purge grace period', e)
+  }
+  
+  showDeleteModal.value = true
+}
+
+const deleteDocument = async () => {
+  if (!document.value) return
+  
+  try {
+    const res = await documentsAPI.delete(document.value.id)
+    if (res.is_success) {
+      if (window.$toast) {
+        window.$toast.show('Document deleted successfully. Redirecting to Recycle Bin...', 'success')
+      }
+      showDeleteModal.value = false
+      // Redirect to Recycle Bin after deletion
+      setTimeout(() => {
+        router.push('/recycle-bin')
+      }, 1500)
+    } else {
+      if (window.$toast) {
+        window.$toast.show(res.message || 'Failed to delete document', 'error')
+      }
+    }
+  } catch (e) {
+    console.error('Failed to delete document', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to delete document', 'error')
+    }
+  }
+}
 </script>
 
 <style scoped>
@@ -723,6 +807,41 @@ const formatSize = (bytes) => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
+}
+
+.deleted-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-xl);
+  color: #856404;
+}
+
+.deleted-banner svg {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.deleted-banner-content {
+  flex: 1;
+}
+
+.deleted-banner-content strong {
+  display: block;
+  font-size: 1rem;
+  margin-bottom: var(--space-xs);
+}
+
+.deleted-banner-details {
+  font-size: 0.875rem;
+  color: #856404;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
 }
 
 .detail-tabs {

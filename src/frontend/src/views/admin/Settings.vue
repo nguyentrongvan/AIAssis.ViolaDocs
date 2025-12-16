@@ -16,6 +16,35 @@
     <div class="settings-content">
       <!-- Retention Policies Tab -->
       <div v-if="activeTab === 'retention'" class="tab-content">
+        <!-- Document Deletion Settings Section -->
+        <div class="deletion-settings-section">
+          <h2>Document Deletion Settings</h2>
+          <div class="form-section">
+            <div class="form-group">
+              <label for="purge_grace_period">Purge Grace Period (days) *</label>
+              <input
+                id="purge_grace_period"
+                v-model.number="purgeGracePeriodForm.days"
+                type="number"
+                min="0"
+                max="365"
+                placeholder="1"
+              />
+              <small>Number of days before soft-deleted documents are permanently purged. Default: 1 day. Min: 0, Max: 365.</small>
+            </div>
+            <div class="form-actions">
+              <button @click="savePurgeGracePeriod" class="btn-primary" :disabled="savingPurgeGracePeriod">
+                <Save :size="16" />
+                {{ savingPurgeGracePeriod ? 'Saving...' : 'Save Settings' }}
+              </button>
+              <button @click="loadPurgeGracePeriod" class="btn-secondary" :disabled="savingPurgeGracePeriod">
+                <RefreshCw :size="16" />
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div class="section-header">
           <h2>Retention Policies</h2>
           <button @click="showRetentionModal = true" class="btn-primary">
@@ -485,6 +514,12 @@ const ocrForm = ref({
 })
 const savingOCR = ref(false)
 
+// Purge grace period settings
+const purgeGracePeriodForm = ref({
+  days: 1
+})
+const savingPurgeGracePeriod = ref(false)
+
 // Fix guide modal
 const showFixGuideModal = ref(false)
 const currentFixGuide = ref(null)
@@ -521,6 +556,7 @@ onMounted(async () => {
   await loadGroups()
   await loadLLMSettings()
   await loadOCRSettings()
+  await loadPurgeGracePeriod()
 })
 
 const loadRetentionPolicies = async () => {
@@ -833,6 +869,53 @@ const copyToClipboard = async (text) => {
     if (window.$toast) {
       window.$toast.show('Failed to copy to clipboard', 'error')
     }
+  }
+}
+
+const loadPurgeGracePeriod = async () => {
+  try {
+    const res = await settingsAPI.purgeGracePeriod.get()
+    if (res.is_success && res.data) {
+      purgeGracePeriodForm.value = {
+        days: res.data.days || 1
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load purge grace period', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to load purge grace period settings', 'error')
+    }
+  }
+}
+
+const savePurgeGracePeriod = async () => {
+  savingPurgeGracePeriod.value = true
+  try {
+    if (purgeGracePeriodForm.value.days < 0 || purgeGracePeriodForm.value.days > 365) {
+      if (window.$toast) {
+        window.$toast.show('Purge grace period must be between 0 and 365 days', 'error')
+      }
+      return
+    }
+    
+    const res = await settingsAPI.purgeGracePeriod.update(purgeGracePeriodForm.value.days)
+    if (res.is_success) {
+      if (window.$toast) {
+        window.$toast.show('Purge grace period saved successfully', 'success')
+      }
+      await loadPurgeGracePeriod()
+    } else {
+      if (window.$toast) {
+        window.$toast.show(res.message || 'Failed to save purge grace period', 'error')
+      }
+    }
+  } catch (e) {
+    console.error('Failed to save purge grace period', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to save purge grace period', 'error')
+    }
+  } finally {
+    savingPurgeGracePeriod.value = false
   }
 }
 </script>
@@ -1394,6 +1477,19 @@ const copyToClipboard = async (text) => {
 
 .language-checkbox input[type="checkbox"]:checked + span {
   font-weight: 600;
+  color: var(--primary);
+}
+
+.deletion-settings-section {
+  margin-bottom: 3rem;
+  padding: 1.5rem;
+  background: var(--bg-light);
+  border-radius: 8px;
+  border: 1px solid #eee;
+}
+
+.deletion-settings-section h2 {
+  margin: 0 0 1.5rem 0;
   color: var(--primary);
 }
 </style>

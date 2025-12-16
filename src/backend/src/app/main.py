@@ -22,6 +22,7 @@ from .routers import (
     folders,
     groups,
     health,
+    recycle_bin,
     reports,
     roles,
     scan_jobs,
@@ -149,6 +150,7 @@ def create_app() -> FastAPI:
     app.include_router(reports.router, prefix=api_prefix)
     app.include_router(audit.router, prefix=api_prefix)
     app.include_router(documents.router, prefix=api_prefix)
+    app.include_router(recycle_bin.router, prefix=api_prefix)
     app.include_router(folders.router, prefix=api_prefix)
     app.include_router(groups.router, prefix=api_prefix)
     app.include_router(users.router, prefix=api_prefix)

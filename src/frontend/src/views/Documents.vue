@@ -190,6 +190,12 @@
                   >
                     Download
                   </button>
+                  <button
+                    @click="confirmDelete(doc)"
+                    class="btn-link-small btn-danger"
+                  >
+                    Delete
+                  </button>
                 </div>
               </td>
             </tr>
@@ -206,13 +212,29 @@
     </div>
 
     <!-- Empty State -->
-    <div v-else class="empty-state">
+    <div v-else-if="!loading && documents.length === 0" class="empty-state">
       <FileText :size="48" />
       <p>No documents found</p>
       <router-link to="/upload" class="btn-primary">
         Upload your first document
       </router-link>
     </div>
+
+    <!-- Delete Confirmation Modal -->
+    <Modal
+      :show="showDeleteModal"
+      title="Delete Document"
+      @update:show="showDeleteModal = $event"
+    >
+      <p v-if="documentToDelete">
+        Are you sure you want to delete "{{ documentToDelete.title }}"? 
+        It will be permanently deleted after {{ purgeGracePeriodDays }} day(s).
+      </p>
+      <template #footer>
+        <button @click="showDeleteModal = false" class="btn-secondary">Cancel</button>
+        <button @click="deleteDocument" class="btn-danger">Delete</button>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -221,8 +243,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDocumentsStore } from '../store/documents'
 import { useFoldersStore } from '../store/folders'
-import { documentsAPI } from '../services/api'
-import { StatusBadge, Pagination } from '../components'
+import { documentsAPI, settingsAPI } from '../services/api'
+import { StatusBadge, Pagination, Modal } from '../components'
 import {
   Upload,
   Search,
@@ -230,7 +252,8 @@ import {
   List,
   FileText,
   Folder,
-  X
+  X,
+  Trash2
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -244,6 +267,9 @@ const viewMode = ref('cards')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const showDeleteModal = ref(false)
+const documentToDelete = ref(null)
+const purgeGracePeriodDays = ref(1)
 
 const filters = ref({
   status: '',
@@ -366,6 +392,46 @@ const downloadDocument = async (docId) => {
     console.error('Failed to download document', e)
     if (window.$toast) {
       window.$toast.show('Failed to download document', 'error')
+    }
+  }
+}
+
+const confirmDelete = async (doc) => {
+  // Load purge grace period
+  try {
+    const res = await settingsAPI.purgeGracePeriod.get()
+    if (res.is_success && res.data) {
+      purgeGracePeriodDays.value = res.data.days || 1
+    }
+  } catch (e) {
+    console.error('Failed to load purge grace period', e)
+  }
+  
+  documentToDelete.value = doc
+  showDeleteModal.value = true
+}
+
+const deleteDocument = async () => {
+  if (!documentToDelete.value) return
+  
+  try {
+    const res = await documentsAPI.delete(documentToDelete.value.id)
+    if (res.is_success) {
+      if (window.$toast) {
+        window.$toast.show('Document deleted successfully', 'success')
+      }
+      showDeleteModal.value = false
+      documentToDelete.value = null
+      await loadDocuments()
+    } else {
+      if (window.$toast) {
+        window.$toast.show(res.message || 'Failed to delete document', 'error')
+      }
+    }
+  } catch (e) {
+    console.error('Failed to delete document', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to delete document', 'error')
     }
   }
 }

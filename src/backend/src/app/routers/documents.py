@@ -1,4 +1,5 @@
 import uuid
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -14,6 +15,8 @@ from ..models.documents import Document, DocumentVersion, Tag, DocumentTag, Shar
 from ..services.storage import generate_presigned_download_url
 from ..utils.response import success_response, error_response
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -99,24 +102,19 @@ async def list_documents(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    # Base query
-    base_query = select(Document).where(
-        and_(
-            Document.owner_id == current_user.id,
-            Document.deleted_at.is_(None)
-        )
-    )
+    # Base query conditions - only show active (non-deleted) documents
+    conditions = [
+        Document.owner_id == current_user.id,
+        Document.deleted_at.is_(None)  # Always filter out deleted documents
+    ]
+    
+    base_query = select(Document).where(and_(*conditions))
     
     if search:
         base_query = base_query.where(Document.title.ilike(f"%{search}%"))
     
     # Get total count
-    count_query = select(func.count(Document.id)).where(
-        and_(
-            Document.owner_id == current_user.id,
-            Document.deleted_at.is_(None)
-        )
-    )
+    count_query = select(func.count(Document.id)).where(and_(*conditions))
     if search:
         count_query = count_query.where(Document.title.ilike(f"%{search}%"))
     total_result = await session.execute(count_query)
@@ -139,6 +137,8 @@ async def list_documents(
             "size": doc.size,
             "status": doc.status,
             "created_at": doc.created_at.isoformat(),
+            "deleted_at": doc.deleted_at.isoformat() if doc.deleted_at else None,
+            "purge_at": doc.purge_at.isoformat() if doc.purge_at else None,
             "document_type": doc.mime.split('/')[0] if '/' in doc.mime else doc.mime,  # e.g., "application" -> "PDF", "image" -> "Image"
             "file_extension": doc.mime.split('/')[-1].split('+')[0] if '/' in doc.mime else ""  # e.g., "pdf", "png" (handle vnd.openxmlformats...)
         }
@@ -178,10 +178,16 @@ async def get_document(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
+    # Filter out deleted documents - they should only be accessible via Recycle Bin
     result = await session.execute(
         select(Document)
         .options(selectinload(Document.versions))
-        .where(and_(Document.id == doc_id, Document.deleted_at.is_(None)))
+        .where(
+            and_(
+                Document.id == doc_id,
+                Document.deleted_at.is_(None)  # Only show non-deleted documents
+            )
+        )
     )
     doc = result.scalar_one_or_none()
     
@@ -307,51 +313,103 @@ async def soft_delete_document(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    result = await session.execute(
-        select(Document).where(and_(Document.id == doc_id, Document.deleted_at.is_(None)))
-    )
-    doc = result.scalar_one_or_none()
+    """Soft delete a document"""
+    from ..services.deletion_service import DocumentDeletionService
     
-    if not doc:
-        return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+    try:
+        # Check permission first
+        result = await session.execute(
+            select(Document).where(and_(Document.id == doc_id, Document.deleted_at.is_(None)))
+        )
+        doc = result.scalar_one_or_none()
+        
+        if not doc:
+            return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+        
+        # Only owner or admin/staff can delete
+        if doc.owner_id != current_user.id and current_user.role not in ["admin", "staff"]:
+            return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+        
+        # Soft delete using service
+        doc = await DocumentDeletionService.soft_delete_document(doc_id, current_user.id, session)
+        
+        # Get purge grace period for response
+        grace_period_days = await DocumentDeletionService.get_purge_grace_period_days(session)
+        
+        return success_response({
+            "id": doc.id,
+            "deleted": True,
+            "deleted_at": doc.deleted_at.isoformat() if doc.deleted_at else None,
+            "purge_at": doc.purge_at.isoformat() if doc.purge_at else None,
+            "grace_period_days": grace_period_days
+        })
+    except ValueError as e:
+        return error_response(str(e), status_code=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        logger.error(f"Error deleting document {doc_id}: {e}", exc_info=True)
+        return error_response("Failed to delete document", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@router.delete("/{doc_id}/purge")
+async def purge_document(
+    doc_id: int,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Force immediate hard delete of a document (admin only)"""
+    from ..services.deletion_service import DocumentDeletionService
     
-    # Only owner or admin/staff can delete
-    if doc.owner_id != current_user.id and current_user.role not in ["admin", "staff"]:
-        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
-    
-    doc.deleted_at = datetime.utcnow()
-    doc.deleted_by = current_user.id
-    doc.purge_at = datetime.utcnow() + timedelta(days=settings.purge_grace_period_days)
-    
-    await session.commit()
-    
-    return success_response({"id": doc.id, "deleted": True})
+    try:
+        # Admin only
+        if current_user.role != "admin":
+            return error_response("Access denied. Admin only.", status_code=status.HTTP_403_FORBIDDEN)
+        
+        # Hard delete using service (force=True bypasses purge_at check)
+        await DocumentDeletionService.hard_delete_document(doc_id, current_user.id, session, force=True)
+        
+        return success_response({"id": doc_id, "purged": True})
+    except ValueError as e:
+        return error_response(str(e), status_code=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        logger.error(f"Error purging document {doc_id}: {e}", exc_info=True)
+        return error_response("Failed to purge document", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @router.post("/{doc_id}/restore")
 async def restore_document(
     doc_id: int,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    result = await session.execute(
-        select(Document).where(Document.id == doc_id)
-    )
-    doc = result.scalar_one_or_none()
+    """Restore a soft-deleted document"""
+    from ..services.deletion_service import DocumentDeletionService
     
-    if not doc:
-        return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
-    
-    if not doc.deleted_at:
-        return error_response("Document is not deleted", status_code=status.HTTP_400_BAD_REQUEST)
-    
-    doc.deleted_at = None
-    doc.deleted_by = None
-    doc.purge_at = None
-    
-    await session.commit()
-    
-    return success_response({"id": doc.id, "restored": True})
+    try:
+        # Check permission first
+        result = await session.execute(
+            select(Document).where(Document.id == doc_id)
+        )
+        doc = result.scalar_one_or_none()
+        
+        if not doc:
+            return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+        
+        if not doc.deleted_at:
+            return error_response("Document is not deleted", status_code=status.HTTP_400_BAD_REQUEST)
+        
+        # Only owner or admin/staff can restore
+        if doc.owner_id != current_user.id and current_user.role not in ["admin", "staff"]:
+            return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+        
+        # Restore using service
+        doc = await DocumentDeletionService.restore_document(doc_id, current_user.id, session)
+        
+        return success_response({"id": doc.id, "restored": True})
+    except ValueError as e:
+        return error_response(str(e), status_code=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        logger.error(f"Error restoring document {doc_id}: {e}", exc_info=True)
+        return error_response("Failed to restore document", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @router.get("/{doc_id}/versions")

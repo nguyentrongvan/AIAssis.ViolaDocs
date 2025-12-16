@@ -685,3 +685,64 @@ async def update_llm_settings(
         "updated_keys": updated_keys,
         "message": "LLM settings updated. Server restart required to take effect."
     })
+
+
+# Purge Grace Period Settings Models
+class PurgeGracePeriodUpdate(BaseModel):
+    days: int
+
+
+@router.get("/purge_grace_period")
+async def get_purge_grace_period(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get purge grace period setting (admin/staff only)."""
+    # Only admin/staff can view this setting
+    if current_user.role not in ["admin", "staff"]:
+        return error_response("Access denied. Admin/staff only.", status_code=status.HTTP_403_FORBIDDEN)
+    
+    from ..services.deletion_service import DocumentDeletionService
+    days = await DocumentDeletionService.get_purge_grace_period_days(session)
+    
+    return success_response({
+        "days": days,
+        "default": 1,
+        "min": 0,
+        "max": 365
+    })
+
+
+@router.put("/purge_grace_period")
+async def update_purge_grace_period(
+    payload: PurgeGracePeriodUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update purge grace period setting (admin/staff only)."""
+    # Only admin/staff can update this setting
+    if current_user.role not in ["admin", "staff"]:
+        return error_response("Access denied. Admin/staff only.", status_code=status.HTTP_403_FORBIDDEN)
+    
+    # Validate days (min: 0, max: 365)
+    if payload.days < 0 or payload.days > 365:
+        return error_response(
+            "Purge grace period must be between 0 and 365 days",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Update setting
+    await SettingsService.set_setting(
+        "purge_grace_period_days",
+        payload.days,
+        "deletion",
+        "Number of days before soft-deleted documents are permanently purged",
+        False,
+        current_user.id,
+        session
+    )
+    
+    return success_response({
+        "days": payload.days,
+        "message": "Purge grace period updated successfully"
+    })

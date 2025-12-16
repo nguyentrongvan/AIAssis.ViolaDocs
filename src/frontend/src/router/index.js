@@ -43,6 +43,11 @@ const routes = [
         component: () => import('../views/DocumentDetail.vue')
       },
       {
+        path: 'recycle-bin',
+        name: 'RecycleBin',
+        component: () => import('../views/RecycleBin.vue')
+      },
+      {
         path: 'tasks',
         name: 'Tasks',
         component: () => import('../views/Tasks.vue')

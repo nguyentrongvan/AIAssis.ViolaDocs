@@ -71,6 +71,7 @@ export const documentsAPI = {
   create: (data) => api.post('/documents', data),
   update: (id, data) => api.patch(`/documents/${id}`, data),
   delete: (id) => api.delete(`/documents/${id}`),
+  purge: (id) => api.delete(`/documents/${id}/purge`),
   restore: (id) => api.post(`/documents/${id}/restore`),
   share: (id, data) => api.post(`/documents/${id}/share`, data),
   versions: (id) => api.get(`/documents/${id}/versions`),
@@ -192,6 +193,10 @@ export const settingsAPI = {
   ocr: {
     get: () => api.get('/settings/ocr'),
     update: (data) => api.post('/settings/ocr', data)
+  },
+  purgeGracePeriod: {
+    get: () => api.get('/settings/purge_grace_period'),
+    update: (days) => api.put('/settings/purge_grace_period', { days })
   }
 }
 
@@ -206,6 +211,12 @@ export const reportsAPI = {
 export const auditAPI = {
   list: (params) => api.get('/audit', { params }),
   export: (params) => api.post('/audit/export', params, { responseType: 'blob' })
+}
+
+export const recycleBinAPI = {
+  list: (params) => api.get('/recycle-bin', { params }),
+  restore: (id) => api.post(`/recycle-bin/${id}/restore`),
+  deletePermanently: (id) => api.delete(`/recycle-bin/${id}/permanent`)
 }
 
 export default api

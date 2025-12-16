@@ -33,6 +33,10 @@
           <Search class="nav-icon" />
           <span>Search</span>
         </router-link>
+        <router-link to="/recycle-bin" :class="['nav-item', { 'router-link-active': isActiveRoute('/recycle-bin') }]" active-class="" exact-active-class="">
+          <Trash2 class="nav-icon" />
+          <span>Recycle Bin</span>
+        </router-link>
         <router-link to="/tasks" :class="['nav-item', { 'router-link-active': isActiveRoute('/tasks') }]" active-class="" exact-active-class="">
           <CheckSquare class="nav-icon" />
           <span>Tasks</span>
@@ -127,7 +131,8 @@ import {
   LogOut,
   Shield,
   Activity,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-vue-next'
 
 const router = useRouter()
