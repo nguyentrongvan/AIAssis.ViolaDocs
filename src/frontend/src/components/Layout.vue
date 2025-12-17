@@ -86,7 +86,7 @@
       </nav>
       <div class="user-menu">
         <div class="user-info">
-          <div class="user-avatar">
+          <div :class="['user-avatar', getUserRoleColor]">
             <User class="user-icon" />
           </div>
           <div class="user-details">
@@ -167,12 +167,29 @@ const handleLogout = () => {
   authStore.logout()
   router.push('/login')
 }
+
+const getUserRoleColor = computed(() => {
+  const role = authStore.user?.role?.toLowerCase() || 'user'
+  
+  switch (role) {
+    case 'admin':
+      return 'avatar-admin'
+    case 'staff':
+      return 'avatar-staff'
+    case 'maintainer':
+      return 'avatar-maintainer'
+    case 'user':
+    default:
+      return 'avatar-user'
+  }
+})
 </script>
 
 <style scoped>
 .layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: var(--bg-light);
   position: relative;
 }
@@ -180,13 +197,46 @@ const handleLogout = () => {
 .sidebar {
   width: 280px;
   min-width: 280px;
+  height: 100vh;
   position: relative;
   color: white;
   display: flex;
   flex-direction: column;
   padding: var(--space-lg);
   overflow-x: hidden;
+  overflow-y: auto;
   z-index: 10;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+  background: var(--gradient-primary);
+  background-attachment: local;
+}
+
+.sidebar:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: var(--radius-full);
+  transition: background 0.3s ease;
+}
+
+.sidebar:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .sidebar::before {
@@ -198,6 +248,7 @@ const handleLogout = () => {
   bottom: 0;
   background: var(--gradient-primary);
   z-index: -1;
+  pointer-events: none;
 }
 
 .sidebar-gradient {
@@ -365,12 +416,55 @@ nav {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-full);
-  background: var(--gradient-cyan-purple);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-glow-cyan);
   flex-shrink: 0;
+  transition: all var(--transition-base);
+}
+
+/* Admin - Red/Purple gradient */
+.avatar-admin {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #991b1b 100%);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+}
+
+.avatar-admin:hover {
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+  transform: scale(1.05);
+}
+
+/* Staff - Blue/Cyan gradient */
+.avatar-staff {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%);
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+}
+
+.avatar-staff:hover {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+  transform: scale(1.05);
+}
+
+/* Maintainer - Gold/Yellow gradient */
+.avatar-maintainer {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 50%, #b45309 100%);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+}
+
+.avatar-maintainer:hover {
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.6);
+  transform: scale(1.05);
+}
+
+/* User - Default Cyan/Purple gradient */
+.avatar-user {
+  background: var(--gradient-cyan-purple);
+  box-shadow: var(--shadow-glow-cyan);
+}
+
+.avatar-user:hover {
+  box-shadow: var(--shadow-glow-cyan);
+  transform: scale(1.05);
 }
 
 .user-icon {

@@ -291,24 +291,38 @@
             
             <div class="form-group">
               <label for="ollama_llm_model">LLM Model *</label>
-              <input
+              <select
                 id="ollama_llm_model"
                 v-model="llmForm.ollama_llm_model"
-                type="text"
-                placeholder="llama3.2"
-              />
-              <small>Model name for chat (e.g., llama3.2, mistral, qwen2.5)</small>
+              >
+                <option value="">-- Select LLM Model --</option>
+                <option
+                  v-for="model in availableLLMModels"
+                  :key="model.name"
+                  :value="model.name"
+                >
+                  {{ model.name }}{{ model.is_current_llm ? ' (Current)' : '' }}
+                </option>
+              </select>
+              <small>Select an available model for chat. Only downloaded models are shown.</small>
             </div>
             
             <div class="form-group">
               <label for="ollama_embedding_model">Embedding Model *</label>
-              <input
+              <select
                 id="ollama_embedding_model"
                 v-model="llmForm.ollama_embedding_model"
-                type="text"
-                placeholder="nomic-text-embedding"
-              />
-              <small>Model name for embeddings (default: nomic-text-embedding)</small>
+              >
+                <option value="">-- Select Embedding Model --</option>
+                <option
+                  v-for="model in availableEmbeddingModels"
+                  :key="model.name"
+                  :value="model.name"
+                >
+                  {{ model.name }}{{ model.is_current_embedding ? ' (Current)' : '' }}
+                </option>
+              </select>
+              <small>Select an available model for embeddings. Only downloaded models are shown.</small>
             </div>
             
             <div class="form-actions">
@@ -344,10 +358,40 @@
           <div v-else-if="loadingModels" class="loading">Loading models...</div>
           
           <div v-else>
+            <!-- Search Box -->
+            <div class="models-search-container">
+              <div class="search-input-wrapper">
+                <Search :size="18" class="search-icon" />
+                <input
+                  v-model="modelSearchQuery"
+                  type="text"
+                  placeholder="Search models by name, description, or tags..."
+                  class="models-search-input"
+                />
+                <button
+                  v-if="modelSearchQuery"
+                  @click="clearSearch"
+                  class="search-clear-btn"
+                  type="button"
+                >
+                  <X :size="16" />
+                </button>
+              </div>
+              <div v-if="modelSearchQuery" class="search-results-info">
+                Found {{ llmModels.length + embeddingModels.length }} model(s)
+              </div>
+            </div>
+            
             <!-- LLM Models Section -->
             <div class="models-subsection">
-              <h3>LLM Models</h3>
-              <div class="models-list">
+              <div class="subsection-header" @click="toggleSection('llm')">
+                <h3>LLM Models</h3>
+                <button class="expand-toggle" type="button">
+                  <ChevronDown v-if="expandedSections.llm" :size="20" />
+                  <ChevronUp v-else :size="20" />
+                </button>
+              </div>
+              <div v-show="expandedSections.llm" class="models-list">
                 <div
                   v-for="model in llmModels"
                   :key="model.name"
@@ -455,8 +499,14 @@
 
             <!-- Embedding Models Section -->
             <div class="models-subsection">
-              <h3>Embedding Models</h3>
-              <div class="models-list">
+              <div class="subsection-header" @click="toggleSection('embedding')">
+                <h3>Embedding Models</h3>
+                <button class="expand-toggle" type="button">
+                  <ChevronDown v-if="expandedSections.embedding" :size="20" />
+                  <ChevronUp v-else :size="20" />
+                </button>
+              </div>
+              <div v-show="expandedSections.embedding" class="models-list">
                 <div
                   v-for="model in embeddingModels"
                   :key="model.name"
@@ -727,7 +777,7 @@ import { useSettingsStore } from '../../store/settings'
 import { useGroupsStore } from '../../store/groups'
 import { settingsAPI } from '../../services/api'
 import { Modal, StatusBadge } from '../../components'
-import { Plus, Edit, Trash2, Activity, Save, RefreshCw, AlertTriangle, Download, TestTube } from 'lucide-vue-next'
+import { Plus, Edit, Trash2, Activity, Save, RefreshCw, AlertTriangle, Download, TestTube, ChevronDown, ChevronUp, Search, X } from 'lucide-vue-next'
 
 const settingsStore = useSettingsStore()
 const groupsStore = useGroupsStore()
@@ -746,12 +796,27 @@ const llmModels = computed(() => {
   return ollamaModels.value.filter(model => {
     // Filter for LLM models (not embedding models)
     // Use type field if available, otherwise fallback to name-based filtering
+    let isLLM = false
     if (model.type !== undefined) {
-      return model.type === 'llm'
+      isLLM = model.type === 'llm'
+    } else {
+      // Fallback: Filter by name (for backward compatibility)
+      const name = model.name.toLowerCase()
+      isLLM = !name.includes('embed') && !name.includes('nomic-embed')
     }
-    // Fallback: Filter by name (for backward compatibility)
-    const name = model.name.toLowerCase()
-    return !name.includes('embed') && !name.includes('nomic-embed')
+    
+    if (!isLLM) return false
+    
+    // Apply search filter
+    if (modelSearchQuery.value) {
+      const query = modelSearchQuery.value.toLowerCase()
+      const name = model.name.toLowerCase()
+      const description = (model.description || '').toLowerCase()
+      const tags = (model.tags || []).join(' ').toLowerCase()
+      return name.includes(query) || description.includes(query) || tags.includes(query)
+    }
+    
+    return true
   })
 })
 
@@ -759,13 +824,37 @@ const embeddingModels = computed(() => {
   return ollamaModels.value.filter(model => {
     // Filter for embedding models
     // Use type field if available, otherwise fallback to name-based filtering
+    let isEmbedding = false
     if (model.type !== undefined) {
-      return model.type === 'embedding'
+      isEmbedding = model.type === 'embedding'
+    } else {
+      // Fallback: Filter by name (for backward compatibility)
+      const name = model.name.toLowerCase()
+      isEmbedding = name.includes('embed') || name.includes('nomic-embed')
     }
-    // Fallback: Filter by name (for backward compatibility)
-    const name = model.name.toLowerCase()
-    return name.includes('embed') || name.includes('nomic-embed')
+    
+    if (!isEmbedding) return false
+    
+    // Apply search filter
+    if (modelSearchQuery.value) {
+      const query = modelSearchQuery.value.toLowerCase()
+      const name = model.name.toLowerCase()
+      const description = (model.description || '').toLowerCase()
+      const tags = (model.tags || []).join(' ').toLowerCase()
+      return name.includes(query) || description.includes(query) || tags.includes(query)
+    }
+    
+    return true
   })
+})
+
+// Computed properties for dropdowns - only show downloaded/available models
+const availableLLMModels = computed(() => {
+  return llmModels.value.filter(model => model.downloaded === true)
+})
+
+const availableEmbeddingModels = computed(() => {
+  return embeddingModels.value.filter(model => model.downloaded === true)
 })
 
 // Close dropdown when clicking outside
@@ -801,6 +890,20 @@ const customTestType = ref(null)
 const customTestInput = ref('')
 const testResults = ref({})
 const expandedTestResults = ref({})
+const expandedSections = ref({
+  llm: true,
+  embedding: true
+})
+
+const modelSearchQuery = ref('')
+
+const toggleSection = (section) => {
+  expandedSections.value[section] = !expandedSections.value[section]
+}
+
+const clearSearch = () => {
+  modelSearchQuery.value = ''
+}
 const ocrSettings = ref(null)
 
 const ocrForm = ref({
@@ -1033,6 +1136,8 @@ const loadLLMSettings = async () => {
         ollama_llm_model: res.data.ollama_llm_model || '',
         ollama_embedding_model: res.data.ollama_embedding_model || ''
       }
+      // Load models list for dropdowns
+      await loadOllamaModels()
     }
   } catch (e) {
     console.error('Failed to load LLM settings', e)
@@ -1553,7 +1658,29 @@ const formatDate = (dateString) => {
   width: 100%;
   padding: 0.75rem;
   border: 1px solid #ddd;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  background: var(--bg-white);
+  transition: all var(--transition-base);
+  cursor: pointer;
+}
+
+.form-group select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2.5rem;
+}
+
+.form-group select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.form-group select option {
+  padding: 0.5rem;
 }
 
 .form-group label input[type="checkbox"] {
@@ -1933,8 +2060,115 @@ const formatDate = (dateString) => {
   border: 1px solid #eee;
 }
 
+.models-search-container {
+  margin-bottom: 2rem;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  transition: all var(--transition-base);
+}
+
+.search-input-wrapper:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.search-icon {
+  color: #999;
+  margin-right: 0.75rem;
+  flex-shrink: 0;
+}
+
+.models-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 1rem;
+  color: var(--text-dark);
+  background: transparent;
+}
+
+.models-search-input::placeholder {
+  color: #999;
+}
+
+.search-clear-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #999;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-base);
+  margin-left: 0.5rem;
+  flex-shrink: 0;
+}
+
+.search-clear-btn:hover {
+  background-color: var(--bg-light);
+  color: var(--primary);
+}
+
+.search-results-info {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text-medium);
+  font-style: italic;
+}
+
 .models-subsection {
   margin-bottom: 2rem;
+}
+
+.subsection-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 0.75rem;
+  margin: -0.75rem -0.75rem 1rem -0.75rem;
+  border-radius: var(--radius-md);
+  transition: background-color var(--transition-base);
+  user-select: none;
+}
+
+.subsection-header:hover {
+  background-color: rgba(108, 92, 231, 0.05);
+}
+
+.subsection-header h3 {
+  margin: 0;
+  color: var(--primary);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.expand-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--primary);
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-base);
+}
+
+.expand-toggle:hover {
+  background-color: rgba(108, 92, 231, 0.1);
+  transform: scale(1.1);
 }
 
 .models-subsection h3 {

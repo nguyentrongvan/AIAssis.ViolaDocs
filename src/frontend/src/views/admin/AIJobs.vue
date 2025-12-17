@@ -160,8 +160,14 @@
       </div>
 
       <!-- Pagination -->
-      <div v-if="total > limit" class="pagination-container">
+      <div v-if="total > 0" class="pagination-container">
+        <div class="pagination-info">
+          <span class="pagination-text">
+            Showing {{ (currentPage - 1) * limit + 1 }} - {{ Math.min(currentPage * limit, total) }} of {{ total }} jobs
+          </span>
+        </div>
         <Pagination
+          v-if="total > limit"
           :current-page="currentPage"
           :total-items="total"
           :items-per-page="limit"
@@ -846,7 +852,21 @@ const reprocessJob = async (jobId) => {
 .pagination-container {
   margin-top: var(--space-xl);
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.pagination-info {
+  display: flex;
+  align-items: center;
   justify-content: center;
+}
+
+.pagination-text {
+  font-size: 0.9rem;
+  color: var(--text-medium);
+  font-weight: 500;
 }
 
 .job-details {
@@ -935,17 +955,18 @@ const reprocessJob = async (jobId) => {
 
 .action-buttons {
   display: flex;
-  gap: var(--space-sm);
+  gap: var(--space-md);
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .btn-action {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-md);
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
   border-radius: var(--radius-lg);
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-weight: 600;
   border: 2px solid transparent;
   cursor: pointer;

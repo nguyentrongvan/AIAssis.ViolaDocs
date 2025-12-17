@@ -1,8 +1,8 @@
 <template>
-  <div v-if="totalPages > 1" class="pagination">
+  <div v-if="totalPagesComputed > 1" class="pagination">
     <button
-      @click="goToPage(page - 1)"
-      :disabled="page === 1"
+      @click="goToPage(currentPage - 1)"
+      :disabled="currentPage === 1"
       class="pagination-btn"
     >
       <ChevronLeft :size="16" />
@@ -12,14 +12,14 @@
         v-for="p in visiblePages"
         :key="p"
         @click="goToPage(p)"
-        :class="['pagination-page', { 'pagination-page-active': p === page }]"
+        :class="['pagination-page', { 'pagination-page-active': p === currentPage }]"
       >
         {{ p }}
       </button>
     </div>
     <button
-      @click="goToPage(page + 1)"
-      :disabled="page === totalPages"
+      @click="goToPage(currentPage + 1)"
+      :disabled="currentPage === totalPagesComputed"
       class="pagination-btn"
     >
       <ChevronRight :size="16" />
@@ -34,11 +34,23 @@ import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
 const props = defineProps({
   page: {
     type: Number,
-    required: true
+    default: null
+  },
+  'current-page': {
+    type: Number,
+    default: null
   },
   totalPages: {
     type: Number,
-    required: true
+    default: null
+  },
+  'total-items': {
+    type: Number,
+    default: null
+  },
+  'items-per-page': {
+    type: Number,
+    default: 20
   },
   maxVisible: {
     type: Number,
@@ -46,13 +58,28 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:page', 'change'])
+const emit = defineEmits(['update:page', 'change', 'page-change'])
+
+// Computed properties for flexible prop usage
+const currentPage = computed(() => {
+  return props.page ?? props['current-page'] ?? 1
+})
+
+const totalPagesComputed = computed(() => {
+  if (props.totalPages !== null) {
+    return props.totalPages
+  }
+  if (props['total-items'] !== null && props['items-per-page']) {
+    return Math.ceil(props['total-items'] / props['items-per-page'])
+  }
+  return 1
+})
 
 const visiblePages = computed(() => {
   const pages = []
   const half = Math.floor(props.maxVisible / 2)
-  let start = Math.max(1, props.page - half)
-  let end = Math.min(props.totalPages, start + props.maxVisible - 1)
+  let start = Math.max(1, currentPage.value - half)
+  let end = Math.min(totalPagesComputed.value, start + props.maxVisible - 1)
   
   if (end - start < props.maxVisible - 1) {
     start = Math.max(1, end - props.maxVisible + 1)
@@ -66,9 +93,10 @@ const visiblePages = computed(() => {
 })
 
 const goToPage = (newPage) => {
-  if (newPage >= 1 && newPage <= props.totalPages && newPage !== props.page) {
+  if (newPage >= 1 && newPage <= totalPagesComputed.value && newPage !== currentPage.value) {
     emit('update:page', newPage)
     emit('change', newPage)
+    emit('page-change', newPage)
   }
 }
 </script>
