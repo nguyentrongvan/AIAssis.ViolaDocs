@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from ..db import get_session
-from ..dependencies import get_current_admin_user, get_current_user
+from ..dependencies import get_current_admin_user, get_current_user, require_permission_or_staff
 from ..models.users import User
 from ..models.retention import RetentionPolicy
 from ..services.settings_service import SettingsService

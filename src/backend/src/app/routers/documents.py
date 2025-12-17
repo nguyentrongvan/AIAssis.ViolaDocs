@@ -13,6 +13,7 @@ from ..dependencies import get_current_user, get_current_admin_user
 from ..models.users import User
 from ..models.documents import Document, DocumentVersion, Tag, DocumentTag, Share, Comment
 from ..services.storage import generate_presigned_download_url
+from ..services.permission_service import get_user_accessible_documents_query, check_document_access
 from ..utils.response import success_response, error_response
 from ..config import settings
 
@@ -85,6 +86,8 @@ class ShareRequest(BaseModel):
     target_id: Optional[int] = None
     target_user_id: Optional[int] = None  # Alias for target_id when target_type=user
     target_role: Optional[str] = None  # For role sharing
+    user_emails: Optional[list[str]] = None  # List of user emails to share with
+    role_ids: Optional[list[int]] = None  # List of role IDs to share with
     expires_at: Optional[str] = None
     permissions: Optional[list[str]] = None
 
@@ -145,19 +148,16 @@ async def list_documents(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    # Base query conditions - only show active (non-deleted) documents
-    conditions = [
-        Document.owner_id == current_user.id,
-        Document.deleted_at.is_(None)  # Always filter out deleted documents
-    ]
-    
-    base_query = select(Document).where(and_(*conditions))
+    # Use permission service to get accessible documents query (includes shared documents)
+    base_query = select(Document)
+    accessible_query = await get_user_accessible_documents_query(session, current_user, base_query)
     
     if search:
-        base_query = base_query.where(Document.title.ilike(f"%{search}%"))
+        accessible_query = accessible_query.where(Document.title.ilike(f"%{search}%"))
     
     # Get total count
-    count_query = select(func.count(Document.id)).where(and_(*conditions))
+    count_query = select(func.count(Document.id))
+    count_query = await get_user_accessible_documents_query(session, current_user, count_query)
     if search:
         count_query = count_query.where(Document.title.ilike(f"%{search}%"))
     total_result = await session.execute(count_query)
@@ -165,7 +165,7 @@ async def list_documents(
     
     # Get paginated results with versions and tags for thumbnails
     # Note: Document.tags relationship needs to be defined in the model
-    query = base_query.options(selectinload(Document.versions)).offset(skip).limit(limit)
+    query = accessible_query.options(selectinload(Document.versions)).offset(skip).limit(limit)
     result = await session.execute(query)
     documents = result.scalars().all()
     
@@ -237,8 +237,10 @@ async def get_document(
     if not doc:
         return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
     
-    if doc.owner_id != current_user.id and current_user.role not in ["admin", "staff"]:
-        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    # Check access using permission service
+    has_access, _, reason = await check_document_access(session, current_user, doc, "read")
+    if not has_access:
+        return error_response(reason or "Access denied", status_code=status.HTTP_403_FORBIDDEN)
     
     from ..services.storage import generate_presigned_download_url
     
@@ -307,8 +309,10 @@ async def update_document(
     if not doc:
         return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
     
+    # Only owner or admin/staff can update documents
+    # (No separate "write" permission - update is owner/admin/staff only)
     if doc.owner_id != current_user.id and current_user.role not in ["admin", "staff"]:
-        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+        return error_response("Access denied: only owner or admin/staff can update", status_code=status.HTTP_403_FORBIDDEN)
     
     if request.title:
         doc.title = request.title
@@ -369,9 +373,10 @@ async def soft_delete_document(
         if not doc:
             return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
         
-        # Only owner or admin/staff can delete
+        # Only owner or admin/staff can delete documents
+        # (No separate "delete" permission - delete is owner/admin/staff only)
         if doc.owner_id != current_user.id and current_user.role not in ["admin", "staff"]:
-            return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+            return error_response("Access denied: only owner or admin/staff can delete", status_code=status.HTTP_403_FORBIDDEN)
         
         # Soft delete using service
         doc = await DocumentDeletionService.soft_delete_document(doc_id, current_user.id, session)
@@ -469,8 +474,10 @@ async def list_versions(
     if not doc:
         return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
     
-    if doc.owner_id != current_user.id and current_user.role not in ["admin", "staff"]:
-        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    # Check view access using permission service
+    has_access, _, reason = await check_document_access(session, current_user, doc, "view")
+    if not has_access:
+        return error_response(reason or "Access denied", status_code=status.HTTP_403_FORBIDDEN)
     
     versions_result = await session.execute(
         select(DocumentVersion).where(DocumentVersion.document_id == doc_id)
@@ -529,8 +536,10 @@ async def compare_versions(
     if not doc:
         return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
     
-    if doc.owner_id != current_user.id and current_user.role not in ["admin", "staff"]:
-        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    # Check view access using permission service
+    has_access, _, reason = await check_document_access(session, current_user, doc, "view")
+    if not has_access:
+        return error_response(reason or "Access denied", status_code=status.HTTP_403_FORBIDDEN)
     
     # Get versions
     v1_result = await session.execute(
@@ -589,8 +598,10 @@ async def upload_new_version(
     if not doc:
         return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
     
+    # Only owner or admin/staff can upload new versions
+    # (No separate "write" permission - upload new version is owner/admin/staff only)
     if doc.owner_id != current_user.id and current_user.role not in ["admin", "staff"]:
-        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+        return error_response("Access denied: only owner or admin/staff can upload new versions", status_code=status.HTTP_403_FORBIDDEN)
     
     # Get latest version number
     latest_version_result = await session.execute(
@@ -635,37 +646,96 @@ async def share_document(
     target_id = request.target_id
     expires_at = None
     
-    # Handle legacy fields
-    if request.target_user_id:
-        target_type = "user"
-        target_id = request.target_user_id
-    elif request.target_role:
-        target_type = "role"
-        # For role, store in target_id as 0 and use permissions JSON to store role name
-        target_id = 0
-    elif not target_type:
-        # Create share link
-        share_token = str(uuid.uuid4())
-        target_type = "link"
-        target_id = None
-    else:
-        share_token = None
-    
     if request.expires_at:
         expires_at = datetime.fromisoformat(request.expires_at)
     
-    # Create share
-    share = Share(
-        document_id=doc_id,
-        target_type=target_type,
-        target_id=target_id,
-        share_token=share_token,
-        expires_at=expires_at,
-        permissions=request.permissions or ["read"]
-    )
-    session.add(share)
+    # Handle legacy fields
+    # Default permissions: view (backward compatible with old "read")
+    default_perms = request.permissions or ["view"]
+    # Map old permissions to new ones for backward compatibility
+    normalized_perms = []
+    for perm in default_perms:
+        if perm == "read":
+            normalized_perms.append("view")
+        elif perm == "write":
+            normalized_perms.extend(["view", "search"])
+        elif perm == "delete":
+            normalized_perms.extend(["view", "search", "chat"])
+        else:
+            normalized_perms.append(perm)
+    # Remove duplicates while preserving order
+    normalized_perms = list(dict.fromkeys(normalized_perms))
+    
+    # Handle user_emails (frontend sends list of emails)
+    if request.user_emails:
+        from ..models.users import User
+        for email in request.user_emails:
+            user_result = await session.execute(select(User).where(User.email == email.strip()))
+            user = user_result.scalar_one_or_none()
+            if user:
+                share = Share(
+                    document_id=doc_id,
+                    target_type="user",
+                    target_id=user.id,
+                    permissions=normalized_perms,
+                    expires_at=expires_at
+                )
+                session.add(share)
+    
+    # Handle role_ids (frontend sends list of role IDs)
+    if request.role_ids:
+        for role_id in request.role_ids:
+            role_result = await session.execute(select(Role).where(Role.id == role_id))
+            role = role_result.scalar_one_or_none()
+            if role:
+                permissions_data = {
+                    "role_name": role.name,
+                    "permissions": normalized_perms
+                }
+                share = Share(
+                    document_id=doc_id,
+                    target_type="role",
+                    target_id=0,
+                    permissions=permissions_data,
+                    expires_at=expires_at
+                )
+                session.add(share)
+    
+    # Handle legacy single user/role sharing (only if no user_emails or role_ids)
+    if not request.user_emails and not request.role_ids:
+        permissions_data = normalized_perms
+        share_token = None
+        
+        if request.target_user_id:
+            target_type = "user"
+            target_id = request.target_user_id
+        elif request.target_role:
+            target_type = "role"
+            # For role, store in target_id as 0 and use permissions JSON to store role name and permissions
+            target_id = 0
+            # Store role_name and permissions in a dict structure
+            permissions_data = {
+                "role_name": request.target_role,
+                "permissions": normalized_perms
+            }
+        elif not target_type:
+            # Create share link
+            share_token = str(uuid.uuid4())
+            target_type = "link"
+            target_id = None
+        
+        # Create share
+        share = Share(
+            document_id=doc_id,
+            target_type=target_type,
+            target_id=target_id,
+            share_token=share_token,
+            expires_at=expires_at,
+            permissions=permissions_data
+        )
+        session.add(share)
+    
     await session.commit()
-    await session.refresh(share)
     
     # Build target response
     target_response = {"type": share.target_type}
@@ -705,8 +775,10 @@ async def get_rendition(
     if not doc:
         return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
     
-    if doc.owner_id != current_user.id and current_user.role not in ["admin", "staff"]:
-        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    # Check view access using permission service
+    has_access, _, reason = await check_document_access(session, current_user, doc, "view")
+    if not has_access:
+        return error_response(reason or "Access denied", status_code=status.HTTP_403_FORBIDDEN)
     
     # Get version (specific or latest)
     if version_id:
@@ -796,34 +868,10 @@ async def create_comment(
     if not doc:
         return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
     
-    # Check access via share if not owner
-    has_access = False
-    if doc.owner_id == current_user.id or current_user.role in ["admin", "staff"]:
-        has_access = True
-    else:
-        # Check shares
-        shares_result = await session.execute(
-            select(Share).where(
-                and_(
-                    Share.document_id == doc_id,
-                    or_(
-                        Share.expires_at.is_(None),
-                        Share.expires_at > datetime.utcnow()
-                    )
-                )
-            )
-        )
-        shares = shares_result.scalars().all()
-        for share in shares:
-            if share.target_type == "user" and share.target_id == current_user.id:
-                has_access = True
-                break
-            elif share.target_type == "role" and current_user.role == share.permissions.get("role"):
-                has_access = True
-                break
-    
+    # Check view access using permission service (comments require view access)
+    has_access, _, reason = await check_document_access(session, current_user, doc, "view")
     if not has_access:
-        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+        return error_response(reason or "Access denied", status_code=status.HTTP_403_FORBIDDEN)
     
     # Validate version_id if provided
     if payload.version_id:
@@ -885,30 +933,10 @@ async def list_comments(
     if not doc:
         return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
     
-    # Check access (similar to create_comment)
-    has_access = False
-    if doc.owner_id == current_user.id or current_user.role in ["admin", "staff"]:
-        has_access = True
-    else:
-        shares_result = await session.execute(
-            select(Share).where(
-                and_(
-                    Share.document_id == doc_id,
-                    or_(
-                        Share.expires_at.is_(None),
-                        Share.expires_at > datetime.utcnow()
-                    )
-                )
-            )
-        )
-        shares = shares_result.scalars().all()
-        for share in shares:
-            if share.target_type == "user" and share.target_id == current_user.id:
-                has_access = True
-                break
-    
+    # Check view access using permission service
+    has_access, _, reason = await check_document_access(session, current_user, doc, "view")
     if not has_access:
-        return error_response("Access denied", status_code=status.HTTP_403_FORBIDDEN)
+        return error_response(reason or "Access denied", status_code=status.HTTP_403_FORBIDDEN)
     
     # Build query
     query = select(Comment).where(Comment.document_id == doc_id)
@@ -1007,4 +1035,75 @@ async def delete_comment(
     await session.commit()
     
     return success_response({"id": comment_id, "deleted": True})
+
+
+@router.get("/shared/{share_token}")
+async def get_shared_document(
+    share_token: str,
+    session: AsyncSession = Depends(get_session)
+):
+    """Access document via share link (no authentication required)."""
+    from datetime import datetime
+    
+    # Find share by token
+    share_result = await session.execute(
+        select(Share).where(Share.share_token == share_token)
+    )
+    share = share_result.scalar_one_or_none()
+    
+    if not share:
+        return error_response("Share link not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Check if share has expired
+    if share.expires_at and share.expires_at < datetime.utcnow():
+        return error_response("Share link has expired", status_code=status.HTTP_410_GONE)
+    
+    # Get document
+    doc_result = await session.execute(
+        select(Document)
+        .options(selectinload(Document.versions))
+        .where(
+            and_(
+                Document.id == share.document_id,
+                Document.deleted_at.is_(None)
+            )
+        )
+    )
+    doc = doc_result.scalar_one_or_none()
+    
+    if not doc:
+        return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Get latest version for preview URL
+    from ..services.storage import generate_presigned_download_url
+    
+    latest_version = max(doc.versions, key=lambda v: v.version_no) if doc.versions else None
+    preview_url = None
+    if latest_version and latest_version.blob_uri:
+        blob_uri = latest_version.blob_uri
+        if blob_uri.startswith(f"minio://{settings.minio_bucket}/"):
+            blob_uri = blob_uri.replace(f"minio://{settings.minio_bucket}/", "")
+        preview_url = generate_presigned_download_url(blob_uri, expires=timedelta(hours=1))
+    
+    # Return document info (read-only access via share link)
+    share_permissions = share.permissions
+    if isinstance(share_permissions, dict):
+        permissions_list = share_permissions.get("permissions", [])
+    elif isinstance(share_permissions, list):
+        permissions_list = share_permissions
+    else:
+        permissions_list = []
+    
+    return success_response({
+        "id": doc.id,
+        "title": doc.title,
+        "mime": doc.mime,
+        "size": doc.size,
+        "status": doc.status,
+        "created_at": doc.created_at.isoformat(),
+        "preview_url": preview_url,
+        "share_token": share_token,
+        "access_type": "shared_link",
+        "permissions": permissions_list
+    })
 

@@ -8,10 +8,11 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
-from ..dependencies import get_current_user
+from ..dependencies import get_current_user, require_permission
 from ..models.users import User
-from ..models.documents import Document, DocumentVersion, Tag, DocumentTag
+from ..models.documents import Document, DocumentVersion, Tag, DocumentTag, Share
 from ..models.workflows import Workflow
+from ..models.roles import Role
 from ..services.storage import generate_presigned_upload_url
 from ..utils.response import success_response, error_response
 from ..config import settings
@@ -40,12 +41,15 @@ class UploadFinalizeRequest(BaseModel):
     sensitivity: Optional[str] = None
     workflow_template: Optional[str] = None
     workflow_assignees: Optional[list[int]] = None
+    allowed_users: Optional[list[int]] = None  # User IDs to share with
+    allowed_roles: Optional[list[int]] = None  # Role IDs to share with (changed from list[str] to list[int])
+    share_permissions: Optional[list[str]] = None  # Permissions: view, search, chat
 
 
 @router.post("/init")
 async def init_upload(
     request: UploadInitRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("upload")),
     session: AsyncSession = Depends(get_session)
 ):
     if request.size > settings.max_upload_size_bytes:
@@ -86,7 +90,7 @@ async def init_upload(
 async def finalize_upload(
     upload_id: str,
     request: UploadFinalizeRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("upload")),
     session: AsyncSession = Depends(get_session)
 ):
     # Retrieve upload metadata
@@ -235,6 +239,61 @@ async def finalize_upload(
         await session.flush()
         
         # Job will be automatically processed by worker service
+    
+    # Get share permissions (default to ["view"] if not provided)
+    share_permissions = request.share_permissions or ["view"]
+    # Ensure view is always included
+    if "view" not in share_permissions:
+        share_permissions = ["view"] + share_permissions
+    
+    # Create shares for allowed users and roles
+    if request.allowed_users:
+        for user_id in request.allowed_users:
+            # Verify user exists
+            user_result = await session.execute(
+                select(User).where(User.id == user_id)
+            )
+            user = user_result.scalar_one_or_none()
+            if user:
+                share = Share(
+                    document_id=doc.id,
+                    target_type="user",
+                    target_id=user_id,
+                    permissions=share_permissions
+                )
+                session.add(share)
+    
+    if request.allowed_roles:
+        for role_identifier in request.allowed_roles:
+            if not role_identifier:
+                continue
+            
+            # Handle both role ID (int) and role name (str)
+            role_name = None
+            if isinstance(role_identifier, int):
+                # If it's an ID, look up the role name
+                role_result = await session.execute(
+                    select(Role).where(Role.id == role_identifier)
+                )
+                role = role_result.scalar_one_or_none()
+                if role:
+                    role_name = role.name
+            elif isinstance(role_identifier, str) and role_identifier.strip():
+                # If it's already a name, use it directly
+                role_name = role_identifier.strip()
+            
+            if role_name:
+                # Create share with role
+                share = Share(
+                    document_id=doc.id,
+                    target_type="role",
+                    target_id=0,
+                    permissions={
+                        "role_name": role_name,
+                        "permissions": share_permissions
+                    }
+                )
+                session.add(share)
     
     await session.commit()
     

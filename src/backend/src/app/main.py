@@ -8,6 +8,7 @@ import os
 from .config import settings
 from .db import AsyncSessionLocal
 from .models.users import User
+from .models.roles import Role
 from .services.auth import get_password_hash
 from sqlalchemy import select
 
@@ -85,10 +86,60 @@ async def ensure_root_user():
             logger.error(f"Failed to create root user: {e}", exc_info=True)
 
 
+async def ensure_default_roles():
+    """Ensure default roles exist, create if not"""
+    # User-level permissions: upload, search, scan, chat, folder, settings, reports, user
+    # Document-level permissions (view/search/chat) are set when sharing documents, not in roles
+    DEFAULT_ROLES = [
+        {"name": "viewer", "permissions": []},  # No user-level permissions, only document-level view permission when shared
+        {"name": "searcher", "permissions": ["search"]},  # User-level: can access search menu
+        {"name": "chatter", "permissions": ["chat"]},  # User-level: can access chat menu
+        {"name": "uploader", "permissions": ["upload"]},  # User-level: can access upload menu
+        {"name": "scanner", "permissions": ["scan"]},  # User-level: can access scan menu
+        {"name": "deleter", "permissions": ["delete"]},  # User-level: can access recycle bin menu
+        {"name": "editor", "permissions": ["upload", "search", "scan", "chat", "folder"]},  # User-level: can access multiple menus
+        {"name": "manager", "permissions": ["upload", "search", "scan", "chat", "folder", "settings", "reports", "user"]}  # All user-level permissions
+    ]
+    
+    try:
+        async with AsyncSessionLocal() as session:
+            created_count = 0
+            for role_data in DEFAULT_ROLES:
+                # Check if role exists
+                result = await session.execute(
+                    select(Role).where(Role.name == role_data["name"])
+                )
+                existing = result.scalar_one_or_none()
+                
+                if existing:
+                    continue
+                
+                # Create role
+                role = Role(
+                    name=role_data["name"],
+                    permissions=role_data["permissions"]
+                )
+                session.add(role)
+                created_count += 1
+            
+            if created_count > 0:
+                await session.commit()
+                logger.info(f"Created {created_count} default roles")
+    except Exception as e:
+        # Check if error is due to missing tables (database not migrated yet)
+        error_str = str(e).lower()
+        if "does not exist" in error_str or "undefinedtable" in error_str or "relation" in error_str:
+            logger.warning("Database tables not found. Please run migrations first.")
+        else:
+            logger.error(f"Failed to create default roles: {e}", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Create root user if not exists
     await ensure_root_user()
+    # Startup: Create default roles if not exist
+    await ensure_default_roles()
     
     # Start background worker only if enabled (for backward compatibility)
     # By default, workers run as separate services (Docker)

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from ..db import get_session
-from ..dependencies import get_current_user, get_current_admin_user
+from ..dependencies import get_current_user, get_current_admin_user, require_permission
 from ..models.users import User
 from ..models.devices import Device
 from ..models.documents import Document, DocumentVersion

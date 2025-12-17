@@ -5,11 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_
 
 from ..db import get_session
-from ..dependencies import get_current_user, get_current_admin_user
+from ..dependencies import get_current_user, get_current_admin_user, require_permission
 from ..models.users import User
 from ..models.documents import Document
 from ..services.ai import get_embedding_service
 from ..services.ai.embedding_service import EmbeddingModelUnavailableError
+from ..services.permission_service import get_user_accessible_documents_query, filter_accessible_documents
 from ..utils.response import success_response, error_response
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -32,7 +33,7 @@ class VectorSearchRequest(BaseModel):
 @router.post("")
 async def search(
     request: SearchRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("search")),
     session: AsyncSession = Depends(get_session)
 ):
     """Hybrid search (keyword + vector)."""
@@ -55,13 +56,9 @@ async def search(
     
     # Keyword search
     if request.mode in ["keyword", "hybrid"]:
-        keyword_query = select(Document).where(
-            and_(
-                Document.owner_id == current_user.id,
-                Document.deleted_at.is_(None),
-                Document.title.ilike(f"%{request.query}%")
-            )
-        )
+        # Use permission service to get accessible documents query (includes shared documents)
+        base_query = select(Document).where(Document.title.ilike(f"%{request.query}%"))
+        keyword_query = await get_user_accessible_documents_query(session, current_user, base_query)
         
         # Apply filters
         if request.filters:
@@ -70,10 +67,14 @@ async def search(
             if "status" in request.filters:
                 keyword_query = keyword_query.where(Document.status == request.filters["status"])
         
-        keyword_query = keyword_query.limit(request.limit)
+        keyword_query = keyword_query.limit(request.limit * 2)  # Get more to filter by permission
         
         result = await session.execute(keyword_query)
-        keyword_results = result.scalars().all()
+        all_docs = result.scalars().all()
+        
+        # Filter to only include documents with "search" permission
+        keyword_results = await filter_accessible_documents(session, current_user, all_docs, "search")
+        keyword_results = keyword_results[:request.limit]  # Limit to requested amount
     
     # Vector search via Chroma
     vector_results = []
@@ -101,16 +102,18 @@ async def search(
                             if doc_id:
                                 doc_ids.append(doc_id)
                 if doc_ids:
+                    # Get documents from database
                     docs_result = await session.execute(
                         select(Document).where(
                             and_(
                                 Document.id.in_(doc_ids),
-                                Document.owner_id == current_user.id,
                                 Document.deleted_at.is_(None)
                             )
                         )
                     )
-                    vector_results = docs_result.scalars().all()
+                    all_docs = docs_result.scalars().all()
+                    # Filter to only include documents with "search" permission
+                    vector_results = await filter_accessible_documents(session, current_user, all_docs, "search")
             except EmbeddingModelUnavailableError as e:
                 # If embedding service is unavailable, return error for vector-only mode
                 if request.mode == "vector":
@@ -195,16 +198,18 @@ async def vector_search(
     
     docs = []
     if doc_ids:
+        # Get documents from database
         docs_result = await session.execute(
             select(Document).where(
                 and_(
                     Document.id.in_(doc_ids),
-                    Document.owner_id == current_user.id,
                     Document.deleted_at.is_(None)
                 )
             )
         )
-        docs = docs_result.scalars().all()
+        all_docs = docs_result.scalars().all()
+        # Filter to only include documents with "search" permission
+        docs = await filter_accessible_documents(session, current_user, all_docs, "search")
     
     results = [{
         "id": doc.id,

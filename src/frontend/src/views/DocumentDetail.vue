@@ -294,11 +294,35 @@
               </select>
             </div>
             <div class="form-group">
-              <label>Permission</label>
-              <select v-model="shareForm.permission">
-                <option value="read">Read</option>
-                <option value="write">Write</option>
-              </select>
+              <label>Permissions</label>
+              <div class="permissions-checkbox-group">
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    v-model="shareForm.permissions"
+                    value="view"
+                    checked
+                  />
+                  <span>View</span>
+                </label>
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    v-model="shareForm.permissions"
+                    value="search"
+                  />
+                  <span>Search</span>
+                </label>
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    v-model="shareForm.permissions"
+                    value="chat"
+                  />
+                  <span>Chat</span>
+                </label>
+              </div>
+              <p class="hint-text">Select permissions for shared users/roles. View is required.</p>
             </div>
             <div class="form-group">
               <label>Expires At (optional)</label>
@@ -312,7 +336,7 @@
               <div class="share-info">
                 <span v-if="share.user">{{ share.user.name }}</span>
                 <span v-else-if="share.role">{{ share.role.name }}</span>
-                <span class="share-permission">{{ share.permission }}</span>
+                <span class="share-permission">{{ Array.isArray(share.permissions) ? share.permissions.join(', ') : (share.permissions || 'view') }}</span>
               </div>
               <button @click="removeShare(share.id)" class="btn-small btn-danger">
                 Remove
@@ -459,7 +483,7 @@ const commentForm = ref({
 const shareForm = ref({
   userEmails: '',
   roleIds: [],
-  permission: 'read',
+  permissions: ['view'], // Default: view permission
   expires_at: null
 })
 
@@ -737,8 +761,14 @@ const restoreVersion = async (version) => {
 
 const shareDocument = async () => {
   try {
+    // Ensure view is always included
+    const permissions = shareForm.value.permissions || ['view']
+    if (!permissions.includes('view')) {
+      permissions.unshift('view')
+    }
+    
     const data = {
-      permission: shareForm.value.permission
+      permissions: permissions
     }
     if (shareForm.value.userEmails) {
       data.user_emails = shareForm.value.userEmails.split(',').map(e => e.trim())
@@ -750,7 +780,8 @@ const shareDocument = async () => {
       data.expires_at = shareForm.value.expires_at
     }
     await documentsAPI.share(document.value.id, data)
-    shareForm.value = { userEmails: '', roleIds: [], permission: 'read', expires_at: null }
+    shareForm.value = { userEmails: '', roleIds: [], permissions: ['view'], expires_at: null }
+    await loadDocument(document.value.id) // Reload to refresh shares
     if (window.$toast) {
       window.$toast.show('Document shared', 'success')
     }
@@ -1452,5 +1483,34 @@ const deleteDocument = async () => {
 
 .btn-link-small:active {
   transform: translateY(0);
+}
+
+.permissions-checkbox-group {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.hint-text {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+  font-style: italic;
 }
 </style>

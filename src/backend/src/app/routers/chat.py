@@ -6,13 +6,14 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
-from ..dependencies import get_current_user
+from ..dependencies import get_current_user, require_permission
 from ..models.users import User
 from ..models.chat import ChatSession
 from ..models.groups import DocumentGroup
 from ..models.documents import Document
 from ..services.ai import get_llm_service, get_embedding_service
 from ..services.ai.embedding_service import EmbeddingModelUnavailableError
+from ..services.permission_service import filter_accessible_documents, check_document_access
 from ..utils.response import success_response, error_response
 from ..config import settings
 from sqlalchemy import select, and_, or_
@@ -51,7 +52,7 @@ class ChatResponse(BaseModel):
 @router.post("")
 async def chat(
     request: ChatRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("chat")),
     session: AsyncSession = Depends(get_session)
 ):
     """Chat with RAG system."""
@@ -132,49 +133,53 @@ async def chat(
                 chroma_result = None
         else:
             chroma_result = None
+        
+        # Process chroma results if available
+        if chroma_result and chroma_result.get("metadatas"):
+            doc_ids = []
+            for metas in chroma_result["metadatas"]:
+                for meta in metas:
+                    doc_id = meta.get("doc_id")
+                    if doc_id:
+                        doc_ids.append(doc_id)
             
-            if chroma_result and chroma_result.get("metadatas"):
-                doc_ids = []
-                for metas in chroma_result["metadatas"]:
-                    for meta in metas:
-                        doc_id = meta.get("doc_id")
-                        if doc_id:
-                            doc_ids.append(doc_id)
-                
-                if doc_ids:
-                    docs_result = await session.execute(
-                        select(Document).where(
-                            and_(
-                                Document.id.in_(doc_ids),
-                                Document.deleted_at.is_(None),
-                                Document.status == "ready"
-                            )
+            if doc_ids:
+                docs_result = await session.execute(
+                    select(Document).where(
+                        and_(
+                            Document.id.in_(doc_ids),
+                            Document.deleted_at.is_(None),
+                            Document.status == "ready"
                         )
                     )
-                    docs = docs_result.scalars().all()
+                )
+                all_docs = docs_result.scalars().all()
+                
+                # Filter documents by permissions (user must have chat permission)
+                docs = await filter_accessible_documents(session, current_user, all_docs, "chat")
+                
+                for doc in docs:
+                    # Get text content for context
+                    from ..models.documents import DocumentVersion
+                    version_result = await session.execute(
+                        select(DocumentVersion)
+                        .where(DocumentVersion.document_id == doc.id)
+                        .order_by(DocumentVersion.version_no.desc())
+                        .limit(1)
+                    )
+                    version = version_result.scalar_one_or_none()
                     
-                    for doc in docs:
-                        # Get text content for context
-                        from ..models.documents import DocumentVersion
-                        version_result = await session.execute(
-                            select(DocumentVersion)
-                            .where(DocumentVersion.document_id == doc.id)
-                            .order_by(DocumentVersion.version_no.desc())
-                            .limit(1)
-                        )
-                        version = version_result.scalar_one_or_none()
-                        
-                        if version and version.text_uri:
-                            from ..services.diff import get_text_from_uri
-                            text_content = await get_text_from_uri(version.text_uri)
-                            if text_content:
-                                # Use first 500 chars as context
-                                doc_contexts.append(text_content[:500])
-                                citations.append({
-                                    "document_id": doc.id,
-                                    "title": doc.title,
-                                    "snippet": text_content[:200]
-                                })
+                    if version and version.text_uri:
+                        from ..services.diff import get_text_from_uri
+                        text_content = await get_text_from_uri(version.text_uri)
+                        if text_content:
+                            # Use first 500 chars as context
+                            doc_contexts.append(text_content[:500])
+                            citations.append({
+                                "document_id": doc.id,
+                                "title": doc.title,
+                                "snippet": text_content[:200]
+                            })
     
     # Generate response using LLM service with prompts and get token usage
     answer, token_usage = llm_service.chat_with_usage(request.message, context=doc_contexts)
@@ -390,7 +395,7 @@ async def request_source_access(
     from ..services.storage import generate_presigned_download_url
     from datetime import timedelta
     
-    # Get documents and verify access
+    # Get documents and verify access using permission service
     accessible_docs = []
     for doc_id in request.source_ids:
         doc_result = await session.execute(
@@ -403,28 +408,33 @@ async def request_source_access(
         )
         doc = doc_result.scalar_one_or_none()
         
-        if doc and (doc.owner_id == current_user.id or current_user.role in ["admin", "staff"]):
-            # Generate presigned URL if access_type is download
-            url = None
-            if request.access_type == "download" and doc.versions:
-                # Get latest version blob_uri
-                from ..models.documents import DocumentVersion
-                version_result = await session.execute(
-                    select(DocumentVersion)
-                    .where(DocumentVersion.document_id == doc.id)
-                    .order_by(DocumentVersion.version_no.desc())
-                    .limit(1)
-                )
-                version = version_result.scalar_one_or_none()
-                if version and version.blob_uri:
-                    url = generate_presigned_download_url(version.blob_uri, expires=timedelta(hours=1))
+        if doc:
+            # Check view access (for preview) or view access (for download)
+            # Both preview and download require view permission
+            has_access, _, _ = await check_document_access(session, current_user, doc, "view")
             
-            accessible_docs.append({
-                "document_id": doc.id,
-                "title": doc.title,
-                "url": url,
-                "access_type": request.access_type
-            })
+            if has_access:
+                # Generate presigned URL if access_type is download
+                url = None
+                if request.access_type == "download" and doc.versions:
+                    # Get latest version blob_uri
+                    from ..models.documents import DocumentVersion
+                    version_result = await session.execute(
+                        select(DocumentVersion)
+                        .where(DocumentVersion.document_id == doc.id)
+                        .order_by(DocumentVersion.version_no.desc())
+                        .limit(1)
+                    )
+                    version = version_result.scalar_one_or_none()
+                    if version and version.blob_uri:
+                        url = generate_presigned_download_url(version.blob_uri, expires=timedelta(hours=1))
+                
+                accessible_docs.append({
+                    "document_id": doc.id,
+                    "title": doc.title,
+                    "url": url,
+                    "access_type": request.access_type
+                })
     
     return success_response({
         "session_id": session_id,

@@ -82,6 +82,37 @@
             </div>
           </div>
           <div class="form-group">
+            <label>Share Permissions</label>
+            <div class="permissions-checkbox-group">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  v-model="file.metadata.share_permissions"
+                  :value="'view'"
+                  checked
+                />
+                <span>View</span>
+              </label>
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  v-model="file.metadata.share_permissions"
+                  value="search"
+                />
+                <span>Search</span>
+              </label>
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  v-model="file.metadata.share_permissions"
+                  value="chat"
+                />
+                <span>Chat</span>
+              </label>
+            </div>
+            <p class="hint-text">Select permissions for shared users/roles. View is required.</p>
+          </div>
+          <div class="form-group">
             <label>ACL - Allowed Users</label>
             <div class="acl-selector">
               <div class="selected-items">
@@ -94,20 +125,13 @@
                   <button @click="removeUser(idx, userId)" class="item-remove">×</button>
                 </span>
               </div>
-              <select
-                @change="addUser(idx, $event.target.value)"
-                class="acl-select"
+              <button
+                @click="openUserPicker(idx)"
+                class="btn-add-acl"
+                type="button"
               >
-                <option value="">Add user...</option>
-                <option
-                  v-for="user in users"
-                  :key="user.id"
-                  :value="user.id"
-                  :disabled="(file.metadata.allowed_users || []).includes(user.id)"
-                >
-                  {{ user.name }} ({{ user.email }})
-                </option>
-              </select>
+                + Add Users
+              </button>
             </div>
           </div>
           <div class="form-group">
@@ -123,20 +147,13 @@
                   <button @click="removeRole(idx, roleId)" class="item-remove">×</button>
                 </span>
               </div>
-              <select
-                @change="addRole(idx, $event.target.value)"
-                class="acl-select"
+              <button
+                @click="openRolePicker(idx)"
+                class="btn-add-acl"
+                type="button"
               >
-                <option value="">Add role...</option>
-                <option
-                  v-for="role in roles"
-                  :key="role.id"
-                  :value="role.id"
-                  :disabled="(file.metadata.allowed_roles || []).includes(role.id)"
-                >
-                  {{ role.name }}
-                </option>
-              </select>
+                + Add Roles
+              </button>
             </div>
           </div>
           <div class="form-group">
@@ -201,11 +218,86 @@
         <button @click="showFolderPicker = false" class="btn-secondary">Cancel</button>
       </template>
     </Modal>
+
+    <!-- User Picker Modal -->
+    <Modal v-model:show="showUserPicker" title="Select Users" size="medium">
+      <div class="picker-search">
+        <input
+          v-model="userSearchQuery"
+          type="text"
+          placeholder="Search users by name or email..."
+          class="search-input"
+        />
+      </div>
+      <div class="picker-list">
+        <div
+          v-for="user in filteredUsers"
+          :key="user.id"
+          class="picker-item"
+        >
+          <label class="picker-checkbox">
+            <input
+              type="checkbox"
+              :checked="isUserSelected(user.id)"
+              @change="toggleUser(user.id)"
+            />
+            <span class="picker-label">
+              <strong>{{ user.name }}</strong>
+              <span class="picker-email">{{ user.email }}</span>
+            </span>
+          </label>
+        </div>
+        <div v-if="filteredUsers.length === 0" class="picker-empty">
+          {{ userSearchQuery ? 'No users found' : 'No users available' }}
+        </div>
+      </div>
+      <template #footer>
+        <button @click="showUserPicker = false" class="btn-secondary">Cancel</button>
+        <button @click="confirmUsers" class="btn-primary">Confirm ({{ tempSelectedUsers.length }})</button>
+      </template>
+    </Modal>
+
+    <!-- Role Picker Modal -->
+    <Modal v-model:show="showRolePicker" title="Select Roles" size="medium">
+      <div class="picker-search">
+        <input
+          v-model="roleSearchQuery"
+          type="text"
+          placeholder="Search roles by name..."
+          class="search-input"
+        />
+      </div>
+      <div class="picker-list">
+        <div
+          v-for="role in filteredRoles"
+          :key="role.id"
+          class="picker-item"
+        >
+          <label class="picker-checkbox">
+            <input
+              type="checkbox"
+              :checked="isRoleSelected(role.id)"
+              @change="toggleRole(role.id)"
+            />
+            <span class="picker-label">
+              <strong>{{ role.name }}</strong>
+            </span>
+          </label>
+        </div>
+        <div v-if="filteredRoles.length === 0" class="picker-empty">
+          {{ roleSearchQuery ? 'No roles found' : 'No roles available' }}
+        </div>
+      </div>
+      <template #footer>
+        <button @click="showRolePicker = false" class="btn-secondary">Cancel</button>
+        <button @click="confirmRoles" class="btn-primary">Confirm ({{ tempSelectedRoles.length }})</button>
+      </template>
+    </Modal>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useFoldersStore } from '../store/folders'
 import { useSettingsStore } from '../store/settings'
 import { useRolesStore } from '../store/roles'
@@ -223,12 +315,16 @@ const rolesStore = useRolesStore()
 
 const folders = ref([])
 const retentionPolicies = ref([])
-const roles = ref([])
+const roles = computed(() => rolesStore.roles || [])
 const users = ref([])
 const showFolderPicker = ref(false)
 const showUserPicker = ref(false)
 const showRolePicker = ref(false)
 const currentFileIndex = ref(null)
+const tempSelectedUsers = ref([])
+const tempSelectedRoles = ref([])
+const userSearchQuery = ref('')
+const roleSearchQuery = ref('')
 
 const handleDrop = (e) => {
   const droppedFiles = Array.from(e.dataTransfer.files)
@@ -266,6 +362,7 @@ const addFiles = (fileList) => {
       document_id: null,
       error: null,
       metadata: {
+        share_permissions: ['view'], // Default: view permission
         title: '',
         tags: '',
         folder_id: null,
@@ -377,7 +474,8 @@ const startUpload = async () => {
         sensitivity: fileItem.metadata.sensitivity || null,
         workflow_template: fileItem.metadata.workflow_template || null,
         allowed_users: fileItem.metadata.allowed_users || [],
-        allowed_roles: fileItem.metadata.allowed_roles || []
+        allowed_roles: fileItem.metadata.allowed_roles || [],
+        share_permissions: fileItem.metadata.share_permissions || ['view']
       }
       
       // Finalize upload
@@ -466,7 +564,9 @@ const loadRetentionPolicies = async () => {
 const loadRoles = async () => {
   try {
     await rolesStore.fetchRoles()
-    roles.value = rolesStore.roles
+    if (rolesStore.roles.length === 0) {
+      console.warn('No roles found in system')
+    }
   } catch (e) {
     console.error('Failed to load roles', e)
   }
@@ -496,10 +596,154 @@ const selectFolder = (folder) => {
   currentFileIndex.value = null
 }
 
+const openUserPicker = (index) => {
+  currentFileIndex.value = index
+  // Initialize temp selection with currently selected users
+  tempSelectedUsers.value = [...(files.value[index].metadata.allowed_users || [])]
+  userSearchQuery.value = ''
+  showUserPicker.value = true
+}
+
+const openRolePicker = (index) => {
+  currentFileIndex.value = index
+  // Initialize temp selection with currently selected roles
+  tempSelectedRoles.value = [...(files.value[index].metadata.allowed_roles || [])]
+  roleSearchQuery.value = ''
+  showRolePicker.value = true
+}
+
+const filteredUsers = computed(() => {
+  if (!users.value || !Array.isArray(users.value)) {
+    return []
+  }
+  if (!userSearchQuery.value) {
+    return users.value.filter(user => user && user.id && user.name)
+  }
+  const query = userSearchQuery.value.toLowerCase()
+  return users.value.filter(user => 
+    user && user.id && user.name && (
+      user.name.toLowerCase().includes(query) ||
+      (user.email && user.email.toLowerCase().includes(query))
+    )
+  )
+})
+
+const filteredRoles = computed(() => {
+  const rolesList = roles.value || []
+  if (!Array.isArray(rolesList) || rolesList.length === 0) {
+    return []
+  }
+  if (!roleSearchQuery.value) {
+    return rolesList.filter(role => role && role.id && role.name)
+  }
+  const query = roleSearchQuery.value.toLowerCase()
+  return rolesList.filter(role => 
+    role && role.id && role.name && role.name.toLowerCase().includes(query)
+  )
+})
+
+const isUserSelected = (userId) => {
+  return tempSelectedUsers.value.includes(userId)
+}
+
+const isRoleSelected = (roleId) => {
+  return tempSelectedRoles.value.includes(roleId)
+}
+
+const toggleUser = (userId) => {
+  const index = tempSelectedUsers.value.indexOf(userId)
+  if (index > -1) {
+    tempSelectedUsers.value.splice(index, 1)
+  } else {
+    tempSelectedUsers.value.push(userId)
+  }
+}
+
+const toggleRole = (roleId) => {
+  const index = tempSelectedRoles.value.indexOf(roleId)
+  if (index > -1) {
+    tempSelectedRoles.value.splice(index, 1)
+  } else {
+    tempSelectedRoles.value.push(roleId)
+  }
+}
+
+const confirmUsers = () => {
+  if (currentFileIndex.value !== null) {
+    files.value[currentFileIndex.value].metadata.allowed_users = [...tempSelectedUsers.value]
+  }
+  showUserPicker.value = false
+  currentFileIndex.value = null
+  tempSelectedUsers.value = []
+  userSearchQuery.value = ''
+}
+
+const confirmRoles = () => {
+  if (currentFileIndex.value !== null) {
+    files.value[currentFileIndex.value].metadata.allowed_roles = [...tempSelectedRoles.value]
+  }
+  showRolePicker.value = false
+  currentFileIndex.value = null
+  tempSelectedRoles.value = []
+  roleSearchQuery.value = ''
+}
+
 const getFolderName = (folderId) => {
   if (!folderId) return 'None'
   const folder = folders.value.find(f => f.id === folderId)
   return folder ? folder.name : 'Unknown'
+}
+
+const addUser = (fileIndex, userId) => {
+  if (!userId) return
+  const userIdNum = parseInt(userId)
+  if (!files.value[fileIndex].metadata.allowed_users) {
+    files.value[fileIndex].metadata.allowed_users = []
+  }
+  if (!files.value[fileIndex].metadata.allowed_users.includes(userIdNum)) {
+    files.value[fileIndex].metadata.allowed_users.push(userIdNum)
+  }
+}
+
+const removeUser = (fileIndex, userId) => {
+  if (!files.value[fileIndex].metadata.allowed_users) return
+  const index = files.value[fileIndex].metadata.allowed_users.indexOf(userId)
+  if (index > -1) {
+    files.value[fileIndex].metadata.allowed_users.splice(index, 1)
+  }
+}
+
+const getUserName = (userId) => {
+  const user = users.value.find(u => u.id === userId)
+  return user ? `${user.name} (${user.email})` : `User ${userId}`
+}
+
+const addRole = (fileIndex, roleId) => {
+  if (!roleId) return
+  const roleIdNum = parseInt(roleId)
+  if (!files.value[fileIndex].metadata.allowed_roles) {
+    files.value[fileIndex].metadata.allowed_roles = []
+  }
+  if (!files.value[fileIndex].metadata.allowed_roles.includes(roleIdNum)) {
+    files.value[fileIndex].metadata.allowed_roles.push(roleIdNum)
+  }
+}
+
+const removeRole = (fileIndex, roleId) => {
+  if (!files.value[fileIndex].metadata.allowed_roles) return
+  const index = files.value[fileIndex].metadata.allowed_roles.indexOf(roleId)
+  if (index > -1) {
+    files.value[fileIndex].metadata.allowed_roles.splice(index, 1)
+  }
+}
+
+const getRoleName = (roleId) => {
+  const rolesList = roles.value || []
+  if (!Array.isArray(rolesList)) {
+    return `Role ${roleId}`
+  }
+  const role = rolesList.find(r => r && r.id === roleId)
+  return role ? role.name : `Role ${roleId}`
 }
 </script>
 
@@ -901,5 +1145,126 @@ const getFolderName = (folderId) => {
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 0.9rem;
+}
+
+.btn-add-acl {
+  padding: 0.5rem 1rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background var(--transition-base);
+}
+
+.btn-add-acl:hover {
+  background: var(--primary-dark);
+}
+
+.picker-list {
+  max-height: 400px;
+  overflow-y: auto;
+  margin: 1rem 0;
+}
+
+.picker-item {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  transition: background var(--transition-base);
+}
+
+.picker-item:hover {
+  background: var(--bg-light);
+}
+
+.picker-item:last-child {
+  border-bottom: none;
+}
+
+.picker-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  width: 100%;
+}
+
+.picker-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.picker-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.picker-label strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.picker-email {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.picker-empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.picker-search {
+  margin-bottom: 1rem;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  transition: border-color var(--transition-base);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+.permissions-checkbox-group {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.hint-text {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+  font-style: italic;
 }
 </style>

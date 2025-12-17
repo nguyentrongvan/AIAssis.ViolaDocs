@@ -10,7 +10,27 @@ export const useAuthStore = defineStore('auth', {
     isAuthenticated: (state) => !!state.token,
     isAdmin: (state) => state.user?.role === 'admin' || state.user?.roles?.includes('admin'),
     isStaff: (state) => state.user?.role === 'staff' || state.user?.roles?.includes('staff'),
-    isMaintainer: (state) => state.user?.is_maintainer === true
+    isMaintainer: (state) => state.user?.is_maintainer === true,
+    // Check if user has a specific permission
+    hasPermission: (state) => (permission) => {
+      // Admin automatically has all permissions
+      if (state.user?.role === 'admin') {
+        return true
+      }
+      // Staff and regular users: check permissions from menu roles
+      const permissions = state.user?.permissions || []
+      return permissions.includes(permission)
+    },
+    // Check if user has any of the specified permissions
+    hasAnyPermission: (state) => (permissions) => {
+      // Admin automatically has all permissions
+      if (state.user?.role === 'admin') {
+        return true
+      }
+      // Staff and regular users: check permissions from menu roles
+      const userPermissions = state.user?.permissions || []
+      return permissions.some(perm => userPermissions.includes(perm))
+    }
   },
   actions: {
     async login(email, password) {

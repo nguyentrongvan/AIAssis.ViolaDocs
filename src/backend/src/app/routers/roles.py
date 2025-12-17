@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from ..db import get_session
-from ..dependencies import get_current_admin_user
+from ..dependencies import get_current_admin_user, get_current_user
 from ..models.users import User
 from ..models.roles import Role
 from ..utils.response import success_response, error_response
@@ -29,10 +29,10 @@ class PermissionsUpdate(BaseModel):
 
 @router.get("")
 async def list_roles(
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),  # Allow all authenticated users to list roles (for sharing)
     session: AsyncSession = Depends(get_session)
 ):
-    """List all roles."""
+    """List all roles. Available to all authenticated users (for document sharing)."""
     result = await session.execute(select(Role))
     roles = result.scalars().all()
     

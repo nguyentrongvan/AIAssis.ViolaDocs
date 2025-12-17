@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from ..db import get_session
-from ..dependencies import get_current_user
+from ..dependencies import get_current_user, get_user_permissions
 from ..models.users import User
 from ..models.devices import Device
 from ..services.auth import (
@@ -115,13 +115,17 @@ async def get_me(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
+    # Get user permissions from roles
+    permissions = await get_user_permissions(session, current_user)
+    
     return success_response({
         "id": current_user.id,
         "name": current_user.name,
         "email": current_user.email,
         "role": current_user.role,
         "status": current_user.status,
-        "expires_at": current_user.expires_at.isoformat() if current_user.expires_at else None
+        "expires_at": current_user.expires_at.isoformat() if current_user.expires_at else None,
+        "permissions": permissions
     })
 
 

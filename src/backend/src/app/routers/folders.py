@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
 from ..db import get_session
-from ..dependencies import get_current_user, get_current_admin_user
+from ..dependencies import get_current_user, get_current_admin_user, require_permission
 from ..models.users import User
 from ..models.documents import Folder
 from ..utils.response import success_response, error_response
@@ -26,7 +26,7 @@ class FolderUpdate(BaseModel):
 @router.get("")
 async def list_folders(
     parent_id: Optional[int] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("folder")),
     session: AsyncSession = Depends(get_session)
 ):
     """List folders. If parent_id is provided, list children of that folder."""

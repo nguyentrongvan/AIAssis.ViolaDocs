@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
 from ..db import get_session
-from ..dependencies import get_current_admin_user
+from ..dependencies import get_current_admin_user, require_permission_or_staff
 from ..models.users import User
 from ..models.documents import Document
 from ..models.audit import AuditEvent
@@ -23,7 +23,7 @@ async def get_audit_report(
     to_date: Optional[str] = Query(None),
     actor_id: Optional[int] = Query(None),
     action: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(require_permission_or_staff("reports")),
     session: AsyncSession = Depends(get_session)
 ):
     query = select(AuditEvent)
@@ -60,7 +60,7 @@ async def get_audit_report(
 async def get_usage_report(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(require_permission_or_staff("reports")),
     session: AsyncSession = Depends(get_session)
 ):
     """Get usage metrics report."""
@@ -119,7 +119,7 @@ async def get_usage_report(
 async def get_workflow_report(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(require_permission_or_staff("reports")),
     session: AsyncSession = Depends(get_session)
 ):
     """Get workflow SLA report."""
@@ -175,7 +175,7 @@ async def get_workflow_report(
 
 @router.get("/quality")
 async def get_quality_report(
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(require_permission_or_staff("reports")),
     session: AsyncSession = Depends(get_session)
 ):
     """Get data quality report."""

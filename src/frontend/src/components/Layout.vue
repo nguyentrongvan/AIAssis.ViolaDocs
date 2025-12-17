@@ -17,23 +17,23 @@
           <FileText class="nav-icon" />
           <span>Documents</span>
         </router-link>
-        <router-link to="/upload" :class="['nav-item', { 'router-link-active': isActiveRoute('/upload') }]" active-class="" exact-active-class="">
+        <router-link v-if="authStore.hasPermission('upload')" to="/upload" :class="['nav-item', { 'router-link-active': isActiveRoute('/upload') }]" active-class="" exact-active-class="">
           <Upload class="nav-icon" />
           <span>Upload</span>
         </router-link>
-        <router-link to="/scan" :class="['nav-item', { 'router-link-active': isActiveRoute('/scan') }]" active-class="" exact-active-class="">
+        <router-link v-if="authStore.hasPermission('scan')" to="/scan" :class="['nav-item', { 'router-link-active': isActiveRoute('/scan') }]" active-class="" exact-active-class="">
           <Scan class="nav-icon" />
           <span>Scan Inbox</span>
         </router-link>
-        <router-link to="/folders" :class="['nav-item', { 'router-link-active': isActiveRoute('/folders') }]" active-class="" exact-active-class="">
+        <router-link v-if="authStore.hasPermission('folder')" to="/folders" :class="['nav-item', { 'router-link-active': isActiveRoute('/folders') }]" active-class="" exact-active-class="">
           <Folder class="nav-icon" />
           <span>Folders</span>
         </router-link>
-        <router-link to="/search" :class="['nav-item', { 'router-link-active': isActiveRoute('/search') }]" active-class="" exact-active-class="">
+        <router-link v-if="authStore.hasPermission('search')" to="/search" :class="['nav-item', { 'router-link-active': isActiveRoute('/search') }]" active-class="" exact-active-class="">
           <Search class="nav-icon" />
           <span>Search</span>
         </router-link>
-        <router-link to="/recycle-bin" :class="['nav-item', { 'router-link-active': isActiveRoute('/recycle-bin') }]" active-class="" exact-active-class="">
+        <router-link v-if="authStore.hasPermission('delete')" to="/recycle-bin" :class="['nav-item', { 'router-link-active': isActiveRoute('/recycle-bin') }]" active-class="" exact-active-class="">
           <Trash2 class="nav-icon" />
           <span>Recycle Bin</span>
         </router-link>
@@ -41,37 +41,37 @@
           <CheckSquare class="nav-icon" />
           <span>Tasks</span>
         </router-link>
-        <router-link to="/chatbot" :class="['nav-item', { 'router-link-active': isActiveRoute('/chatbot') }]" active-class="" exact-active-class="">
+        <router-link v-if="authStore.hasPermission('chat')" to="/chatbot" :class="['nav-item', { 'router-link-active': isActiveRoute('/chatbot') }]" active-class="" exact-active-class="">
           <MessageSquare class="nav-icon" />
           <span>Chatbot</span>
         </router-link>
-        <template v-if="authStore.isAdmin || authStore.isStaff">
+        <template v-if="authStore.isAdmin || authStore.isStaff || authStore.hasPermission('user') || authStore.hasPermission('settings') || authStore.hasPermission('reports')">
           <div class="nav-divider">Admin</div>
-          <router-link to="/admin/users" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/users') }]" active-class="" exact-active-class="">
+          <router-link v-if="authStore.isAdmin || authStore.isStaff || authStore.hasPermission('user')" to="/admin/users" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/users') }]" active-class="" exact-active-class="">
             <Users class="nav-icon" />
             <span>Users</span>
           </router-link>
-          <router-link to="/admin/devices" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/devices') }]" active-class="" exact-active-class="">
+          <router-link v-if="authStore.isAdmin || authStore.isStaff" to="/admin/devices" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/devices') }]" active-class="" exact-active-class="">
             <Printer class="nav-icon" />
             <span>Devices</span>
           </router-link>
-          <router-link to="/admin/groups" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/groups') }]" active-class="" exact-active-class="">
+          <router-link v-if="authStore.isAdmin || authStore.isStaff" to="/admin/groups" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/groups') }]" active-class="" exact-active-class="">
             <Folder class="nav-icon" />
             <span>Groups</span>
           </router-link>
-          <router-link to="/admin/settings" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/settings') }]" active-class="" exact-active-class="">
+          <router-link v-if="authStore.isAdmin || authStore.isStaff || authStore.hasPermission('settings')" to="/admin/settings" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/settings') }]" active-class="" exact-active-class="">
             <Settings class="nav-icon" />
             <span>Settings</span>
           </router-link>
-          <router-link to="/admin/reports" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/reports') }]" active-class="" exact-active-class="">
+          <router-link v-if="authStore.isAdmin || authStore.isStaff || authStore.hasPermission('reports')" to="/admin/reports" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/reports') }]" active-class="" exact-active-class="">
             <BarChart3 class="nav-icon" />
             <span>Reports</span>
           </router-link>
-          <router-link to="/admin/roles" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/roles') }]" active-class="" exact-active-class="">
+          <router-link v-if="authStore.isAdmin || authStore.isStaff" to="/admin/roles" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/roles') }]" active-class="" exact-active-class="">
             <Shield class="nav-icon" />
             <span>Roles</span>
           </router-link>
-          <router-link to="/admin/ai-jobs" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/ai-jobs') }]" active-class="" exact-active-class="">
+          <router-link v-if="authStore.isAdmin || authStore.isStaff" to="/admin/ai-jobs" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/ai-jobs') }]" active-class="" exact-active-class="">
             <Activity class="nav-icon" />
             <span>AI Jobs</span>
           </router-link>

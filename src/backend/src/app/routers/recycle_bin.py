@@ -10,7 +10,7 @@ from sqlalchemy import select, and_, func, or_
 from sqlalchemy.orm import selectinload
 
 from ..db import get_session
-from ..dependencies import get_current_user, get_current_admin_user
+from ..dependencies import get_current_user, get_current_admin_user, require_permission
 from ..models.users import User
 from ..models.documents import Document, DocumentVersion, Tag, DocumentTag
 from ..services.storage import generate_presigned_download_url
@@ -69,7 +69,7 @@ async def list_deleted_documents(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("delete")),
     session: AsyncSession = Depends(get_session)
 ):
     """Get list of deleted documents for current user"""
