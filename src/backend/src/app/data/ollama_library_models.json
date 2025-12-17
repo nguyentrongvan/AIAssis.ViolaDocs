@@ -1,0 +1,201 @@
+{
+  "models": [
+    {
+      "name": "llama3.2",
+      "variants": ["llama3.2:1b", "llama3.2:3b"],
+      "type": "llm",
+      "description": "Meta's Llama 3.2 goes small with 1B and 3B models",
+      "tags": ["tools"]
+    },
+    {
+      "name": "llama3.1",
+      "variants": ["llama3.1:8b", "llama3.1:70b", "llama3.1:405b"],
+      "type": "llm",
+      "description": "Llama 3.1 is a new state-of-the-art model from Meta available in 8B, 70B and 405B parameter sizes",
+      "tags": ["tools"]
+    },
+    {
+      "name": "llama3",
+      "variants": ["llama3:8b", "llama3:70b"],
+      "type": "llm",
+      "description": "Meta Llama 3: The most capable openly available LLM to date",
+      "tags": []
+    },
+    {
+      "name": "llama2",
+      "variants": ["llama2:7b", "llama2:13b", "llama2:70b"],
+      "type": "llm",
+      "description": "Llama 2 is a collection of foundation language models ranging from 7B to 70B parameters",
+      "tags": []
+    },
+    {
+      "name": "mistral",
+      "variants": ["mistral:7b", "mistral:latest"],
+      "type": "llm",
+      "description": "The 7B model released by Mistral AI",
+      "tags": ["tools"]
+    },
+    {
+      "name": "qwen2.5",
+      "variants": ["qwen2.5:0.5b", "qwen2.5:1.5b", "qwen2.5:3b", "qwen2.5:7b", "qwen2.5:14b", "qwen2.5:32b", "qwen2.5:72b"],
+      "type": "llm",
+      "description": "Qwen2.5 models are pretrained on Alibaba's latest large-scale dataset, encompassing up to 18 trillion tokens",
+      "tags": ["tools"]
+    },
+    {
+      "name": "qwen3",
+      "variants": ["qwen3:0.6b", "qwen3:1.7b", "qwen3:4b", "qwen3:8b", "qwen3:14b", "qwen3:30b", "qwen3:32b", "qwen3:235b"],
+      "type": "llm",
+      "description": "Qwen3 is the latest generation of large language models in Qwen series",
+      "tags": ["tools", "thinking"]
+    },
+    {
+      "name": "gemma2",
+      "variants": ["gemma2:2b", "gemma2:9b", "gemma2:27b"],
+      "type": "llm",
+      "description": "Google Gemma 2 is a high-performing and efficient model available in three sizes: 2B, 9B, and 27B",
+      "tags": []
+    },
+    {
+      "name": "gemma3",
+      "variants": ["gemma3:270m", "gemma3:1b", "gemma3:4b", "gemma3:12b", "gemma3:27b"],
+      "type": "llm",
+      "description": "The current, most capable model that runs on a single GPU",
+      "tags": ["vision"]
+    },
+    {
+      "name": "phi3",
+      "variants": ["phi3:3.8b", "phi3:14b", "phi3:latest"],
+      "type": "llm",
+      "description": "Phi-3 is a family of lightweight 3B (Mini) and 14B (Medium) state-of-the-art open models by Microsoft",
+      "tags": []
+    },
+    {
+      "name": "deepseek-r1",
+      "variants": ["deepseek-r1:1.5b", "deepseek-r1:7b", "deepseek-r1:8b", "deepseek-r1:14b", "deepseek-r1:32b", "deepseek-r1:70b", "deepseek-r1:671b"],
+      "type": "llm",
+      "description": "DeepSeek-R1 is a family of open reasoning models with performance approaching that of leading models",
+      "tags": ["tools", "thinking"]
+    },
+    {
+      "name": "deepseek-v3.1",
+      "variants": ["deepseek-v3.1:671b"],
+      "type": "llm",
+      "description": "DeepSeek-V3.1-Terminus is a hybrid model that supports both thinking mode and non-thinking mode",
+      "tags": ["tools", "thinking"]
+    },
+    {
+      "name": "deepseek-v3.2",
+      "variants": ["deepseek-v3.2"],
+      "type": "llm",
+      "description": "DeepSeek-V3.2, a model that harmonizes high computational efficiency with superior reasoning and agent performance",
+      "tags": ["tools", "thinking"]
+    },
+    {
+      "name": "nomic-embed-text",
+      "variants": ["nomic-embed-text:latest"],
+      "type": "embedding",
+      "description": "A high-performing open embedding model with a large token context window",
+      "tags": ["embedding"]
+    },
+    {
+      "name": "nomic-embed-text-v2-moe",
+      "variants": ["nomic-embed-text-v2-moe"],
+      "type": "embedding",
+      "description": "A multilingual MoE text embedding model that excels at multilingual retrieval",
+      "tags": ["embedding"]
+    },
+    {
+      "name": "mxbai-embed-large",
+      "variants": ["mxbai-embed-large"],
+      "type": "embedding",
+      "description": "State-of-the-art large embedding model from mixedbread.ai",
+      "tags": ["embedding"]
+    },
+    {
+      "name": "embeddinggemma",
+      "variants": ["embeddinggemma:300m"],
+      "type": "embedding",
+      "description": "EmbeddingGemma is a 300M parameter embedding model from Google",
+      "tags": ["embedding"]
+    },
+    {
+      "name": "qwen3-vl",
+      "variants": ["qwen3-vl:2b", "qwen3-vl:4b", "qwen3-vl:8b", "qwen3-vl:30b", "qwen3-vl:32b", "qwen3-vl:235b"],
+      "type": "llm",
+      "description": "The most powerful vision-language model in the Qwen model family to date",
+      "tags": ["vision", "tools"]
+    },
+    {
+      "name": "llava",
+      "variants": ["llava:7b", "llava:13b", "llava:34b"],
+      "type": "llm",
+      "description": "LLaVA is a novel end-to-end trained large multimodal model that combines a vision encoder and Vicuna for general-purpose visual and language understanding",
+      "tags": ["vision"]
+    },
+    {
+      "name": "codellama",
+      "variants": ["codellama:7b", "codellama:13b", "codellama:34b", "codellama:70b"],
+      "type": "llm",
+      "description": "A large language model that can use text prompts to generate and discuss code",
+      "tags": []
+    },
+    {
+      "name": "qwen2.5-coder",
+      "variants": ["qwen2.5-coder:0.5b", "qwen2.5-coder:1.5b", "qwen2.5-coder:3b", "qwen2.5-coder:7b", "qwen2.5-coder:32b"],
+      "type": "llm",
+      "description": "The latest series of Code-Specific Qwen models, with significant improvements in code generation, code reasoning, and code fixing",
+      "tags": ["tools"]
+    },
+    {
+      "name": "qwen3-coder",
+      "variants": ["qwen3-coder:30b", "qwen3-coder:480b"],
+      "type": "llm",
+      "description": "Alibaba's performant long context models for agentic and coding tasks",
+      "tags": ["tools"]
+    },
+    {
+      "name": "ministral-3",
+      "variants": ["ministral-3:3b", "ministral-3:8b", "ministral-3:14b"],
+      "type": "llm",
+      "description": "The Ministral 3 family is designed for edge deployment, capable of running on a wide range of hardware",
+      "tags": ["vision", "tools"]
+    },
+    {
+      "name": "devstral-2",
+      "variants": ["devstral-2:123b"],
+      "type": "llm",
+      "description": "123B model that excels at using tools to explore codebases, editing multiple files and power software engineering agents",
+      "tags": ["tools"]
+    },
+    {
+      "name": "devstral-small-2",
+      "variants": ["devstral-small-2:24b"],
+      "type": "llm",
+      "description": "24B model that excels at using tools to explore codebases, editing multiple files and power software engineering agents",
+      "tags": ["tools"]
+    },
+    {
+      "name": "gpt-oss",
+      "variants": ["gpt-oss:20b", "gpt-oss:120b"],
+      "type": "llm",
+      "description": "OpenAI's open-weight models designed for powerful reasoning, agentic tasks, and versatile developer use cases",
+      "tags": ["tools", "thinking"]
+    },
+    {
+      "name": "olmo-3",
+      "variants": ["olmo-3:7b", "olmo-3:32b"],
+      "type": "llm",
+      "description": "Olmo is a series of Open language models designed to enable the science of language models",
+      "tags": ["tools"]
+    },
+    {
+      "name": "olmo-3.1",
+      "variants": ["olmo-3.1:32b"],
+      "type": "llm",
+      "description": "Olmo is a series of Open language models designed to enable the science of language models",
+      "tags": ["tools"]
+    }
+  ]
+}
+

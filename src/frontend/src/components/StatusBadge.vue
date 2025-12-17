@@ -100,5 +100,15 @@ const props = defineProps({
   color: #1e40af;
   animation: pulse 2s var(--ease-in-out) infinite;
 }
+
+.status-available {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  color: #065f46;
+}
+
+.status-not_available {
+  background: #fee2e2;
+  color: #991b1b;
+}
 </style>
 

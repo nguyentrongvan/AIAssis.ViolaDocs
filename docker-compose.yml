@@ -95,6 +95,9 @@ services:
       MINIO_SECRET_KEY: minioadmin123
       MINIO_SECURE: "false"
       MINIO_BUCKET: documents
+      # Ollama - Use Docker service name
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_EMBEDDING_MODEL: nomic-embed-text:latest
       # Worker config
       OCR_WORKER_POLL_INTERVAL: 2
       OCR_WORKER_MAX_CONCURRENT: 2

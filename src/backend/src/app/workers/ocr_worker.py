@@ -168,9 +168,17 @@ async def process_embedding_job(job_id: int):
             
             embedding_service = get_embedding_service()
             if not embedding_service or not embedding_service.is_available():
+                diagnostic = ""
+                if embedding_service:
+                    diagnostic = embedding_service.get_availability_diagnostic()
+                else:
+                    diagnostic = (
+                        "Embedding service could not be initialized. "
+                        f"Ollama base URL: {settings.ollama_base_url}, "
+                        f"Model: {settings.ollama_embedding_model}"
+                    )
                 raise ValueError(
-                    "Embedding provider not configured or model not available. "
-                    "Please configure Ollama and ensure the embedding model is pulled."
+                    f"Embedding provider not configured or model not available. {diagnostic}"
                 )
             
             # Get text from OCR result or document

@@ -193,6 +193,17 @@ export const settingsAPI = {
     get: () => api.get('/settings/llm'),
     update: (data) => api.post('/settings/llm', data)
   },
+  ollama: {
+    models: {
+      list: () => api.get('/settings/ollama/models'),
+      pull: (modelName) => api.post('/settings/ollama/models/pull', { model_name: modelName }),
+      test: (modelName, modelType, testInput) => api.post('/settings/ollama/models/test', {
+        model_name: modelName,
+        model_type: modelType,
+        test_input: testInput
+      })
+    }
+  },
   ocr: {
     get: () => api.get('/settings/ocr'),
     update: (data) => api.post('/settings/ocr', data)

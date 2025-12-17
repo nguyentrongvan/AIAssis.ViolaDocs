@@ -3,6 +3,11 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+import httpx
+import time
+import json
+import os
+from pathlib import Path
 
 from ..db import get_session
 from ..dependencies import get_current_admin_user, get_current_user, require_permission_or_staff
@@ -746,3 +751,397 @@ async def update_purge_grace_period(
         "days": payload.days,
         "message": "Purge grace period updated successfully"
     })
+
+
+# Ollama Models Management
+class OllamaModelPullRequest(BaseModel):
+    model_name: str
+
+
+class OllamaModelTestRequest(BaseModel):
+    model_name: str
+    model_type: str  # "llm" or "embedding"
+    test_input: Optional[str] = None
+
+
+def _load_library_models() -> Dict:
+    """Load curated library models from JSON file"""
+    try:
+        # Get the path to the data directory
+        # settings.py is in routers/, so we need to go up one level to app/ then into data/
+        current_dir = Path(__file__).parent.parent
+        json_path = current_dir / "data" / "ollama_library_models.json"
+        
+        if not json_path.exists():
+            print(f"Warning: Library models file not found at {json_path}")
+            return {"models": []}
+        
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            # Debug: Print loaded models count
+            models_count = len(data.get("models", []))
+            print(f"Loaded {models_count} library models from {json_path}")
+            return data
+    except Exception as e:
+        print(f"Error loading library models: {e}")
+        return {"models": []}
+
+
+def _find_model_in_library(model_name: str, library_models: List[Dict]) -> Optional[Dict]:
+    """Find model info in library by name"""
+    for lib_model in library_models:
+        # Check base name
+        if lib_model.get("name") == model_name:
+            return lib_model
+        # Check variants
+        variants = lib_model.get("variants", [])
+        for variant in variants:
+            if variant == model_name:
+                return lib_model
+        # Check if model_name starts with base name (e.g., "llama3.2:1b" starts with "llama3.2")
+        base_name = lib_model.get("name", "")
+        if model_name.startswith(base_name + ":") or model_name == base_name:
+            return lib_model
+    return None
+
+
+@router.get("/ollama/models")
+async def get_ollama_models(
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get list of Ollama models from Ollama API and library."""
+    from ..config import settings as config_settings, get_ollama_base_url_from_db
+    
+    try:
+        # Get Ollama base URL from DB or config
+        ollama_base_url = await get_ollama_base_url_from_db()
+        
+        if not ollama_base_url:
+            return error_response(
+                "Ollama base URL not configured",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get currently configured models
+        ollama_llm_model = await SettingsService.get_setting(
+            "llm.ollama.llm_model", 
+            config_settings.ollama_llm_model, 
+            session
+        )
+        ollama_embedding_model = await SettingsService.get_setting(
+            "llm.ollama.embedding_model", 
+            config_settings.ollama_embedding_model, 
+            session
+        )
+        
+        # Load library models
+        library_data = _load_library_models()
+        library_models = library_data.get("models", [])
+        
+        # Debug: Check for specific models in library
+        target_models = ["qwen2.5:0.5b", "qwen2.5:1.5b", "mistral:latest", "phi3:latest"]
+        print(f"Checking library for target models:")
+        for lib_model in library_models:
+            variants = lib_model.get("variants", [])
+            for target in target_models:
+                if target in variants:
+                    print(f"  Found {target} in {lib_model.get('name')} variants")
+        
+        # Call Ollama API to get downloaded models
+        downloaded_models = []
+        ollama_connected = False
+        
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{ollama_base_url}/api/tags")
+                
+                if response.status_code == 200:
+                    ollama_connected = True
+                    data = response.json()
+                    downloaded_models = data.get("models", [])
+        except (httpx.ConnectError, httpx.TimeoutException):
+            ollama_connected = False
+        except Exception as e:
+            print(f"Error fetching downloaded models: {e}")
+            ollama_connected = False
+        
+        # Create a set of downloaded model names for quick lookup
+        downloaded_names = set()
+        downloaded_models_dict = {}
+        for model_data in downloaded_models:
+            model_name = model_data.get("name") or model_data.get("model", "")
+            downloaded_names.add(model_name)
+            downloaded_models_dict[model_name] = model_data
+        
+        # Merge models: start with downloaded models
+        merged_models = []
+        
+        # Add downloaded models with library info
+        for model_name in downloaded_names:
+            model_data = downloaded_models_dict[model_name]
+            library_info = _find_model_in_library(model_name, library_models)
+            
+            merged_models.append({
+                "name": model_name,
+                "size": model_data.get("size", 0),
+                "modified_at": model_data.get("modified_at", ""),
+                "downloaded": True,
+                "available": True if library_info else False,
+                "type": library_info.get("type", "llm") if library_info else "llm",
+                "description": library_info.get("description", "") if library_info else "",
+                "tags": library_info.get("tags", []) if library_info else [],
+                "is_current_llm": model_name == ollama_llm_model,
+                "is_current_embedding": model_name == ollama_embedding_model
+            })
+        
+        # Add library models that are not downloaded
+        added_variants_count = 0
+        for lib_model in library_models:
+            variants = lib_model.get("variants", [lib_model.get("name")])
+            for variant in variants:
+                if variant not in downloaded_names:
+                    merged_models.append({
+                        "name": variant,
+                        "size": 0,
+                        "modified_at": None,
+                        "downloaded": False,
+                        "available": True,
+                        "type": lib_model.get("type", "llm"),
+                        "description": lib_model.get("description", ""),
+                        "tags": lib_model.get("tags", []),
+                        "is_current_llm": variant == ollama_llm_model,
+                        "is_current_embedding": variant == ollama_embedding_model
+                    })
+                    added_variants_count += 1
+                    # Debug: Log specific models being added
+                    if variant in ["qwen2.5:0.5b", "qwen2.5:1.5b", "mistral:latest", "phi3:latest"]:
+                        print(f"  Added library model: {variant} (type: {lib_model.get('type', 'llm')})")
+        
+        print(f"Added {added_variants_count} library models (not downloaded) to merged list")
+        
+        # Debug: Print some info about merged models
+        print(f"Total merged models: {len(merged_models)}")
+        print(f"Downloaded models: {len([m for m in merged_models if m['downloaded']])}")
+        print(f"Library models (not downloaded): {len([m for m in merged_models if not m['downloaded']])}")
+        # Check for specific models
+        target_models = ["qwen2.5:0.5b", "qwen2.5:1.5b", "mistral:latest", "phi3:latest"]
+        for target in target_models:
+            found = any(m["name"] == target for m in merged_models)
+            print(f"Model {target} in merged list: {found}")
+        
+        # Sort models: downloaded first, then by name
+        merged_models.sort(key=lambda x: (not x["downloaded"], x["name"]))
+        
+        return success_response({
+            "models": merged_models,
+            "ollama_connected": ollama_connected,
+            "ollama_base_url": ollama_base_url,
+            "current_llm_model": ollama_llm_model,
+            "current_embedding_model": ollama_embedding_model
+        })
+            
+    except Exception as e:
+        return error_response(
+            f"Error: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.post("/ollama/models/pull")
+async def pull_ollama_model(
+    payload: OllamaModelPullRequest,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Pull an Ollama model."""
+    from ..config import get_ollama_base_url_from_db
+    
+    try:
+        ollama_base_url = await get_ollama_base_url_from_db()
+        
+        if not ollama_base_url:
+            return error_response(
+                "Ollama base URL not configured",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Call Ollama API to pull model
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:  # 5 minutes timeout for pulling
+                response = await client.post(
+                    f"{ollama_base_url}/api/pull",
+                    json={"name": payload.model_name},
+                    timeout=300.0
+                )
+                
+                if response.status_code == 200:
+                    # Ollama returns streaming JSON, but we'll just check if it started
+                    return success_response({
+                        "model_name": payload.model_name,
+                        "status": "pulling",
+                        "message": f"Started pulling model {payload.model_name}. This may take several minutes."
+                    })
+                else:
+                    return error_response(
+                        f"Failed to pull model: HTTP {response.status_code}",
+                        status_code=status.HTTP_502_BAD_GATEWAY
+                    )
+                    
+        except httpx.ConnectError:
+            return error_response(
+                f"Cannot connect to Ollama at {ollama_base_url}",
+                status_code=status.HTTP_502_BAD_GATEWAY
+            )
+        except httpx.TimeoutException:
+            return error_response(
+                "Pull operation timed out. The model may still be downloading in the background.",
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT
+            )
+        except Exception as e:
+            return error_response(
+                f"Error pulling model: {str(e)}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
+    except Exception as e:
+        return error_response(
+            f"Error: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.post("/ollama/models/test")
+async def test_ollama_model(
+    payload: OllamaModelTestRequest,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Test an Ollama model (LLM or Embedding) using native API."""
+    from ..config import get_ollama_base_url_from_db
+    import httpx
+    
+    try:
+        ollama_base_url = await get_ollama_base_url_from_db()
+        
+        if not ollama_base_url:
+            return error_response(
+                "Ollama base URL not configured",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if payload.model_type not in ["llm", "embedding"]:
+            return error_response(
+                "model_type must be 'llm' or 'embedding'",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Set default test input if not provided
+        test_input = payload.test_input
+        if not test_input:
+            test_input = "Hello" if payload.model_type == "llm" else "test"
+        
+        start_time = time.time()
+        base_url_clean = ollama_base_url.rstrip('/')
+        model_name = payload.model_name
+        
+        try:
+            # Use httpx.AsyncClient for async endpoint
+            async with httpx.AsyncClient(timeout=60.0, base_url=base_url_clean) as client:
+                if payload.model_type == "llm":
+                    # Test LLM model using Ollama native API
+                    response = await client.post(
+                        "/api/generate",
+                        json={
+                            "model": model_name,
+                            "prompt": test_input,
+                            "stream": False
+                        }
+                    )
+                    
+                    if response.status_code != 200:
+                        if response.status_code == 404:
+                            return error_response(
+                                f"Model '{model_name}' not found. Please ensure the model is pulled: ollama pull {model_name}",
+                                status_code=status.HTTP_404_NOT_FOUND
+                            )
+                        return error_response(
+                            f"Ollama API error: HTTP {response.status_code} - {response.text}",
+                            status_code=status.HTTP_502_BAD_GATEWAY
+                        )
+                    
+                    data = response.json()
+                    result_text = data.get("response", "")
+                    duration_ms = int((time.time() - start_time) * 1000)
+                    
+                    return success_response({
+                        "model_name": model_name,
+                        "model_type": "llm",
+                        "test_input": test_input,
+                        "result": {
+                            "response": result_text,
+                            "token_usage": {
+                                "prompt_tokens": data.get("prompt_eval_count", 0),
+                                "completion_tokens": data.get("eval_count", 0),
+                                "total_tokens": data.get("prompt_eval_count", 0) + data.get("eval_count", 0)
+                            }
+                        },
+                        "success": True,
+                        "duration_ms": duration_ms
+                    })
+                    
+                else:  # embedding
+                    # Test Embedding model using Ollama native API
+                    response = await client.post(
+                        "/api/embeddings",
+                        json={
+                            "model": model_name,
+                            "prompt": test_input
+                        }
+                    )
+                    
+                    if response.status_code != 200:
+                        if response.status_code == 404:
+                            return error_response(
+                                f"Model '{model_name}' not found. Please ensure the model is pulled: ollama pull {model_name}",
+                                status_code=status.HTTP_404_NOT_FOUND
+                            )
+                        return error_response(
+                            f"Ollama API error: HTTP {response.status_code} - {response.text}",
+                            status_code=status.HTTP_502_BAD_GATEWAY
+                        )
+                    
+                    data = response.json()
+                    embedding = data.get("embedding", [])
+                    duration_ms = int((time.time() - start_time) * 1000)
+                    
+                    return success_response({
+                        "model_name": model_name,
+                        "model_type": "embedding",
+                        "test_input": test_input,
+                        "result": {
+                            "embedding_dimension": len(embedding),
+                            "embedding_sample": embedding[:10] if len(embedding) > 10 else embedding
+                        },
+                        "success": True,
+                        "duration_ms": duration_ms
+                    })
+                    
+        except httpx.RequestError as e:
+            return error_response(
+                f"Error connecting to Ollama: {str(e)}",
+                status_code=status.HTTP_502_BAD_GATEWAY
+            )
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            return error_response(
+                f"Error testing model '{model_name}': {str(e)}\nDetails: {error_details}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
+    except Exception as e:
+        return error_response(
+            f"Error: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

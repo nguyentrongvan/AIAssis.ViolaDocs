@@ -53,129 +53,109 @@ class EmbeddingProvider:
 
 
 class OllamaEmbeddingProvider(EmbeddingProvider):
-    """Ollama embedding provider using OpenAI-compatible API"""
+    """Ollama embedding provider using native API"""
     
     def __init__(self, base_url: str, api_key: Optional[str] = None, model: str = "nomic-text-embedding"):
-        self.base_url = base_url
+        self.base_url = base_url.rstrip('/')
         self.api_key = api_key
         self.model = model
-        self.client = None
+        self.http_client = None
         self.dimension = 1536  # Default for nomic-text-embedding (actual dimension)
         self._init_client()
         # Try to detect actual dimension from model
         self._detect_dimension()
     
     def _init_client(self):
-        """Initialize OpenAI client with Ollama base URL"""
+        """Initialize HTTP client for Ollama native API"""
         try:
-            import openai
             import httpx
-            
-            # The proxies error comes from httpx.Client being initialized with proxies parameter
-            # We need to create httpx client WITHOUT base_url (OpenAI will handle that)
-            # and explicitly exclude proxies parameter
-            
-            # Create httpx client without proxies
-            # Don't pass base_url to httpx - OpenAI client will handle it
-            http_client = httpx.Client(
+            self.http_client = httpx.Client(
                 timeout=60.0,
-                # Explicitly don't include proxies or base_url here
+                base_url=self.base_url
             )
-            
-            # Now initialize OpenAI client with the custom http_client
-            # This should prevent proxies from being passed
-            try:
-                self.client = openai.OpenAI(
-                    base_url=self.base_url,
-                    api_key=self.api_key or "ollama",
-                    http_client=http_client
-                )
-            except (TypeError, AttributeError) as e:
-                # If http_client parameter not supported in this version
-                if "http_client" in str(e) or "unexpected keyword" in str(e):
-                    # Fallback: try without http_client
-                    try:
-                        self.client = openai.OpenAI(
-                            base_url=self.base_url,
-                            api_key=self.api_key or "ollama"
-                        )
-                    except TypeError as e2:
-                        if "proxies" in str(e2):
-                            # Last resort: try with just base_url
-                            self.client = openai.OpenAI(base_url=self.base_url)
-                        else:
-                            raise e2
-                elif "proxies" in str(e):
-                    # If proxies error still occurs, try without http_client and api_key
-                    self.client = openai.OpenAI(base_url=self.base_url)
-                else:
-                    raise
         except ImportError:
-            print("openai or httpx not installed")
-            self.client = None
+            print("httpx not installed")
+            self.http_client = None
         except Exception as e:
-            error_msg = str(e)
-            print(f"Failed to initialize Ollama embedding client: {error_msg}")
-            # Try one more time with absolute minimal parameters
-            if "proxies" in error_msg:
-                try:
-                    import openai
-                    # Use inspect to only pass valid parameters
-                    import inspect
-                    sig = inspect.signature(openai.OpenAI.__init__)
-                    params = {}
-                    # Only add parameters that exist and are not proxies
-                    for param_name, param in sig.parameters.items():
-                        if param_name == 'base_url':
-                            params['base_url'] = self.base_url
-                        elif param_name == 'api_key' and (self.api_key or "ollama"):
-                            params['api_key'] = self.api_key or "ollama"
-                        # Skip proxies, http_client, and other optional params
-                    self.client = openai.OpenAI(**params)
-                    print("Successfully initialized with minimal parameters")
-                except Exception as e2:
-                    print(f"All initialization attempts failed. Last error: {e2}")
-                    import traceback
-                    traceback.print_exc()
-                    self.client = None
-            else:
-                import traceback
-                traceback.print_exc()
-                self.client = None
+            print(f"Failed to initialize Ollama embedding HTTP client: {e}")
+            self.http_client = None
     
     def is_model_available(self) -> bool:
         """Check if the embedding model is available"""
-        if not self.client:
+        if not self.http_client:
             return False
-        try:
-            # Make a minimal test call to check if model exists
-            test_response = self.client.embeddings.create(
-                model=self.model,
-                input="test"
-            )
-            if test_response.data and test_response.data[0].embedding:
-                return True
-            return False
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "404" in error_msg or "not found" in error_msg:
-                return False
-            # For other errors, assume model might be available but there's a connection issue
-            return False
+        
+        # Try the configured model name first
+        model_names_to_try = [self.model]
+        
+        # If model doesn't have :latest, also try with :latest
+        if ":latest" not in self.model:
+            model_names_to_try.append(f"{self.model}:latest")
+        # If model has :latest, also try without it
+        elif self.model.endswith(":latest"):
+            model_names_to_try.append(self.model[:-7])  # Remove :latest
+        
+        for model_name in model_names_to_try:
+            try:
+                # Make a minimal test call to check if model exists using native API
+                response = self.http_client.post(
+                    "/api/embeddings",
+                    json={
+                        "model": model_name,
+                        "prompt": "test"
+                    }
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    embedding = data.get("embedding", [])
+                    if embedding:
+                        # If we found a working model name that's different, update it
+                        if model_name != self.model:
+                            print(f"Info: Using model name '{model_name}' instead of '{self.model}'")
+                            self.model = model_name
+                        return True
+                elif response.status_code == 404:
+                    # Try next model name
+                    continue
+            except Exception as e:
+                error_msg = str(e).lower()
+                if "404" in error_msg or "not found" in error_msg:
+                    # Try next model name
+                    continue
+                # For connection errors, log but don't fail - might be temporary
+                if "connection" in error_msg or "timeout" in error_msg or "refused" in error_msg or "cannot connect" in error_msg:
+                    print(f"Warning: Could not check model availability (connection issue): {e}")
+                    return False
+                # For other errors, try next model name
+                continue
+        
+        # None of the model names worked
+        return False
     
     def _detect_dimension(self):
         """Detect actual embedding dimension by making a test call"""
-        if not self.client:
+        if not self.http_client:
             return
         try:
-            # Make a minimal test call to detect dimension
-            test_response = self.client.embeddings.create(
-                model=self.model,
-                input="test"
+            # Make a minimal test call to detect dimension using native API
+            response = self.http_client.post(
+                "/api/embeddings",
+                json={
+                    "model": self.model,
+                    "prompt": "test"
+                }
             )
-            if test_response.data and test_response.data[0].embedding:
-                self.dimension = len(test_response.data[0].embedding)
-                print(f"Detected Ollama embedding dimension: {self.dimension}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                embedding = data.get("embedding", [])
+                if embedding:
+                    self.dimension = len(embedding)
+                    print(f"Detected Ollama embedding dimension: {self.dimension}")
+            elif response.status_code == 404:
+                print(f"Ollama model '{self.model}' not available yet (404). Will use default dimension {self.dimension}.")
+                print(f"  Make sure Ollama is running and model is pulled: ollama pull {self.model}")
         except Exception as e:
             error_msg = str(e).lower()
             # Don't log 404 errors as errors - Ollama might not be ready or model not pulled yet
@@ -187,7 +167,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
     
     def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for text"""
-        if not self.client:
+        if not self.http_client:
             raise EmbeddingModelUnavailableError(
                 f"Ollama embedding client not initialized. "
                 f"Make sure Ollama is running at {self.base_url} and model '{self.model}' is available. "
@@ -204,14 +184,30 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
             if not text or not text.strip():
                 raise ValueError("Cannot generate embedding for empty text")
             
-            response = self.client.embeddings.create(
-                model=self.model,
-                input=text
+            # Call Ollama native API
+            response = self.http_client.post(
+                "/api/embeddings",
+                json={
+                    "model": self.model,
+                    "prompt": text
+                }
             )
-            embedding = response.data[0].embedding
+            
+            if response.status_code != 200:
+                if response.status_code == 404:
+                    raise EmbeddingModelUnavailableError(
+                        f"Ollama embedding model '{self.model}' is not available. "
+                        f"Make sure Ollama is running and model is pulled: ollama pull {self.model}"
+                    )
+                raise RuntimeError(f"Ollama API error: HTTP {response.status_code} - {response.text}")
+            
+            data = response.json()
+            embedding = data.get("embedding", [])
+            
             # Update dimension based on actual response
             if embedding:
                 self.dimension = len(embedding)
+            
             return embedding
         except EmbeddingModelUnavailableError:
             raise
@@ -226,7 +222,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
     
     def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for multiple texts"""
-        if not self.client:
+        if not self.http_client:
             raise EmbeddingModelUnavailableError(
                 f"Ollama embedding client not initialized. "
                 f"Make sure Ollama is running at {self.base_url} and model '{self.model}' is available. "
@@ -245,15 +241,39 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
             if not valid_texts or all(not t for t in valid_texts):
                 raise ValueError("Cannot generate embeddings for empty text list")
             
-            response = self.client.embeddings.create(
-                model=self.model,
-                input=valid_texts
-            )
-            
-            embeddings = [item.embedding for item in response.data]
-            # Update dimension based on actual response
-            if embeddings and embeddings[0]:
-                self.dimension = len(embeddings[0])
+            # Ollama native API doesn't support batch, so call individually
+            embeddings = []
+            for text in valid_texts:
+                if not text or not text.strip():
+                    # Use zero vector for empty text
+                    embeddings.append([0.0] * self.dimension)
+                    continue
+                
+                response = self.http_client.post(
+                    "/api/embeddings",
+                    json={
+                        "model": self.model,
+                        "prompt": text
+                    }
+                )
+                
+                if response.status_code != 200:
+                    if response.status_code == 404:
+                        raise EmbeddingModelUnavailableError(
+                            f"Ollama embedding model '{self.model}' is not available. "
+                            f"Make sure Ollama is running and model is pulled: ollama pull {self.model}"
+                        )
+                    raise RuntimeError(f"Ollama API error: HTTP {response.status_code} - {response.text}")
+                
+                data = response.json()
+                embedding = data.get("embedding", [])
+                if embedding:
+                    embeddings.append(embedding)
+                    # Update dimension based on actual response
+                    if len(embedding) != self.dimension:
+                        self.dimension = len(embedding)
+                else:
+                    embeddings.append([0.0] * self.dimension)
             
             return embeddings
         except EmbeddingModelUnavailableError:
@@ -478,18 +498,20 @@ class EmbeddingService:
                     api_key=settings.ollama_api_key if settings.ollama_api_key else None,
                     model=settings.ollama_embedding_model
                 )
-                # Verify client was initialized and model is available
-                if provider.client is not None:
-                    if provider.is_model_available():
-                        return provider
-                    else:
-                        print(f"Warning: Ollama embedding model '{settings.ollama_embedding_model}' is not available.")
-                        print(f"  Make sure Ollama is running and model is pulled: ollama pull {settings.ollama_embedding_model}")
-                        return None
+                # Verify client was initialized
+                if provider.http_client is not None:
+                    # Don't check model availability here - do it lazily when actually needed
+                    # This allows the service to be created even if Ollama is temporarily unavailable
+                    # The availability check will happen in is_available() or when generating embeddings
+                    print(f"Ollama embedding provider initialized: {settings.ollama_base_url}, model: {settings.ollama_embedding_model}")
+                    return provider
                 else:
-                    print("Ollama embedding provider client not initialized")
+                    print(f"Warning: Ollama embedding provider client not initialized for {settings.ollama_base_url}")
+                    return None
             except Exception as e:
                 print(f"Ollama embedding provider not available: {e}")
+                import traceback
+                traceback.print_exc()
         
         # No fallback - return None if Ollama is not available
         print("Warning: No embedding provider available. Please configure Ollama.")
@@ -518,6 +540,60 @@ class EmbeddingService:
         # For other providers, assume available if embedder exists
         return True
     
+    def get_availability_diagnostic(self) -> str:
+        """Get detailed diagnostic information about why embedding service is not available"""
+        if not self.embedder:
+            # Try to create a new provider to get diagnostic info
+            if not settings.ollama_base_url:
+                return (
+                    "Ollama base URL is not configured. "
+                    f"Please set OLLAMA_BASE_URL in your .env file (current: {settings.ollama_base_url}). "
+                    "Example: OLLAMA_BASE_URL=http://localhost:11434"
+                )
+            
+            try:
+                provider = OllamaEmbeddingProvider(
+                    base_url=settings.ollama_base_url,
+                    api_key=settings.ollama_api_key if settings.ollama_api_key else None,
+                    model=settings.ollama_embedding_model
+                )
+                
+                if provider.http_client is None:
+                    return (
+                        f"Failed to connect to Ollama at {settings.ollama_base_url}. "
+                        "Please ensure Ollama is running and accessible. "
+                        "Check: curl http://localhost:11434/api/tags"
+                    )
+                
+                if not provider.is_model_available():
+                    return (
+                        f"Ollama embedding model '{settings.ollama_embedding_model}' is not available. "
+                        f"Please pull the model: ollama pull {settings.ollama_embedding_model}. "
+                        f"Ollama base URL: {settings.ollama_base_url}"
+                    )
+                
+                return "Embedding provider should be available but is not initialized."
+            except Exception as e:
+                return (
+                    f"Error initializing Ollama embedding provider: {str(e)}. "
+                    f"Base URL: {settings.ollama_base_url}, Model: {settings.ollama_embedding_model}"
+                )
+        
+        if isinstance(self.embedder, OllamaEmbeddingProvider):
+            if self.embedder.http_client is None:
+                return (
+                    f"Ollama client not initialized. "
+                    f"Base URL: {self.embedder.base_url}, Model: {self.embedder.model}"
+                )
+            if not self.embedder.is_model_available():
+                return (
+                    f"Ollama embedding model '{self.embedder.model}' is not available. "
+                    f"Please ensure Ollama is running at {self.embedder.base_url} and pull the model: "
+                    f"ollama pull {self.embedder.model}"
+                )
+        
+        return "Unknown issue with embedding service availability."
+    
     def health_check(self) -> Dict[str, Any]:
         """Perform health check on embedding service"""
         status = {
@@ -530,7 +606,7 @@ class EmbeddingService:
         # Check embedder
         if self.embedder:
             if isinstance(self.embedder, OllamaEmbeddingProvider):
-                if self.embedder.client is None:
+                if self.embedder.http_client is None:
                     status["errors"].append("Ollama client not initialized")
                 elif not self.embedder.is_model_available():
                     status["errors"].append(

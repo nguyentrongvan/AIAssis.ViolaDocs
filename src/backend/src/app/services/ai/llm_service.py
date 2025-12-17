@@ -1,4 +1,5 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
+import httpx
 from ...config import settings
 from ...prompts import (
     CHATBOT_SYSTEM_PROMPT,
@@ -30,84 +31,106 @@ class LLMProvider:
 
 
 class OllamaLLMProvider(LLMProvider):
-    """Ollama LLM implementation using OpenAI-compatible API"""
+    """Ollama LLM implementation using native API"""
     
     def __init__(self, base_url: str, api_key: Optional[str] = None, model: str = "llama3.2"):
-        self.base_url = base_url
+        self.base_url = base_url.rstrip('/')
         self.api_key = api_key
         self.model = model
-        self.client = None
+        self.http_client = None
         self._init_client()
     
     def _init_client(self):
-        """Initialize OpenAI client with Ollama base URL"""
+        """Initialize HTTP client for Ollama native API"""
         try:
-            import openai
-            try:
-                # Try with explicit parameters
-                self.client = openai.OpenAI(
-                    base_url=self.base_url,
-                    api_key=self.api_key or "ollama"
-                )
-            except TypeError as e:
-                # Handle proxies error if it occurs
-                if "proxies" in str(e):
-                    try:
-                        # Try without api_key
-                        self.client = openai.OpenAI(base_url=self.base_url)
-                    except Exception as e2:
-                        print(f"Failed to initialize LLM client: {e2}")
-                        self.client = None
-                else:
-                    print(f"Failed to initialize LLM client: {e}")
-                    self.client = None
-        except ImportError:
-            print("openai not installed")
-            self.client = None
+            self.http_client = httpx.Client(
+                timeout=60.0,
+                base_url=self.base_url
+            )
         except Exception as e:
-            print(f"Failed to initialize Ollama LLM client: {e}")
-            self.client = None
+            print(f"Failed to initialize Ollama LLM HTTP client: {e}")
+            self.http_client = None
+    
+    def _messages_to_prompt(self, messages: List[Dict], system_prompt: Optional[str] = None) -> str:
+        """Convert OpenAI messages format to Ollama prompt string"""
+        parts = []
+        if system_prompt:
+            parts.append(f"System: {system_prompt}")
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                parts.append(f"System: {content}")
+            elif role == "user":
+                parts.append(f"User: {content}")
+            elif role == "assistant":
+                parts.append(f"Assistant: {content}")
+        return "\n\n".join(parts)
     
     def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        if not self.client:
+        if not self.http_client:
             return "Ollama LLM provider not available. Please check configuration."
         
         try:
-            messages = []
+            # Convert prompt and system_prompt to Ollama format
+            prompt_text = prompt
             if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": prompt})
+                prompt_text = f"System: {system_prompt}\n\nUser: {prompt}"
             
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages
+            # Call Ollama native API
+            response = self.http_client.post(
+                "/api/generate",
+                json={
+                    "model": self.model,
+                    "prompt": prompt_text,
+                    "stream": False
+                }
             )
-            return response.choices[0].message.content
+            
+            if response.status_code != 200:
+                return f"Error generating response: HTTP {response.status_code} - {response.text}"
+            
+            data = response.json()
+            return data.get("response", "")
+        except httpx.RequestError as e:
+            return f"Error connecting to Ollama: {str(e)}"
         except Exception as e:
             return f"Error generating response: {str(e)}"
     
     def generate_response_with_usage(self, prompt: str, system_prompt: Optional[str] = None) -> tuple[str, dict]:
         """Generate response and return token usage"""
-        if not self.client:
+        if not self.http_client:
             return "Ollama LLM provider not available. Please check configuration.", {"token_in": 0, "token_out": 0}
         
         try:
-            messages = []
+            # Convert prompt and system_prompt to Ollama format
+            prompt_text = prompt
             if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": prompt})
+                prompt_text = f"System: {system_prompt}\n\nUser: {prompt}"
             
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages
+            # Call Ollama native API
+            response = self.http_client.post(
+                "/api/generate",
+                json={
+                    "model": self.model,
+                    "prompt": prompt_text,
+                    "stream": False
+                }
             )
             
-            # Extract token usage from response
-            usage = response.usage
-            token_in = usage.prompt_tokens if usage else 0
-            token_out = usage.completion_tokens if usage else 0
+            if response.status_code != 200:
+                return f"Error generating response: HTTP {response.status_code} - {response.text}", {"token_in": 0, "token_out": 0}
             
-            return response.choices[0].message.content, {"token_in": token_in, "token_out": token_out}
+            data = response.json()
+            response_text = data.get("response", "")
+            
+            # Extract token usage from Ollama response
+            token_in = data.get("prompt_eval_count", 0)
+            token_out = data.get("eval_count", 0)
+            
+            return response_text, {"token_in": token_in, "token_out": token_out}
+        except httpx.RequestError as e:
+            return f"Error connecting to Ollama: {str(e)}", {"token_in": 0, "token_out": 0}
         except Exception as e:
             return f"Error generating response: {str(e)}", {"token_in": 0, "token_out": 0}
 

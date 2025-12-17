@@ -325,6 +325,246 @@
           
           <div v-else class="loading">Loading LLM settings...</div>
         </div>
+
+        <!-- Ollama Models Management Section -->
+        <div class="ollama-models-section">
+          <div class="section-header">
+            <h2>Ollama Models</h2>
+            <button @click="loadOllamaModels" class="btn-secondary" :disabled="loadingModels">
+              <RefreshCw :size="20" :class="{ 'spinning': loadingModels }" />
+              Refresh
+            </button>
+          </div>
+
+          <div v-if="!ollamaConnected" class="warning-box">
+            <AlertTriangle :size="20" />
+            <span>Cannot connect to Ollama. Please check your Ollama Base URL configuration.</span>
+          </div>
+
+          <div v-else-if="loadingModels" class="loading">Loading models...</div>
+          
+          <div v-else>
+            <!-- LLM Models Section -->
+            <div class="models-subsection">
+              <h3>LLM Models</h3>
+              <div class="models-list">
+                <div
+                  v-for="model in llmModels"
+                  :key="model.name"
+                  class="model-item"
+                  :class="{ 'model-current': model.is_current_llm }"
+                >
+                  <div class="model-header">
+                    <div class="model-info">
+                      <h4>
+                        {{ model.name }}
+                        <span v-if="model.is_current_llm" class="current-badge">Current</span>
+                      </h4>
+                      <div class="model-meta">
+                        <span v-if="model.size > 0">{{ formatSize(model.size) }}</span>
+                        <span v-if="model.modified_at">{{ formatDate(model.modified_at) }}</span>
+                        <span v-if="model.description" class="model-description">{{ model.description }}</span>
+                        <span v-if="model.tags && model.tags.length > 0" class="model-tags">
+                          <span v-for="tag in model.tags" :key="tag" class="tag">{{ tag }}</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div class="model-actions">
+                      <StatusBadge 
+                        :status="model.downloaded ? 'available' : (model.available ? 'pending' : 'not_available')" 
+                      />
+                      <span v-if="model.downloaded" class="status-text">Downloaded</span>
+                      <span v-else-if="model.available" class="status-text">Available</span>
+                      <span v-else class="status-text">Unknown</span>
+                      <div class="action-buttons">
+                        <button
+                          v-if="!model.downloaded && model.available"
+                          @click="pullModel(model.name)"
+                          class="btn-small btn-primary"
+                          :disabled="pullingModel === model.name"
+                        >
+                          <Download :size="14" />
+                          {{ pullingModel === model.name ? 'Downloading...' : 'Download' }}
+                        </button>
+                        <div v-if="model.downloaded" class="test-dropdown">
+                          <button
+                            @click.stop="showTestDropdown(model.name)"
+                            class="btn-small btn-secondary"
+                            :disabled="testingModel === model.name"
+                          >
+                            <TestTube :size="14" />
+                            Test
+                          </button>
+                          <div v-if="testDropdownOpen === model.name" class="dropdown-menu" @click.stop>
+                            <button @click="testModel(model.name, 'llm', true)" class="dropdown-item">
+                              Quick Test
+                            </button>
+                            <button @click="showCustomTest(model.name, 'llm')" class="dropdown-item">
+                              Custom Test
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Custom Test Input -->
+                  <div v-if="customTestModel === model.name && customTestType === 'llm'" class="custom-test-input">
+                    <input
+                      v-model="customTestInput"
+                      type="text"
+                      placeholder="Enter test prompt..."
+                      @keyup.enter="testModel(model.name, 'llm', false)"
+                    />
+                    <button @click="testModel(model.name, 'llm', false)" class="btn-small btn-primary">
+                      Run Test
+                    </button>
+                    <button @click="cancelCustomTest" class="btn-small btn-secondary">
+                      Cancel
+                    </button>
+                  </div>
+
+                  <!-- Test Result -->
+                  <div v-if="testResults[model.name]" class="test-result">
+                    <div class="test-result-header" @click="toggleTestResult(model.name)">
+                      <span>Test Result</span>
+                      <span>{{ testResults[model.name].success ? '✓' : '✗' }}</span>
+                    </div>
+                    <div v-if="expandedTestResults[model.name]" class="test-result-content">
+                      <div v-if="testResults[model.name].success">
+                        <div v-if="testResults[model.name].result.response" class="test-response">
+                          <strong>Response:</strong>
+                          <pre>{{ testResults[model.name].result.response }}</pre>
+                        </div>
+                        <div v-if="testResults[model.name].result.token_usage" class="test-meta">
+                          <span>Duration: {{ testResults[model.name].duration_ms }}ms</span>
+                          <span>Tokens: {{ testResults[model.name].result.token_usage.total_tokens }}</span>
+                        </div>
+                      </div>
+                      <div v-else class="test-error">
+                        {{ testResults[model.name].error || 'Test failed' }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="llmModels.length === 0" class="empty-state">
+                  No LLM models found
+                </div>
+              </div>
+            </div>
+
+            <!-- Embedding Models Section -->
+            <div class="models-subsection">
+              <h3>Embedding Models</h3>
+              <div class="models-list">
+                <div
+                  v-for="model in embeddingModels"
+                  :key="model.name"
+                  class="model-item"
+                  :class="{ 'model-current': model.is_current_embedding }"
+                >
+                  <div class="model-header">
+                    <div class="model-info">
+                      <h4>
+                        {{ model.name }}
+                        <span v-if="model.is_current_embedding" class="current-badge">Current</span>
+                      </h4>
+                      <div class="model-meta">
+                        <span v-if="model.size > 0">{{ formatSize(model.size) }}</span>
+                        <span v-if="model.modified_at">{{ formatDate(model.modified_at) }}</span>
+                        <span v-if="model.description" class="model-description">{{ model.description }}</span>
+                        <span v-if="model.tags && model.tags.length > 0" class="model-tags">
+                          <span v-for="tag in model.tags" :key="tag" class="tag">{{ tag }}</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div class="model-actions">
+                      <StatusBadge 
+                        :status="model.downloaded ? 'available' : (model.available ? 'pending' : 'not_available')" 
+                      />
+                      <span v-if="model.downloaded" class="status-text">Downloaded</span>
+                      <span v-else-if="model.available" class="status-text">Available</span>
+                      <span v-else class="status-text">Unknown</span>
+                      <div class="action-buttons">
+                        <button
+                          v-if="!model.downloaded && model.available"
+                          @click="pullModel(model.name)"
+                          class="btn-small btn-primary"
+                          :disabled="pullingModel === model.name"
+                        >
+                          <Download :size="14" />
+                          {{ pullingModel === model.name ? 'Downloading...' : 'Download' }}
+                        </button>
+                        <div v-if="model.downloaded" class="test-dropdown">
+                          <button
+                            @click.stop="showTestDropdown(model.name)"
+                            class="btn-small btn-secondary"
+                            :disabled="testingModel === model.name"
+                          >
+                            <TestTube :size="14" />
+                            Test
+                          </button>
+                          <div v-if="testDropdownOpen === model.name" class="dropdown-menu" @click.stop>
+                            <button @click="testModel(model.name, 'embedding', true)" class="dropdown-item">
+                              Quick Test
+                            </button>
+                            <button @click="showCustomTest(model.name, 'embedding')" class="dropdown-item">
+                              Custom Test
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Custom Test Input -->
+                  <div v-if="customTestModel === model.name && customTestType === 'embedding'" class="custom-test-input">
+                    <input
+                      v-model="customTestInput"
+                      type="text"
+                      placeholder="Enter test text..."
+                      @keyup.enter="testModel(model.name, 'embedding', false)"
+                    />
+                    <button @click="testModel(model.name, 'embedding', false)" class="btn-small btn-primary">
+                      Run Test
+                    </button>
+                    <button @click="cancelCustomTest" class="btn-small btn-secondary">
+                      Cancel
+                    </button>
+                  </div>
+
+                  <!-- Test Result -->
+                  <div v-if="testResults[model.name]" class="test-result">
+                    <div class="test-result-header" @click="toggleTestResult(model.name)">
+                      <span>Test Result</span>
+                      <span>{{ testResults[model.name].success ? '✓' : '✗' }}</span>
+                    </div>
+                    <div v-if="expandedTestResults[model.name]" class="test-result-content">
+                      <div v-if="testResults[model.name].success">
+                        <div v-if="testResults[model.name].result.embedding_dimension" class="test-response">
+                          <strong>Dimension:</strong> {{ testResults[model.name].result.embedding_dimension }}
+                        </div>
+                        <div v-if="testResults[model.name].result.embedding_sample" class="test-response">
+                          <strong>Sample (first 10 values):</strong>
+                          <pre>{{ JSON.stringify(testResults[model.name].result.embedding_sample, null, 2) }}</pre>
+                        </div>
+                        <div class="test-meta">
+                          <span>Duration: {{ testResults[model.name].duration_ms }}ms</span>
+                        </div>
+                      </div>
+                      <div v-else class="test-error">
+                        {{ testResults[model.name].error || 'Test failed' }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="embeddingModels.length === 0" class="empty-state">
+                  No Embedding models found
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Chatbot Policies Tab -->
@@ -482,17 +722,59 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useSettingsStore } from '../../store/settings'
 import { useGroupsStore } from '../../store/groups'
 import { settingsAPI } from '../../services/api'
 import { Modal, StatusBadge } from '../../components'
-import { Plus, Edit, Trash2, Activity, Save, RefreshCw, AlertTriangle } from 'lucide-vue-next'
+import { Plus, Edit, Trash2, Activity, Save, RefreshCw, AlertTriangle, Download, TestTube } from 'lucide-vue-next'
 
 const settingsStore = useSettingsStore()
 const groupsStore = useGroupsStore()
 
 const activeTab = ref('retention')
+
+// Watch for tab changes to load models
+watch(activeTab, async (newTab) => {
+  if (newTab === 'llm') {
+    await loadOllamaModels()
+  }
+})
+
+// Computed properties for filtering models
+const llmModels = computed(() => {
+  return ollamaModels.value.filter(model => {
+    // Filter for LLM models (not embedding models)
+    // Use type field if available, otherwise fallback to name-based filtering
+    if (model.type !== undefined) {
+      return model.type === 'llm'
+    }
+    // Fallback: Filter by name (for backward compatibility)
+    const name = model.name.toLowerCase()
+    return !name.includes('embed') && !name.includes('nomic-embed')
+  })
+})
+
+const embeddingModels = computed(() => {
+  return ollamaModels.value.filter(model => {
+    // Filter for embedding models
+    // Use type field if available, otherwise fallback to name-based filtering
+    if (model.type !== undefined) {
+      return model.type === 'embedding'
+    }
+    // Fallback: Filter by name (for backward compatibility)
+    const name = model.name.toLowerCase()
+    return name.includes('embed') || name.includes('nomic-embed')
+  })
+})
+
+// Close dropdown when clicking outside
+const handleClickOutside = (event) => {
+  if (!event.target.closest('.test-dropdown')) {
+    testDropdownOpen.value = null
+  }
+}
+
 const retentionPolicies = ref([])
 const providers = ref(null)
 const chatbotPolicies = ref([])
@@ -506,6 +788,19 @@ const llmForm = ref({
   ollama_embedding_model: ''
 })
 const savingLLM = ref(false)
+
+// Ollama Models Management
+const ollamaModels = ref([])
+const loadingModels = ref(false)
+const ollamaConnected = ref(true)
+const pullingModel = ref(null)
+const testingModel = ref(null)
+const testDropdownOpen = ref(null)
+const customTestModel = ref(null)
+const customTestType = ref(null)
+const customTestInput = ref('')
+const testResults = ref({})
+const expandedTestResults = ref({})
 const ocrSettings = ref(null)
 
 const ocrForm = ref({
@@ -550,6 +845,7 @@ const retentionForm = ref({
 })
 
 onMounted(async () => {
+  document.addEventListener('click', handleClickOutside)
   await loadRetentionPolicies()
   await loadProviders()
   await loadChatbotPolicies()
@@ -557,6 +853,14 @@ onMounted(async () => {
   await loadLLMSettings()
   await loadOCRSettings()
   await loadPurgeGracePeriod()
+  // Load Ollama models when LLM tab is active
+  if (activeTab.value === 'llm') {
+    await loadOllamaModels()
+  }
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 
 const loadRetentionPolicies = async () => {
@@ -917,6 +1221,133 @@ const savePurgeGracePeriod = async () => {
   } finally {
     savingPurgeGracePeriod.value = false
   }
+}
+
+// Ollama Models Management Functions
+const loadOllamaModels = async () => {
+  loadingModels.value = true
+  try {
+    const res = await settingsAPI.ollama.models.list()
+    if (res.is_success) {
+      ollamaModels.value = res.data.models || []
+      ollamaConnected.value = res.data.ollama_connected !== false
+    } else {
+      ollamaConnected.value = false
+      if (window.$toast) {
+        window.$toast.show('Failed to load Ollama models', 'error')
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load Ollama models', e)
+    ollamaConnected.value = false
+    if (window.$toast) {
+      window.$toast.show('Failed to load Ollama models', 'error')
+    }
+  } finally {
+    loadingModels.value = false
+  }
+}
+
+const pullModel = async (modelName) => {
+  pullingModel.value = modelName
+  try {
+    const res = await settingsAPI.ollama.models.pull(modelName)
+    if (res.is_success) {
+      if (window.$toast) {
+        window.$toast.show(`Started pulling ${modelName}. This may take several minutes.`, 'success')
+      }
+      // Refresh models list after a delay
+      setTimeout(async () => {
+        await loadOllamaModels()
+      }, 2000)
+    } else {
+      if (window.$toast) {
+        window.$toast.show(res.message || `Failed to pull ${modelName}`, 'error')
+      }
+    }
+  } catch (e) {
+    console.error(`Failed to pull model ${modelName}`, e)
+    const errorMsg = e.response?.data?.message || e.message || `Failed to pull ${modelName}`
+    if (window.$toast) {
+      window.$toast.show(errorMsg, 'error')
+    }
+  } finally {
+    pullingModel.value = null
+  }
+}
+
+const showTestDropdown = (modelName) => {
+  testDropdownOpen.value = testDropdownOpen.value === modelName ? null : modelName
+}
+
+const showCustomTest = (modelName, modelType) => {
+  customTestModel.value = modelName
+  customTestType.value = modelType
+  customTestInput.value = ''
+  testDropdownOpen.value = null
+}
+
+const cancelCustomTest = () => {
+  customTestModel.value = null
+  customTestType.value = null
+  customTestInput.value = ''
+}
+
+const testModel = async (modelName, modelType, isQuickTest) => {
+  testingModel.value = modelName
+  cancelCustomTest()
+  
+  try {
+    const testInput = isQuickTest ? null : customTestInput.value
+    const res = await settingsAPI.ollama.models.test(modelName, modelType, testInput)
+    
+    if (res.is_success) {
+      testResults.value[modelName] = {
+        success: true,
+        result: res.data.result,
+        duration_ms: res.data.duration_ms,
+        test_input: res.data.test_input
+      }
+      expandedTestResults.value[modelName] = true
+    } else {
+      testResults.value[modelName] = {
+        success: false,
+        error: res.message || 'Test failed'
+      }
+      expandedTestResults.value[modelName] = true
+    }
+  } catch (e) {
+    console.error(`Failed to test model ${modelName}`, e)
+    const errorMsg = e.response?.data?.message || e.message || `Failed to test ${modelName}`
+    testResults.value[modelName] = {
+      success: false,
+      error: errorMsg
+    }
+    expandedTestResults.value[modelName] = true
+    if (window.$toast) {
+      window.$toast.show(errorMsg, 'error')
+    }
+  } finally {
+    testingModel.value = null
+  }
+}
+
+const toggleTestResult = (modelName) => {
+  expandedTestResults.value[modelName] = !expandedTestResults.value[modelName]
+}
+
+const formatSize = (bytes) => {
+  if (!bytes) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
+const formatDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.toLocaleDateString() + ' ' + date.toLocaleTimeString()
 }
 </script>
 
@@ -1491,5 +1922,247 @@ const savePurgeGracePeriod = async () => {
 .deletion-settings-section h2 {
   margin: 0 0 1.5rem 0;
   color: var(--primary);
+}
+
+/* Ollama Models Section */
+.ollama-models-section {
+  margin-top: 3rem;
+  padding: 1.5rem;
+  background: var(--bg-light);
+  border-radius: 8px;
+  border: 1px solid #eee;
+}
+
+.models-subsection {
+  margin-bottom: 2rem;
+}
+
+.models-subsection h3 {
+  margin: 0 0 1rem 0;
+  color: var(--primary);
+  font-size: 1.2rem;
+}
+
+.models-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.model-item {
+  background: white;
+  padding: 1rem;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  transition: all 0.2s;
+}
+
+.model-item.model-current {
+  border-left: 4px solid var(--primary);
+  background: #f8f9ff;
+}
+
+.model-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.model-info h4 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.current-badge {
+  background: var(--primary);
+  color: white;
+  padding: 0.2rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.model-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: #666;
+  align-items: center;
+}
+
+.model-description {
+  font-style: italic;
+  color: #888;
+}
+
+.model-tags {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.model-tags .tag {
+  background: #e5e7eb;
+  color: #374151;
+  padding: 0.2rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.model-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.status-text {
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 0.5rem;
+  position: relative;
+}
+
+.test-dropdown {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.25rem;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  min-width: 150px;
+}
+
+.dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.dropdown-item:hover {
+  background: #f5f5f5;
+}
+
+.custom-test-input {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.custom-test-input input {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.test-result {
+  margin-top: 1rem;
+  border-top: 1px solid #eee;
+  padding-top: 1rem;
+}
+
+.test-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.test-result-header:hover {
+  background: #e9ecef;
+}
+
+.test-result-content {
+  margin-top: 0.5rem;
+  padding: 1rem;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #eee;
+}
+
+.test-response {
+  margin-bottom: 1rem;
+}
+
+.test-response pre {
+  background: #f8f9fa;
+  padding: 0.75rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.test-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: #666;
+  margin-top: 0.5rem;
+}
+
+.test-error {
+  color: #dc3545;
+  padding: 0.5rem;
+  background: #fff5f5;
+  border-radius: 4px;
+}
+
+.warning-box {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  color: #856404;
+  margin-bottom: 1rem;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>
