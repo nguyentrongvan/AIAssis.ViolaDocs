@@ -86,7 +86,7 @@ const goToPage = (newPage) => {
   padding: 0.5rem;
   border: 1px solid #ddd;
   background: white;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -114,7 +114,7 @@ const goToPage = (newPage) => {
   padding: 0.5rem 0.75rem;
   border: 1px solid #ddd;
   background: white;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.2s;
 }

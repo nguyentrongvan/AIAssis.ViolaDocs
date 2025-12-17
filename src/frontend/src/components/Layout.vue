@@ -226,6 +226,8 @@ const handleLogout = () => {
   height: 48px;
   width: auto;
   flex-shrink: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 
 .logo-tagline {

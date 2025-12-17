@@ -700,7 +700,7 @@ const formatDate = (dateStr) => {
   background: var(--primary-light);
   color: var(--primary);
   padding: 0.25rem 0.75rem;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   font-size: 0.85rem;
 }
 
@@ -722,7 +722,7 @@ const formatDate = (dateStr) => {
 .session-item {
   padding: 0.75rem;
   background: var(--bg-light);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   margin-bottom: 0.5rem;
   cursor: pointer;
   transition: all 0.2s;
@@ -1050,7 +1050,7 @@ const formatDate = (dateStr) => {
   padding: 0.25rem 0.5rem;
   background: white;
   border: 1px solid #ddd;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1075,7 +1075,7 @@ const formatDate = (dateStr) => {
   padding: 0.5rem;
   background: #fef3c7;
   color: #92400e;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 0.85rem;
 }
 
@@ -1230,7 +1230,7 @@ const formatDate = (dateStr) => {
 .form-group select {
   padding: 0.75rem;
   border: 1px solid #ddd;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-family: inherit;
 }
 

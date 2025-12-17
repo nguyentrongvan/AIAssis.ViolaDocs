@@ -143,7 +143,7 @@ const handleLogin = async () => {
   height: 64px;
   width: auto;
   flex-shrink: 0;
-  border-radius: 20px;
+  border-radius: var(--radius-xl);
   filter: drop-shadow(0 0 20px rgba(0, 217, 255, 0.4));
   animation: float 3s var(--ease-in-out) infinite;
 }

@@ -709,7 +709,7 @@ const formatDate = (dateStr) => {
   align-items: center;
   padding: 1rem;
   background: var(--primary-light);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 .bulk-actions {
@@ -733,7 +733,7 @@ const formatDate = (dateStr) => {
   padding: 0.5rem;
   background: white;
   border: 1px solid #ddd;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
   align-items: center;
