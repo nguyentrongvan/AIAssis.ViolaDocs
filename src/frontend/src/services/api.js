@@ -62,7 +62,10 @@ export const foldersAPI = {
   get: (id) => api.get(`/folders/${id}`),
   create: (data) => api.post('/folders', data),
   update: (id, data) => api.patch(`/folders/${id}`, data),
-  delete: (id) => api.delete(`/folders/${id}`)
+  delete: (id) => api.delete(`/folders/${id}`),
+  share: (folderId, data) => api.post(`/folders/${folderId}/share`, data),
+  getShares: (folderId) => api.get(`/folders/${folderId}/shares`),
+  deleteShare: (folderId, shareId) => api.delete(`/folders/${folderId}/shares/${shareId}`)
 }
 
 export const documentsAPI = {

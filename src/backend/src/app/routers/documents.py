@@ -145,6 +145,7 @@ async def list_documents(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
+    folder_id: Optional[int] = Query(None),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
@@ -155,11 +156,17 @@ async def list_documents(
     if search:
         accessible_query = accessible_query.where(Document.title.ilike(f"%{search}%"))
     
+    # Filter by folder_id if provided
+    if folder_id is not None:
+        accessible_query = accessible_query.where(Document.folder_id == folder_id)
+    
     # Get total count
     count_query = select(func.count(Document.id))
     count_query = await get_user_accessible_documents_query(session, current_user, count_query)
     if search:
         count_query = count_query.where(Document.title.ilike(f"%{search}%"))
+    if folder_id is not None:
+        count_query = count_query.where(Document.folder_id == folder_id)
     total_result = await session.execute(count_query)
     total = total_result.scalar() or 0
     
@@ -179,6 +186,7 @@ async def list_documents(
             "mime": doc.mime,
             "size": doc.size,
             "status": doc.status,
+            "folder_id": doc.folder_id,  # Include folder_id in response
             "created_at": doc.created_at.isoformat(),
             "deleted_at": doc.deleted_at.isoformat() if doc.deleted_at else None,
             "purge_at": doc.purge_at.isoformat() if doc.purge_at else None,
@@ -317,6 +325,15 @@ async def update_document(
     if request.title:
         doc.title = request.title
     if request.folder_id is not None:
+        # Validate folder access if moving to a different folder
+        if request.folder_id != doc.folder_id:
+            from ..services.permission_service import check_folder_access
+            has_folder_access, reason = await check_folder_access(session, current_user, request.folder_id)
+            if not has_folder_access:
+                return error_response(
+                    reason or "Access denied: you don't have access to the target folder",
+                    status_code=status.HTTP_403_FORBIDDEN
+                )
         doc.folder_id = request.folder_id
     if request.retention_policy_id is not None:
         doc.retention_policy_id = request.retention_policy_id

@@ -92,6 +92,18 @@ class Share(BaseModel):
     permissions = Column(JSON, nullable=True)  # read, write, delete
 
 
+class FolderShare(BaseModel):
+    __tablename__ = "folder_shares"
+    
+    folder_id = Column(Integer, ForeignKey("folders.id"), nullable=False)
+    target_type = Column(String(50), nullable=False)  # user, role
+    target_id = Column(Integer, nullable=True)  # user_id or role_id
+    expires_at = Column(DateTime, nullable=True)
+    
+    # Relationship to Folder
+    folder = relationship("Folder", backref="shares")
+
+
 class Comment(BaseModel):
     __tablename__ = "comments"
     
