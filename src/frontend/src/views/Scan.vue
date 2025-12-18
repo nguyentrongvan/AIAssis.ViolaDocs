@@ -1,122 +1,206 @@
 <template>
   <div class="scan-page">
-    <h1 class="page-header">Scan Inbox</h1>
-      <div v-if="scans.length === 0" class="empty-state">
-        <p>No pending scans</p>
-      </div>
-      <div v-else class="scan-list">
-        <div v-for="scan in scans" :key="scan.id" class="scan-item">
-          <div class="scan-preview">
-            <img v-if="scan.thumbnail" :src="scan.thumbnail" alt="Scan preview" />
-          </div>
-          <div class="scan-info">
-            <h3>{{ scan.filename }}</h3>
-            <p class="meta">From {{ scan.device?.name }} • {{ formatDate(scan.created_at) }}</p>
-            <p v-if="scan.user" class="meta">User: {{ scan.user.name }}</p>
-          </div>
-          <div class="scan-actions">
-            <button @click="claimScan(scan)" class="btn-primary">Claim</button>
-            <button @click="assignScan(scan)" class="btn-secondary">Assign</button>
-            <button @click="deleteScan(scan)" class="btn-danger">Delete</button>
-          </div>
+    <div class="coming-soon-container">
+      <div class="coming-soon-content">
+        <div class="icon-wrapper">
+          <Scan class="coming-soon-icon" />
+        </div>
+        <h1 class="coming-soon-title">Scan Inbox</h1>
+        <p class="coming-soon-subtitle">Coming Soon</p>
+        <p class="coming-soon-description">
+          The automatic scan feature is under development. You will be able to:
+        </p>
+        <ul class="feature-list">
+          <li>
+            <CheckCircle class="feature-icon" />
+            <span>Receive and manage documents automatically scanned from scanners</span>
+          </li>
+          <li>
+            <CheckCircle class="feature-icon" />
+            <span>Preview and process scanned documents</span>
+          </li>
+          <li>
+            <CheckCircle class="feature-icon" />
+            <span>Assign documents to users or folders</span>
+          </li>
+          <li>
+            <CheckCircle class="feature-icon" />
+            <span>Track scan status and history</span>
+          </li>
+        </ul>
+        <div class="coming-soon-footer">
+          <p class="footer-text">This feature will be available soon in the next version.</p>
         </div>
       </div>
     </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import api from '../services/api'
-
-const scans = ref([])
-
-onMounted(async () => {
-  await loadScans()
-})
-
-const loadScans = async () => {
-  try {
-    const res = await api.get('/scan-jobs/pending')
-    if (res.is_success) {
-      scans.value = res.data || []
-    }
-  } catch (e) {
-    console.error('Failed to load scans', e)
-  }
-}
-
-const claimScan = async (scan) => {
-  try {
-    await api.post(`/scan-jobs/${scan.id}/claim`)
-    await loadScans()
-  } catch (e) {
-    console.error('Failed to claim scan', e)
-  }
-}
-
-const assignScan = (scan) => {
-  // Open assign modal
-  console.log('Assign scan', scan)
-}
-
-const deleteScan = async (scan) => {
-  if (confirm('Delete this scan?')) {
-    try {
-      await api.delete(`/scan-jobs/${scan.id}`)
-      await loadScans()
-    } catch (e) {
-      console.error('Failed to delete scan', e)
-    }
-  }
-}
-
-const formatDate = (dateStr) => {
-  return new Date(dateStr).toLocaleDateString()
-}
+import { Scan, CheckCircle } from 'lucide-vue-next'
 </script>
 
 <style scoped>
 .scan-page {
-  max-width: 1200px;
+  min-height: calc(100vh - 200px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.coming-soon-container {
+  width: 100%;
+  max-width: 800px;
   margin: 0 auto;
 }
-.empty-state {
-  text-align: center;
-  padding: 3rem;
-  color: #666;
-}
-.scan-list {
-  display: grid;
-  gap: 1.5rem;
-}
-.scan-item {
+
+.coming-soon-content {
   background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-  display: grid;
-  grid-template-columns: 150px 1fr auto;
-  gap: 1.5rem;
-  align-items: center;
+  border-radius: 16px;
+  padding: 4rem 3rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  text-align: center;
 }
-.scan-preview img {
-  width: 100%;
-  height: 150px;
-  object-fit: cover;
-  border-radius: 6px;
+
+.icon-wrapper {
+  margin-bottom: 2rem;
+  display: flex;
+  justify-content: center;
 }
-.scan-info h3 {
+
+.coming-soon-icon {
+  width: 120px;
+  height: 120px;
+  color: var(--primary, #4f46e5);
+  opacity: 0.8;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+.coming-soon-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--primary, #4f46e5);
   margin: 0 0 0.5rem 0;
 }
-.meta {
+
+.coming-soon-subtitle {
+  font-size: 1.5rem;
+  font-weight: 600;
   color: #666;
-  font-size: 0.9rem;
-  margin: 0.25rem 0;
+  margin: 0 0 2rem 0;
+  position: relative;
+  display: inline-block;
 }
-.scan-actions {
+
+.coming-soon-subtitle::after {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary, #4f46e5), var(--ai-cyan, #00d9ff));
+  border-radius: 2px;
+}
+
+.coming-soon-description {
+  font-size: 1.1rem;
+  color: #555;
+  margin: 2rem 0 1.5rem 0;
+  line-height: 1.6;
+}
+
+.feature-list {
+  list-style: none;
+  padding: 0;
+  margin: 2rem 0;
+  text-align: left;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.feature-list li {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  background: var(--bg-light, #f8f9fa);
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.feature-list li:hover {
+  background: #e9ecef;
+  transform: translateX(5px);
+}
+
+.feature-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--primary, #4f46e5);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.feature-list li span {
+  color: #555;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.coming-soon-footer {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid #e9ecef;
+}
+
+.footer-text {
+  color: #888;
+  font-size: 0.95rem;
+  font-style: italic;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .coming-soon-content {
+    padding: 2rem 1.5rem;
+  }
+
+  .coming-soon-title {
+    font-size: 2rem;
+  }
+
+  .coming-soon-subtitle {
+    font-size: 1.25rem;
+  }
+
+  .coming-soon-icon {
+    width: 80px;
+    height: 80px;
+  }
+
+  .feature-list {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .feature-list li {
+    padding: 0.75rem;
+  }
 }
 </style>
-
