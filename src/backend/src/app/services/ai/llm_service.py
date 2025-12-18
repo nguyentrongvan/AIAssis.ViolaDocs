@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict
 import httpx
-from ...config import settings
+from ...config import settings, get_ollama_base_url_from_db, get_ollama_llm_model_from_db
 from ...prompts import (
     CHATBOT_SYSTEM_PROMPT,
     CHATBOT_CONTEXT_PROMPT,
@@ -31,20 +31,35 @@ class LLMProvider:
         """
         response = self.generate_response(prompt, system_prompt)
         return response, {"token_in": 0, "token_out": 0}
+    
+    async def generate_response_with_usage_async(self, prompt: str, system_prompt: Optional[str] = None) -> tuple[str, dict]:
+        """
+        Generate response from prompt and return token usage (async version).
+        Returns: (response_text, {"token_in": int, "token_out": int})
+        Default implementation calls async generate_response if available.
+        """
+        if hasattr(self, 'generate_response_async'):
+            response = await self.generate_response_async(prompt, system_prompt)
+        else:
+            response = self.generate_response(prompt, system_prompt)
+        return response, {"token_in": 0, "token_out": 0}
 
 
 class OllamaLLMProvider(LLMProvider):
-    """Ollama LLM implementation using native API"""
+    """Ollama LLM implementation using native API with async support"""
     
-    def __init__(self, base_url: str, api_key: Optional[str] = None, model: str = "llama3.2"):
+    # Class-level cache for async clients per base_url
+    _async_clients: Dict[str, httpx.AsyncClient] = {}
+    
+    def __init__(self, base_url: str, api_key: Optional[str] = None, model: Optional[str] = None):
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key
-        self.model = model
-        self.http_client = None
+        self.model = model or settings.ollama_llm_model  # Fallback to config if not provided
+        self.http_client = None  # Keep sync client for backward compatibility
         self._init_client()
     
     def _init_client(self):
-        """Initialize HTTP client for Ollama native API"""
+        """Initialize synchronous HTTP client for backward compatibility"""
         try:
             self.http_client = httpx.Client(
                 timeout=60.0,
@@ -53,6 +68,21 @@ class OllamaLLMProvider(LLMProvider):
         except Exception as e:
             print(f"Failed to initialize Ollama LLM HTTP client: {e}")
             self.http_client = None
+    
+    async def _get_async_client(self) -> Optional[httpx.AsyncClient]:
+        """Get or create async HTTP client with connection pooling"""
+        if self.base_url not in OllamaLLMProvider._async_clients:
+            try:
+                OllamaLLMProvider._async_clients[self.base_url] = httpx.AsyncClient(
+                    timeout=30.0,  # Reduced timeout for faster responses
+                    base_url=self.base_url,
+                    limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+                    http2=True  # Enable HTTP/2 for better performance
+                )
+            except Exception as e:
+                print(f"Failed to initialize Ollama LLM async HTTP client: {e}")
+                return None
+        return OllamaLLMProvider._async_clients[self.base_url]
     
     def _messages_to_prompt(self, messages: List[Dict], system_prompt: Optional[str] = None) -> str:
         """Convert OpenAI messages format to Ollama prompt string"""
@@ -101,7 +131,7 @@ class OllamaLLMProvider(LLMProvider):
             return f"Error generating response: {str(e)}"
     
     def generate_response_with_usage(self, prompt: str, system_prompt: Optional[str] = None) -> tuple[str, dict]:
-        """Generate response and return token usage"""
+        """Generate response and return token usage (synchronous, for backward compatibility)"""
         if not self.http_client:
             return "Ollama LLM provider not available. Please check configuration.", {"token_in": 0, "token_out": 0}
         
@@ -113,6 +143,44 @@ class OllamaLLMProvider(LLMProvider):
             
             # Call Ollama native API
             response = self.http_client.post(
+                "/api/generate",
+                json={
+                    "model": self.model,
+                    "prompt": prompt_text,
+                    "stream": False
+                }
+            )
+            
+            if response.status_code != 200:
+                return f"Error generating response: HTTP {response.status_code} - {response.text}", {"token_in": 0, "token_out": 0}
+            
+            data = response.json()
+            response_text = data.get("response", "")
+            
+            # Extract token usage from Ollama response
+            token_in = data.get("prompt_eval_count", 0)
+            token_out = data.get("eval_count", 0)
+            
+            return response_text, {"token_in": token_in, "token_out": token_out}
+        except httpx.RequestError as e:
+            return f"Error connecting to Ollama: {str(e)}", {"token_in": 0, "token_out": 0}
+        except Exception as e:
+            return f"Error generating response: {str(e)}", {"token_in": 0, "token_out": 0}
+    
+    async def generate_response_with_usage_async(self, prompt: str, system_prompt: Optional[str] = None) -> tuple[str, dict]:
+        """Generate response and return token usage (async version)"""
+        async_client = await self._get_async_client()
+        if not async_client:
+            return "Ollama LLM provider not available. Please check configuration.", {"token_in": 0, "token_out": 0}
+        
+        try:
+            # Convert prompt and system_prompt to Ollama format
+            prompt_text = prompt
+            if system_prompt:
+                prompt_text = f"System: {system_prompt}\n\nUser: {prompt}"
+            
+            # Call Ollama native API asynchronously
+            response = await async_client.post(
                 "/api/generate",
                 json={
                     "model": self.model,
@@ -229,6 +297,31 @@ class LLMService:
         if not self.provider:
             return "LLM provider not configured", {"token_in": 0, "token_out": 0}
         
+        # Load model and base_url from database settings
+        if isinstance(self.provider, OllamaLLMProvider):
+            try:
+                db_base_url = await get_ollama_base_url_from_db()
+                db_model = await get_ollama_llm_model_from_db()
+                
+                # Update provider if model or base_url changed
+                if db_model != self.provider.model or db_base_url != self.provider.base_url:
+                    # Update model and base_url
+                    self.provider.model = db_model
+                    old_base_url = self.provider.base_url
+                    self.provider.base_url = db_base_url.rstrip('/')
+                    
+                    # Recreate async client if base_url changed
+                    if old_base_url != self.provider.base_url:
+                        # Close old client if exists
+                        if old_base_url in OllamaLLMProvider._async_clients:
+                            try:
+                                await OllamaLLMProvider._async_clients[old_base_url].aclose()
+                            except:
+                                pass
+                            del OllamaLLMProvider._async_clients[old_base_url]
+            except Exception as e:
+                print(f"Warning: Failed to load LLM settings from DB, using current provider settings: {e}")
+        
         # Load prompts from settings
         system_prompt, context_prompt, no_context_prompt, context_with_history_prompt, history_only_prompt = await self._get_prompts()
         
@@ -259,7 +352,11 @@ class LLMService:
             # No context at all
             prompt = no_context_prompt.format(question=question)
         
-        return self.provider.generate_response_with_usage(prompt, system_prompt=system_prompt)
+        # Use async version if available, otherwise fall back to sync
+        if hasattr(self.provider, 'generate_response_with_usage_async'):
+            return await self.provider.generate_response_with_usage_async(prompt, system_prompt=system_prompt)
+        else:
+            return self.provider.generate_response_with_usage(prompt, system_prompt=system_prompt)
     
     def chat_with_usage(
         self, 

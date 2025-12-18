@@ -1,9 +1,10 @@
 import uuid
 from typing import Optional, List, Dict, Any
-from datetime import datetime, date as date_type
-from fastapi import APIRouter, Depends, Query, status
+from datetime import datetime, date as date_type, timedelta
+from fastapi import APIRouter, Depends, Query, status, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
 
 from ..db import get_session
 from ..dependencies import get_current_user, require_permission
@@ -23,6 +24,10 @@ from ..config import settings
 from sqlalchemy import select, and_, or_, func
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+# In-memory cache for conversation history (TTL 5 minutes)
+_history_cache: Dict[str, tuple[List[Dict[str, str]], datetime]] = {}
+_cache_ttl = timedelta(minutes=5)
 
 try:
     import redis.asyncio as redis
@@ -70,10 +75,10 @@ async def get_conversation_history(
     redis_client: Optional[Any],
     db_session: AsyncSession,
     user_id: int,
-    limit: int = 10
+    limit: int = 5  # Reduced default limit
 ) -> List[Dict[str, str]]:
     """
-    Get conversation history from Redis cache with fallback to database.
+    Get conversation history with multi-level caching: in-memory -> Redis -> database.
     
     Args:
         session_id: Chat session ID
@@ -87,7 +92,18 @@ async def get_conversation_history(
     """
     conversation_history = []
     
-    # Try Redis first
+    # Check in-memory cache first (fastest)
+    cache_key = f"{session_id}:{user_id}"
+    if cache_key in _history_cache:
+        cached_history, cache_time = _history_cache[cache_key]
+        if datetime.utcnow() - cache_time < _cache_ttl:
+            # Return cached history, limit to requested amount
+            return cached_history[-(limit * 2):]
+        else:
+            # Cache expired, remove it
+            del _history_cache[cache_key]
+    
+    # Try Redis second
     try:
         if redis_client:
             session_key = f"chat:session:{session_id}"
@@ -96,8 +112,9 @@ async def get_conversation_history(
                 # Parse Redis format and limit to last N messages
                 parsed = parse_redis_history(history)
                 # Limit to last 'limit' pairs (each pair is user + assistant)
-                # Take last (limit * 2) messages to get limit pairs
                 conversation_history = parsed[-(limit * 2):]
+                # Cache in memory
+                _history_cache[cache_key] = (conversation_history, datetime.utcnow())
                 return conversation_history
     except Exception as e:
         print(f"Redis error getting conversation history (trying database fallback): {e}")
@@ -124,10 +141,41 @@ async def get_conversation_history(
                 for msg in messages
                 if msg.get("role") in ["user", "assistant"] and msg.get("content")
             ]
+            # Cache in memory and Redis
+            _history_cache[cache_key] = (conversation_history, datetime.utcnow())
+            try:
+                if redis_client:
+                    session_key = f"chat:session:{session_id}"
+                    # Update Redis cache asynchronously (don't wait)
+                    asyncio.create_task(_update_redis_cache(redis_client, session_key, conversation_history))
+            except Exception:
+                pass  # Ignore Redis update errors
     except Exception as e:
         print(f"Database error getting conversation history: {e}")
     
     return conversation_history
+
+
+async def _update_redis_cache(redis_client: Any, session_key: str, history: List[Dict[str, str]]):
+    """Update Redis cache asynchronously"""
+    try:
+        # Convert history back to Redis format
+        redis_messages = []
+        for msg in history:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "user":
+                redis_messages.append(f"user:{content}")
+            elif role == "assistant":
+                redis_messages.append(f"assistant:{content}")
+        
+        if redis_messages:
+            await redis_client.delete(session_key)
+            if redis_messages:
+                await redis_client.lpush(session_key, *reversed(redis_messages))
+            await redis_client.expire(session_key, 3600 * 24)
+    except Exception as e:
+        print(f"Error updating Redis cache: {e}")
 
 
 class ChatRequest(BaseModel):
@@ -144,13 +192,93 @@ class ChatResponse(BaseModel):
     session_id: str
 
 
+async def _save_chat_to_db(
+    session_id: str,
+    user_id: int,
+    group_id: Optional[int],
+    message: str,
+    answer: str,
+    citations: List[dict],
+    token_in: int,
+    token_out: int
+):
+    """Background task to save chat to database"""
+    from ..db import AsyncSessionLocal
+    try:
+        async with AsyncSessionLocal() as session:
+            chat_session_result = await session.execute(
+                select(ChatSession).where(ChatSession.session_id == session_id)
+            )
+            chat_session = chat_session_result.scalar_one_or_none()
+            
+            if not chat_session:
+                chat_session = ChatSession(
+                    user_id=user_id,
+                    group_id=group_id,
+                    session_id=session_id,
+                    messages=[],
+                    token_in_total=0,
+                    token_out_total=0
+                )
+                session.add(chat_session)
+            
+            # Add messages to session with token tracking
+            messages = chat_session.messages or []
+            messages.append({
+                "role": "user",
+                "content": message,
+                "timestamp": datetime.utcnow().isoformat(),
+                "token_in": 0,
+                "token_out": 0
+            })
+            messages.append({
+                "role": "assistant",
+                "content": answer,
+                "citations": citations,
+                "timestamp": datetime.utcnow().isoformat(),
+                "token_in": token_in,
+                "token_out": token_out
+            })
+            chat_session.messages = messages[-20:]  # Keep last 20 messages
+            
+            # Update total token counts for session
+            chat_session.token_in_total = (chat_session.token_in_total or 0) + token_in
+            chat_session.token_out_total = (chat_session.token_out_total or 0) + token_out
+            
+            await session.commit()
+    except Exception as e:
+        print(f"Error saving chat to database (background task): {e}")
+        import traceback
+        traceback.print_exc()
+
+
+async def _save_chat_to_redis(
+    redis_client: Optional[Any],
+    session_id: str,
+    message: str,
+    answer: str
+):
+    """Background task to save chat to Redis cache"""
+    try:
+        if redis_client:
+            session_key = f"chat:session:{session_id}"
+            await redis_client.lpush(session_key, f"user:{message}", f"assistant:{answer}")
+            await redis_client.expire(session_key, 3600 * 24)  # 24 hours
+    except Exception as e:
+        print(f"Redis error saving chat (background task): {e}")
+
+
 @router.post("")
 async def chat(
     request: ChatRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_permission("chat")),
     session: AsyncSession = Depends(get_session)
 ):
-    """Chat with RAG system."""
+    """Chat with RAG system - optimized for fast response times."""
+    import time
+    start_time = time.time()
+    
     # Validate message
     if not request.message or not request.message.strip():
         return error_response(
@@ -165,181 +293,186 @@ async def chat(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE
         )
     
-    # Verify selected_document_ids permissions if provided
-    if request.selected_document_ids:
-        for doc_id in request.selected_document_ids:
-            doc_result = await session.execute(
-                select(Document).where(Document.id == doc_id)
-            )
-            doc = doc_result.scalar_one_or_none()
-            if not doc:
-                return error_response(
-                    f"Document {doc_id} not found",
-                    status_code=status.HTTP_404_NOT_FOUND
-                )
-            
-            # Check chat permission
-            has_access, _, reason = await check_document_access(
-                session, current_user, doc, "chat"
-            )
-            if not has_access:
-                return error_response(
-                    f"Access denied to document {doc_id}: {reason}",
-                    status_code=status.HTTP_403_FORBIDDEN
-                )
-    
-    # Verify group access if group_id provided
-    if request.group_id:
-        group_result = await session.execute(
-            select(DocumentGroup).where(DocumentGroup.id == request.group_id)
-        )
-        group = group_result.scalar_one_or_none()
-        
-        if not group:
-            return error_response("Document group not found", status_code=status.HTTP_404_NOT_FOUND)
-        
-        # Check access to group
-        has_access = False
-        if current_user.id in (group.owners or []):
-            has_access = True
-        elif current_user.role in (group.allowed_roles or []):
-            has_access = True
-        elif current_user.id in (group.allowed_users or []):
-            has_access = True
-        elif current_user.role in ["admin", "staff"]:
-            has_access = True
-        
-        if not has_access:
-            return error_response("Access denied to document group", status_code=status.HTTP_403_FORBIDDEN)
-    
-    redis_client = await get_redis()
-    
     # Get or create session
     session_id = request.session_id or str(uuid.uuid4())
+    redis_client = await get_redis()
     
-    # Get conversation history (from Redis with database fallback)
-    conversation_history = await get_conversation_history(
+    # Parallelize independent operations: permission checks, conversation history, and document queries
+    # Only check permissions if selected_document_ids is provided
+    permission_check_task = None
+    if request.selected_document_ids:
+        async def check_permissions():
+            for doc_id in request.selected_document_ids:
+                doc_result = await session.execute(
+                    select(Document).where(Document.id == doc_id)
+                )
+                doc = doc_result.scalar_one_or_none()
+                if not doc:
+                    raise ValueError(f"Document {doc_id} not found")
+                
+                has_access, _, reason = await check_document_access(
+                    session, current_user, doc, "chat"
+                )
+                if not has_access:
+                    raise ValueError(f"Access denied to document {doc_id}: {reason}")
+        permission_check_task = check_permissions()
+    
+    # Verify group access if group_id provided
+    group_check_task = None
+    if request.group_id:
+        async def check_group():
+            group_result = await session.execute(
+                select(DocumentGroup).where(DocumentGroup.id == request.group_id)
+            )
+            group = group_result.scalar_one_or_none()
+            
+            if not group:
+                raise ValueError("Document group not found")
+            
+            has_access = (
+                current_user.id in (group.owners or []) or
+                current_user.role in (group.allowed_roles or []) or
+                current_user.id in (group.allowed_users or []) or
+                current_user.role in ["admin", "staff"]
+            )
+            
+            if not has_access:
+                raise ValueError("Access denied to document group")
+        group_check_task = check_group()
+    
+    # Get conversation history (optimized: limit=5, in-memory cache would be added later)
+    conversation_history_task = get_conversation_history(
         session_id=session_id,
         redis_client=redis_client,
         db_session=session,
         user_id=current_user.id,
-        limit=5  # Last 5 pairs (10 messages total)
+        limit=5  # Reduced from 10 to 5 for faster retrieval
     )
     
-    # Get user accessible documents with "chat" permission
-    base_query = select(Document).where(
-        and_(
-            Document.deleted_at.is_(None),
-            Document.status == "ready"
-        )
-    )
-    
-    accessible_query = await get_user_accessible_documents_query(
-        session, current_user, base_query
-    )
-    
-    # Apply group_id filter if provided
-    # Documents are linked to groups through document_group_documents table
-    if request.group_id:
-        accessible_query = accessible_query.join(
-            document_group_documents,
-            Document.id == document_group_documents.c.document_id
-        ).where(
-            document_group_documents.c.group_id == request.group_id
-        ).distinct()
-    
-    # Apply filters if provided
-    if request.filters:
-        # Tags filter
-        if request.filters.get("tags"):
-            tag_names = request.filters["tags"]
-            if isinstance(tag_names, str):
-                tag_names = [t.strip() for t in tag_names.split(",") if t.strip()]
-            if tag_names:
-                accessible_query = accessible_query.join(
-                    DocumentTag, Document.id == DocumentTag.document_id
-                ).join(
-                    Tag, DocumentTag.tag_id == Tag.id
-                ).where(
-                    Tag.name.in_(tag_names)
-                ).distinct()
-        
-        # Type filter
-        if request.filters.get("type"):
-            type_filter = request.filters["type"]
-            accessible_query = accessible_query.where(Document.mime.like(f"%{type_filter}%"))
-        
-        # Date filters
-        if request.filters.get("date_from"):
-            try:
-                date_from_str = request.filters["date_from"]
-                date_from_obj = datetime.fromisoformat(date_from_str.replace("Z", "+00:00"))
-                accessible_query = accessible_query.where(Document.created_at >= date_from_obj)
-            except (ValueError, TypeError):
-                pass
-        
-        if request.filters.get("date_to"):
-            try:
-                date_to_str = request.filters["date_to"]
-                date_to_obj = datetime.fromisoformat(date_to_str.replace("Z", "+00:00"))
-                accessible_query = accessible_query.where(Document.created_at <= date_to_obj)
-            except (ValueError, TypeError):
-                pass
-    
-    # Execute query to get accessible documents
-    result = await session.execute(accessible_query)
-    accessible_docs = result.scalars().unique().all()
-    accessible_doc_ids = [doc.id for doc in accessible_docs]
-    
-    # Get group IDs for each document (query separately to avoid async relationship issues)
-    doc_group_map = {}
-    if accessible_doc_ids:
-        group_mapping_result = await session.execute(
-            select(
-                document_group_documents.c.document_id,
-                document_group_documents.c.group_id
-            ).where(
-                document_group_documents.c.document_id.in_(accessible_doc_ids)
+    # Run permission and group checks in parallel
+    conversation_history = None
+    try:
+        if permission_check_task and group_check_task:
+            _, _, conversation_history = await asyncio.gather(
+                permission_check_task, 
+                group_check_task, 
+                conversation_history_task
             )
-        )
-        group_mappings = group_mapping_result.all()
-        for mapping in group_mappings:
-            doc_id = mapping.document_id
-            group_id = mapping.group_id
-            if doc_id not in doc_group_map:
-                doc_group_map[doc_id] = []
-            doc_group_map[doc_id].append(group_id)
-    
-    # Apply selected_document_ids filter if provided
-    # If selected_document_ids is explicitly provided (even if empty list), use it to filter
-    # If None, it means "select all" or not specified, so use all accessible documents
-    if request.selected_document_ids is not None:
-        if len(request.selected_document_ids) == 0:
-            # Empty list means user explicitly selected nothing - skip RAG
-            accessible_doc_ids = []
+        elif permission_check_task:
+            _, conversation_history = await asyncio.gather(
+                permission_check_task, 
+                conversation_history_task
+            )
+        elif group_check_task:
+            _, conversation_history = await asyncio.gather(
+                group_check_task, 
+                conversation_history_task
+            )
         else:
-            # Intersection: only documents that are both accessible AND selected
-            accessible_doc_ids = [doc_id for doc_id in accessible_doc_ids if doc_id in request.selected_document_ids]
-    # else: selected_document_ids is None - use all accessible documents (original behavior)
+            conversation_history = await conversation_history_task
+    except ValueError as e:
+        error_msg = str(e)
+        if "not found" in error_msg.lower():
+            return error_response(error_msg, status_code=status.HTTP_404_NOT_FOUND)
+        elif "access denied" in error_msg.lower() or "denied" in error_msg.lower():
+            return error_response(error_msg, status_code=status.HTTP_403_FORBIDDEN)
+        else:
+            return error_response(error_msg, status_code=status.HTTP_400_BAD_REQUEST)
     
-    # Retrieve relevant documents from vector store
+    # Get user accessible documents with "chat" permission (only if RAG is needed)
+    accessible_doc_ids = []
     doc_contexts = []
     citations = []
     warning = None
     
+    # Only do document queries if RAG might be needed (selected_document_ids is None or non-empty)
+    needs_rag = request.selected_document_ids is None or len(request.selected_document_ids) > 0
+    
+    if needs_rag:
+        base_query = select(Document).where(
+            and_(
+                Document.deleted_at.is_(None),
+                Document.status == "ready"
+            )
+        )
+        
+        accessible_query = await get_user_accessible_documents_query(
+            session, current_user, base_query
+        )
+        
+        # Apply group_id filter if provided
+        if request.group_id:
+            accessible_query = accessible_query.join(
+                document_group_documents,
+                Document.id == document_group_documents.c.document_id
+            ).where(
+                document_group_documents.c.group_id == request.group_id
+            ).distinct()
+        
+        # Apply filters if provided
+        if request.filters:
+            if request.filters.get("tags"):
+                tag_names = request.filters["tags"]
+                if isinstance(tag_names, str):
+                    tag_names = [t.strip() for t in tag_names.split(",") if t.strip()]
+                if tag_names:
+                    accessible_query = accessible_query.join(
+                        DocumentTag, Document.id == DocumentTag.document_id
+                    ).join(
+                        Tag, DocumentTag.tag_id == Tag.id
+                    ).where(
+                        Tag.name.in_(tag_names)
+                    ).distinct()
+            
+            if request.filters.get("type"):
+                type_filter = request.filters["type"]
+                accessible_query = accessible_query.where(Document.mime.like(f"%{type_filter}%"))
+            
+            if request.filters.get("date_from"):
+                try:
+                    date_from_str = request.filters["date_from"]
+                    date_from_obj = datetime.fromisoformat(date_from_str.replace("Z", "+00:00"))
+                    accessible_query = accessible_query.where(Document.created_at >= date_from_obj)
+                except (ValueError, TypeError):
+                    pass
+            
+            if request.filters.get("date_to"):
+                try:
+                    date_to_str = request.filters["date_to"]
+                    date_to_obj = datetime.fromisoformat(date_to_str.replace("Z", "+00:00"))
+                    accessible_query = accessible_query.where(Document.created_at <= date_to_obj)
+                except (ValueError, TypeError):
+                    pass
+        
+        # Execute query to get accessible documents
+        result = await session.execute(accessible_query)
+        accessible_docs = result.scalars().unique().all()
+        accessible_doc_ids = [doc.id for doc in accessible_docs]
+        
+        # Apply selected_document_ids filter if provided
+        if request.selected_document_ids is not None:
+            if len(request.selected_document_ids) == 0:
+                # Empty list means user explicitly selected nothing - skip RAG
+                accessible_doc_ids = []
+            else:
+                # Intersection: only documents that are both accessible AND selected
+                accessible_doc_ids = [doc_id for doc_id in accessible_doc_ids if doc_id in request.selected_document_ids]
+    
+    # Retrieve relevant documents from vector store (RAG)
     if accessible_doc_ids:
         embedding_service = get_embedding_service()
         if embedding_service and embedding_service.is_available():
             try:
-                # Load RAG settings for top_k
+                # Load RAG settings for top_k (reduced default from 20 to 10 for faster queries)
                 from ..services.settings_service import SettingsService
                 top_k = await SettingsService.get_setting(
                     "rag_top_k",
-                    default=20,
+                    default=10,  # Reduced from 20 to 10
                     session=session
                 )
                 
-                query_embedding = embedding_service.generate_embedding(request.message)
+                # Use async embedding generation
+                query_embedding = await embedding_service.generate_embedding_async(request.message)
                 
                 # Build search filters
                 # Qdrant supports $in operator, so we can filter by accessible_doc_ids directly
@@ -474,8 +607,8 @@ async def chat(
                             if chunk_texts:
                                 # Combine chunks with separator
                                 aggregated_text = "\n\n".join(chunk_texts)
-                                # Limit total context length (use first ~2000 chars)
-                                doc_contexts.append(aggregated_text[:2000])
+                                # Limit total context length early (use first ~1500 chars instead of 2000)
+                                doc_contexts.append(aggregated_text[:1500])
                                 
                                 # Create citation with chunk snippet
                                 best_chunk = chunks_for_doc[0] if chunks_for_doc else None
@@ -527,86 +660,52 @@ async def chat(
                 warning = "Vector search unavailable. Answering without document context."
     
     # Generate response using LLM service with prompts and get token usage
-    # Use async version to load prompts from settings
-    # Pass conversation history to maintain context
-    if hasattr(llm_service, 'chat_with_usage_async'):
-        answer, token_usage = await llm_service.chat_with_usage_async(
-            question=request.message,
-            context=doc_contexts,
-            conversation_history=conversation_history,
-            session=session
-        )
-    else:
-        answer, token_usage = llm_service.chat_with_usage(
-            question=request.message,
-            context=doc_contexts,
-            conversation_history=conversation_history
-        )
+    # Use async version (now always available)
+    answer, token_usage = await llm_service.chat_with_usage_async(
+        question=request.message,
+        context=doc_contexts,
+        conversation_history=conversation_history,
+        session=session
+    )
     token_in = token_usage.get("token_in", 0)
     token_out = token_usage.get("token_out", 0)
     
-    # Store in cache
-    try:
-        if redis_client:
-            session_key = f"chat:session:{session_id}"
-            await redis_client.lpush(session_key, f"user:{request.message}", f"assistant:{answer}")
-            await redis_client.expire(session_key, 3600 * 24)  # 24 hours
-    except Exception as e:
-        # Redis not available or error - continue without cache
-        print(f"Redis error (continuing without cache): {e}")
+    # Calculate response time
+    response_time = time.time() - start_time
     
-    # Store in database for audit
-    chat_session_result = await session.execute(
-        select(ChatSession).where(ChatSession.session_id == session_id)
-    )
-    chat_session = chat_session_result.scalar_one_or_none()
-    
-    if not chat_session:
-        chat_session = ChatSession(
-            user_id=current_user.id,
-            group_id=request.group_id,
-            session_id=session_id,
-            messages=[],
-            token_in_total=0,
-            token_out_total=0
-        )
-        session.add(chat_session)
-    
-    # Add messages to session with token tracking
-    messages = chat_session.messages or []
-    messages.append({
-        "role": "user",
-        "content": request.message,
-        "timestamp": datetime.utcnow().isoformat(),
-        "token_in": 0,  # User messages don't count as input tokens for LLM
-        "token_out": 0
-    })
-    messages.append({
-        "role": "assistant",
-        "content": answer,
-        "citations": citations,
-        "timestamp": datetime.utcnow().isoformat(),
-        "token_in": token_in,
-        "token_out": token_out
-    })
-    chat_session.messages = messages[-20:]  # Keep last 20 messages
-    
-    # Update total token counts for session
-    chat_session.token_in_total = (chat_session.token_in_total or 0) + token_in
-    chat_session.token_out_total = (chat_session.token_out_total or 0) + token_out
-    
-    await session.commit()
-    await session.refresh(chat_session)
-    
+    # Prepare response data immediately
     response_data = {
         "answer": answer,
         "citations": citations,
-        "session_id": session_id
+        "session_id": session_id,
+        "response_time": round(response_time, 3)  # Round to 3 decimal places (milliseconds precision)
     }
     
     if warning:
         response_data["warning"] = warning
     
+    # Schedule background tasks for DB commit and Redis cache (non-blocking)
+    background_tasks.add_task(
+        _save_chat_to_db,
+        session_id=session_id,
+        user_id=current_user.id,
+        group_id=request.group_id,
+        message=request.message,
+        answer=answer,
+        citations=citations,
+        token_in=token_in,
+        token_out=token_out
+    )
+    
+    background_tasks.add_task(
+        _save_chat_to_redis,
+        redis_client=redis_client,
+        session_id=session_id,
+        message=request.message,
+        answer=answer
+    )
+    
+    # Return response immediately (DB commit happens in background)
     return success_response(response_data)
 
 

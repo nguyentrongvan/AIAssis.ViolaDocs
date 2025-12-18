@@ -219,6 +219,10 @@
               </div>
               <div class="message-content">
               <div class="message-text" v-html="formatMessage(msg.content)"></div>
+              <div v-if="msg.response_time !== undefined" class="message-response-time">
+                <Clock :size="12" />
+                <span>{{ formatResponseTime(msg.response_time) }}</span>
+              </div>
               <div v-if="msg.citations && msg.citations.length > 0" class="citations">
                 <div class="citations-header">Sources:</div>
                 <div
@@ -369,7 +373,8 @@ import {
   AlertTriangle,
   Circle,
   Search,
-  X
+  X,
+  Clock
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -610,6 +615,7 @@ const sendMessage = async () => {
       chatData.selected_document_ids = []
     }
 
+    const requestStartTime = Date.now()
     const res = await chatAPI.chat(chatData)
     if (res.is_success) {
       const botMsg = {
@@ -618,6 +624,7 @@ const sendMessage = async () => {
         content: res.data.answer,
         citations: res.data.citations || [],
         warning: res.data.warning,
+        response_time: res.data.response_time, // Backend response time in seconds
         timestamp: new Date().toISOString()
       }
       messages.value.push(botMsg)
@@ -793,6 +800,19 @@ const scrollToBottom = () => {
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleString()
+}
+
+const formatResponseTime = (timeInSeconds) => {
+  if (timeInSeconds === undefined || timeInSeconds === null) return ''
+  
+  // Convert to milliseconds for display
+  const ms = timeInSeconds * 1000
+  
+  if (ms < 1000) {
+    return `${Math.round(ms)}ms`
+  } else {
+    return `${timeInSeconds.toFixed(2)}s`
+  }
 }
 </script>
 
@@ -1644,6 +1664,24 @@ const formatDate = (dateStr) => {
   color: white;
   border-color: var(--primary);
   box-shadow: 0 2px 6px rgba(108, 92, 231, 0.3);
+}
+
+.message-response-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: var(--space-xs);
+  padding: 0.25rem 0.5rem;
+  background: rgba(0, 217, 255, 0.1);
+  color: var(--ai-cyan);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.message.user .message-response-time {
+  display: none; /* Only show for assistant messages */
 }
 
 .message-warning {

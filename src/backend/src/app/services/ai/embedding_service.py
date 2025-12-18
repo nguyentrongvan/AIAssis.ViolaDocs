@@ -1,5 +1,9 @@
 import os
 from typing import List, Optional, Dict, Any
+try:
+    import httpx
+except ImportError:
+    httpx = None  # httpx not installed
 from ...config import settings, get_ollama_base_url_from_db, get_ollama_embedding_model_from_db
 from .qdrant_store import QdrantVectorStore
 
@@ -48,38 +52,68 @@ class EmbeddingProvider:
         """Generate embedding vector from text"""
         raise NotImplementedError
     
+    async def generate_embedding_async(self, text: str) -> List[float]:
+        """Generate embedding vector from text (async version)"""
+        # Default implementation falls back to sync version
+        return self.generate_embedding(text)
+    
     def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for multiple texts"""
         return [self.generate_embedding(text) for text in texts]
+    
+    async def generate_embeddings_batch_async(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings for multiple texts (async version)"""
+        # Default implementation falls back to sync version
+        return self.generate_embeddings_batch(texts)
 
 
 class OllamaEmbeddingProvider(EmbeddingProvider):
-    """Ollama embedding provider using native API"""
+    """Ollama embedding provider using native API with async support"""
     
-    def __init__(self, base_url: str, api_key: Optional[str] = None, model: str = "nomic-text-embedding"):
+    # Class-level cache for async clients per base_url
+    _async_clients: Dict[str, Any] = {}  # Use Any instead of httpx.AsyncClient to avoid type errors if httpx not installed
+    
+    def __init__(self, base_url: str, api_key: Optional[str] = None, model: Optional[str] = None):
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key
-        self.model = model
-        self.http_client = None
+        self.model = model or settings.ollama_embedding_model  # Fallback to config if not provided
+        self.http_client = None  # Keep sync client for backward compatibility
         self.dimension = 1536  # Default for nomic-text-embedding (actual dimension)
         self._init_client()
         # Try to detect actual dimension from model
         self._detect_dimension()
     
     def _init_client(self):
-        """Initialize HTTP client for Ollama native API"""
+        """Initialize synchronous HTTP client for backward compatibility"""
+        if httpx is None:
+            print("httpx not installed")
+            self.http_client = None
+            return
         try:
-            import httpx
             self.http_client = httpx.Client(
                 timeout=60.0,
                 base_url=self.base_url
             )
-        except ImportError:
-            print("httpx not installed")
-            self.http_client = None
         except Exception as e:
             print(f"Failed to initialize Ollama embedding HTTP client: {e}")
             self.http_client = None
+    
+    async def _get_async_client(self) -> Optional[Any]:
+        """Get or create async HTTP client with connection pooling"""
+        if httpx is None:
+            return None
+        if self.base_url not in OllamaEmbeddingProvider._async_clients:
+            try:
+                OllamaEmbeddingProvider._async_clients[self.base_url] = httpx.AsyncClient(
+                    timeout=30.0,  # Reduced timeout for faster responses
+                    base_url=self.base_url,
+                    limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+                    http2=True  # Enable HTTP/2 for better performance
+                )
+            except Exception as e:
+                print(f"Failed to initialize Ollama embedding async HTTP client: {e}")
+                return None
+        return OllamaEmbeddingProvider._async_clients[self.base_url]
     
     def is_model_available(self) -> bool:
         """Check if the embedding model is available"""
@@ -167,7 +201,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
                 print(f"Could not detect embedding dimension: {e}, using default: {self.dimension}")
     
     def generate_embedding(self, text: str) -> List[float]:
-        """Generate embedding for text"""
+        """Generate embedding for text (synchronous, for backward compatibility)"""
         if not self.http_client:
             raise EmbeddingModelUnavailableError(
                 f"Ollama embedding client not initialized. "
@@ -187,6 +221,86 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
             
             # Call Ollama native API
             response = self.http_client.post(
+                "/api/embeddings",
+                json={
+                    "model": self.model,
+                    "prompt": text
+                }
+            )
+            
+            if response.status_code != 200:
+                if response.status_code == 404:
+                    raise EmbeddingModelUnavailableError(
+                        f"Ollama embedding model '{self.model}' is not available. "
+                        f"Make sure Ollama is running and model is pulled: ollama pull {self.model}"
+                    )
+                raise RuntimeError(f"Ollama API error: HTTP {response.status_code} - {response.text}")
+            
+            data = response.json()
+            embedding = data.get("embedding", [])
+            
+            # Update dimension based on actual response
+            if embedding:
+                self.dimension = len(embedding)
+            
+            return embedding
+        except EmbeddingModelUnavailableError:
+            raise
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "404" in error_msg or "not found" in error_msg:
+                raise EmbeddingModelUnavailableError(
+                    f"Ollama embedding model '{self.model}' is not available. "
+                    f"Make sure Ollama is running and model is pulled: ollama pull {self.model}"
+                ) from e
+            raise RuntimeError(f"Error generating Ollama embedding: {e}") from e
+    
+    async def generate_embedding_async(self, text: str) -> List[float]:
+        """Generate embedding for text (async version)"""
+        # Load model and base_url from database settings
+        try:
+            db_base_url = await get_ollama_base_url_from_db()
+            db_model = await get_ollama_embedding_model_from_db()
+            
+            # Update provider if model or base_url changed
+            if db_model != self.model or db_base_url != self.base_url:
+                self.model = db_model
+                old_base_url = self.base_url
+                self.base_url = db_base_url.rstrip('/')
+                
+                # Recreate async client if base_url changed
+                if old_base_url != self.base_url:
+                    # Close old client if exists
+                    if old_base_url in OllamaEmbeddingProvider._async_clients:
+                        try:
+                            await OllamaEmbeddingProvider._async_clients[old_base_url].aclose()
+                        except:
+                            pass
+                        del OllamaEmbeddingProvider._async_clients[old_base_url]
+        except Exception as e:
+            print(f"Warning: Failed to load embedding settings from DB, using current provider settings: {e}")
+        
+        async_client = await self._get_async_client()
+        if not async_client:
+            raise EmbeddingModelUnavailableError(
+                f"Ollama embedding client not initialized. "
+                f"Make sure Ollama is running at {self.base_url} and model '{self.model}' is available. "
+                f"Run: ollama pull {self.model}"
+            )
+        
+        # Check model availability (use sync check for now, can be optimized later)
+        if not self.is_model_available():
+            raise EmbeddingModelUnavailableError(
+                f"Ollama embedding model '{self.model}' is not available. "
+                f"Make sure Ollama is running and model is pulled: ollama pull {self.model}"
+            )
+        
+        try:
+            if not text or not text.strip():
+                raise ValueError("Cannot generate embedding for empty text")
+            
+            # Call Ollama native API asynchronously
+            response = await async_client.post(
                 "/api/embeddings",
                 json={
                     "model": self.model,
@@ -729,6 +843,17 @@ class EmbeddingService:
             )
         return self.embedder.generate_embedding(text)
     
+    async def generate_embedding_async(self, text: str) -> List[float]:
+        """Generate embedding for text (async version)"""
+        if not self.embedder:
+            raise EmbeddingModelUnavailableError(
+                "Embedding provider not configured. Please configure Ollama."
+            )
+        if hasattr(self.embedder, 'generate_embedding_async'):
+            return await self.embedder.generate_embedding_async(text)
+        else:
+            return self.embedder.generate_embedding(text)
+    
     def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for multiple texts"""
         if not self.embedder:
@@ -736,6 +861,17 @@ class EmbeddingService:
                 "Embedding provider not configured. Please configure Ollama."
             )
         return self.embedder.generate_embeddings_batch(texts)
+    
+    async def generate_embeddings_batch_async(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings for multiple texts (async version)"""
+        if not self.embedder:
+            raise EmbeddingModelUnavailableError(
+                "Embedding provider not configured. Please configure Ollama."
+            )
+        if hasattr(self.embedder, 'generate_embeddings_batch_async'):
+            return await self.embedder.generate_embeddings_batch_async(texts)
+        else:
+            return self.embedder.generate_embeddings_batch(texts)
     
     def upsert_embeddings(self, ids: List[str], embeddings: List[List[float]], metadatas: List[Dict[str, Any]]):
         """Upsert embeddings into vector store"""
