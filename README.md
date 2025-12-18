@@ -6,17 +6,48 @@
 
 **AI-Powered Document Intelligence**
 
+[![Product Showcase](docs/preview/welcome.jpg)](docs/showcase.html)
+
+**[🎨 View Interactive Showcase →](docs/showcase.html)**
+
 </div>
 
-**ViolaDocs** is an AI-powered Document Management System featuring OCR processing, semantic search, and an intelligent chatbot. It supports document versioning, workflow management, and integrates with printers/scanners. Built with FastAPI and Vue 3, it provides enterprise security with role-based access control and comprehensive audit logging.
+## 🚀 Transform Your Document Workflow
+
+**ViolaDocs** is a next-generation AI-powered Document Management System that revolutionizes how organizations handle, search, and interact with their documents. Combining cutting-edge OCR technology, semantic search, and intelligent AI assistance, ViolaDocs transforms paper documents and digital files into searchable, intelligent knowledge assets.
+
+### Why ViolaDocs?
+
+✨ **Intelligent Document Processing** - Automatically extract text from images and PDFs using advanced OCR technology supporting multiple languages  
+🔍 **Semantic Search** - Find documents by meaning, not just keywords, using hybrid vector and keyword search  
+🤖 **AI-Powered Assistant** - Get instant answers from your document library with our RAG-powered chatbot  
+📋 **Workflow Automation** - Streamline review and approval processes with built-in workflow management  
+🔒 **Enterprise Security** - Role-based access control, comprehensive audit logging, and enterprise-grade security  
+📱 **Device Integration** - Direct integration with printers and scanners for seamless document capture  
+📊 **Advanced Analytics** - Comprehensive reporting and analytics to track document usage and workflows
+
+## 🎯 Key Features
+
+### Core Capabilities
+
+- **📄 Document Management**: Upload, version control, search, and organize documents with intuitive folder structures
+- **👁️ OCR Processing**: Advanced PaddleOCR support for English, Vietnamese, Japanese, Korean, and Chinese with high accuracy
+- **🔎 Semantic Search**: Hybrid keyword + vector search that understands context and meaning
+- **💬 AI Chatbot**: RAG-powered assistant with document group scoping for intelligent Q&A
+- **⚙️ Workflow Management**: Review and approval workflows with customizable task assignments
+- **👥 User Management**: Role-based access control (Admin/Staff/User) with granular permissions
+- **🖨️ Device Integration**: Printer/scanner connector for direct scanning and document capture
+- **📈 Audit & Reports**: Comprehensive logging, reporting, and analytics dashboard
+
+### See It In Action
+
+Check out our [interactive showcase](docs/showcase.html) to see ViolaDocs features in action with screenshots and demonstrations.
 
 ## About This Project
 
 This project serves as a **practice implementation** demonstrating modern development workflows using **Cursor AI** for code generation and assistance. It showcases how AI-assisted development can accelerate the creation of complex enterprise applications, from architecture design to full-stack implementation.
 
 **ViolaDocs** is part of the **AIAssis ecosystem**, a collection of projects exploring the integration of AI technologies in software development and business applications.
-
-## Features
 
 - **Document Management**: Upload, version control, search, and organize documents
 - **OCR Processing**: PaddleOCR support for English, Vietnamese, Japanese, Korean, and Chinese
@@ -43,17 +74,19 @@ This project serves as a **practice implementation** demonstrating modern develo
 - Vue Router
 - Axios
 
-## Quick Start
+## 🚀 Quick Start
 
 For detailed setup instructions, see [SETUP.md](SETUP.md)
 
-Quick overview:
+**Quick overview:**
 1. Start infrastructure: `docker-compose up -d`
 2. Setup backend: Configure `.env`, run migrations, start server
 3. Setup frontend: Install dependencies, start dev server
 4. Create admin user via API
 
 See [SETUP.md](SETUP.md) for complete installation guide.
+
+> 💡 **New to ViolaDocs?** Check out our [interactive showcase](docs/showcase.html) to explore features before installation.
 
 ## Project Structure
 
