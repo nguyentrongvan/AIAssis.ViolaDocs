@@ -108,6 +108,37 @@ TRANSLATE_PROMPT = """Translate the following text from {source_lang} to {target
 
 Translation:"""
 
+# Auto tag generation prompt
+GENERATE_TAGS_PROMPT = """Based on the following document content, generate {max_tags} relevant tags.
+Each tag should be maximum {max_length} characters.
+Return only the tags, separated by commas.
+
+Document content:
+{content}
+
+Tags:"""
+
+# Filename to tag generalization prompt
+GENERATE_TAG_FROM_FILENAME_PROMPT = """Extract a single generalized tag from this filename.
+
+Filename: {filename}
+
+Instructions:
+- Remove file extension (.pdf, .docx, etc.)
+- Extract the main document type or category (e.g., invoice, report, contract, receipt)
+- Remove dates, version numbers, company names, and specific identifiers
+- Use lowercase, single word or hyphenated phrase
+- Maximum {max_length} characters
+- Return ONLY the tag word/phrase, no explanations, no prefixes, no other text
+
+Examples:
+- "invoice_2024_01_15.pdf" -> "invoice"
+- "report_q1_2024_final.docx" -> "report" or "quarterly-report"
+- "contract_ABC_Company_v2.pdf" -> "contract"
+- "receipt_store_12345.jpg" -> "receipt"
+
+Tag:"""
+
 
 
 

@@ -1028,6 +1028,169 @@ async def update_purge_grace_period(
     })
 
 
+# Auto Tag Settings Models
+class AutoTagSettingsUpdate(BaseModel):
+    max_tags: Optional[int] = None
+    max_length: Optional[int] = None
+    prefix: Optional[str] = None
+    ocr_text_limit: Optional[int] = None
+    prompt: Optional[str] = None
+
+
+@router.get("/tags")
+async def get_tag_settings(
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get auto tag settings."""
+    from ..prompts import GENERATE_TAGS_PROMPT
+    
+    # Default values
+    default_max_tags = 3
+    default_max_length = 50
+    default_prefix = "auto_tag:"
+    default_ocr_text_limit = 5000
+    default_prompt = GENERATE_TAGS_PROMPT
+    
+    # Get settings from database, fallback to defaults
+    max_tags = await SettingsService.get_setting(
+        "auto_tag.max_tags",
+        default=default_max_tags,
+        session=session
+    )
+    max_length = await SettingsService.get_setting(
+        "auto_tag.max_length",
+        default=default_max_length,
+        session=session
+    )
+    prefix = await SettingsService.get_setting(
+        "auto_tag.prefix",
+        default=default_prefix,
+        session=session
+    )
+    ocr_text_limit = await SettingsService.get_setting(
+        "auto_tag.ocr_text_limit",
+        default=default_ocr_text_limit,
+        session=session
+    )
+    prompt = await SettingsService.get_setting(
+        "auto_tag.prompt",
+        default=default_prompt,
+        session=session
+    )
+    
+    return success_response({
+        "max_tags": max_tags,
+        "max_length": max_length,
+        "prefix": prefix,
+        "ocr_text_limit": ocr_text_limit,
+        "prompt": prompt
+    })
+
+
+@router.post("/tags")
+async def update_tag_settings(
+    payload: AutoTagSettingsUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update auto tag settings."""
+    updated_keys = []
+    
+    # Validation
+    if payload.max_tags is not None:
+        if payload.max_tags < 1 or payload.max_tags > 20:
+            return error_response(
+                "max_tags must be between 1 and 20",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        await SettingsService.set_setting(
+            "auto_tag.max_tags",
+            payload.max_tags,
+            "auto_tag",
+            "Maximum number of tags to generate",
+            False,
+            current_user.id,
+            session
+        )
+        updated_keys.append("max_tags")
+    
+    if payload.max_length is not None:
+        if payload.max_length < 5 or payload.max_length > 200:
+            return error_response(
+                "max_length must be between 5 and 200",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        await SettingsService.set_setting(
+            "auto_tag.max_length",
+            payload.max_length,
+            "auto_tag",
+            "Maximum length of each tag in characters",
+            False,
+            current_user.id,
+            session
+        )
+        updated_keys.append("max_length")
+    
+    if payload.prefix is not None:
+        if len(payload.prefix) > 50:
+            return error_response(
+                "prefix must be maximum 50 characters",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        await SettingsService.set_setting(
+            "auto_tag.prefix",
+            payload.prefix,
+            "auto_tag",
+            "Prefix to add to auto-generated tags",
+            False,
+            current_user.id,
+            session
+        )
+        updated_keys.append("prefix")
+    
+    if payload.ocr_text_limit is not None:
+        if payload.ocr_text_limit < 100 or payload.ocr_text_limit > 50000:
+            return error_response(
+                "ocr_text_limit must be between 100 and 50000",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        await SettingsService.set_setting(
+            "auto_tag.ocr_text_limit",
+            payload.ocr_text_limit,
+            "auto_tag",
+            "Maximum OCR text length to use for tag generation",
+            False,
+            current_user.id,
+            session
+        )
+        updated_keys.append("ocr_text_limit")
+    
+    if payload.prompt is not None:
+        if len(payload.prompt) > 5000:
+            return error_response(
+                "prompt must be maximum 5000 characters",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        await SettingsService.set_setting(
+            "auto_tag.prompt",
+            payload.prompt,
+            "auto_tag",
+            "Prompt template for tag generation",
+            False,
+            current_user.id,
+            session
+        )
+        updated_keys.append("prompt")
+    
+    await session.commit()
+    
+    return success_response({
+        "message": f"Updated: {', '.join(updated_keys)}" if updated_keys else "No changes",
+        "updated": updated_keys
+    })
+
+
 # Ollama Models Management
 class OllamaModelPullRequest(BaseModel):
     model_name: str

@@ -617,6 +617,86 @@
         </div>
       </div>
 
+      <!-- Auto Tag Settings Tab -->
+      <div v-if="activeTab === 'tags'" class="tab-content">
+        <div class="section-header">
+          <h2>Auto Tag Settings</h2>
+        </div>
+        <div class="tag-settings-section">
+          <div class="form-section">
+            <div class="form-group">
+              <label for="tag_max_tags">Max Tags *</label>
+              <input
+                id="tag_max_tags"
+                v-model.number="tagForm.max_tags"
+                type="number"
+                min="1"
+                max="20"
+                placeholder="3"
+              />
+              <small>Maximum number of tags to generate per document. Default: 3. Range: 1-20.</small>
+            </div>
+            <div class="form-group">
+              <label for="tag_max_length">Max Tag Length (characters) *</label>
+              <input
+                id="tag_max_length"
+                v-model.number="tagForm.max_length"
+                type="number"
+                min="5"
+                max="200"
+                placeholder="50"
+              />
+              <small>Maximum length of each tag in characters. Default: 50. Range: 5-200.</small>
+            </div>
+            <div class="form-group">
+              <label for="tag_prefix">Tag Prefix *</label>
+              <input
+                id="tag_prefix"
+                v-model="tagForm.prefix"
+                type="text"
+                placeholder="auto_tag:"
+                maxlength="50"
+              />
+              <small>Prefix to add to auto-generated tags. Default: "auto_tag:". Maximum 50 characters.</small>
+            </div>
+            <div class="form-group">
+              <label for="tag_ocr_text_limit">OCR Text Limit (characters) *</label>
+              <input
+                id="tag_ocr_text_limit"
+                v-model.number="tagForm.ocr_text_limit"
+                type="number"
+                min="100"
+                max="50000"
+                placeholder="5000"
+              />
+              <small>Maximum OCR text length to use for tag generation. Default: 5000. Range: 100-50000.</small>
+            </div>
+            <div class="form-group">
+              <label for="tag_prompt">Tag Generation Prompt *</label>
+              <textarea
+                id="tag_prompt"
+                v-model="tagForm.prompt"
+                rows="8"
+                placeholder="Based on the following document content, generate {max_tags} relevant tags..."
+                class="prompt-textarea"
+                maxlength="5000"
+              ></textarea>
+              <small>Prompt template for tag generation. Use {content}, {max_tags}, and {max_length} as placeholders. Maximum 5000 characters.</small>
+            </div>
+            <div class="form-actions">
+              <button @click="saveTagSettings" class="btn-primary" :disabled="savingTags">
+                <Save :size="16" />
+                {{ savingTags ? 'Saving...' : 'Save Tag Settings' }}
+              </button>
+              <button @click="loadTagSettings" class="btn-secondary" :disabled="savingTags">
+                <RefreshCw :size="16" />
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Chatbot Policies Tab -->
       <div v-if="activeTab === 'chatbot'" class="tab-content">
         <!-- Chatbot Prompts Section -->
@@ -1039,6 +1119,16 @@ const purgeGracePeriodForm = ref({
 })
 const savingPurgeGracePeriod = ref(false)
 
+// Auto Tag Settings
+const tagForm = ref({
+  max_tags: 3,
+  max_length: 50,
+  prefix: 'auto_tag:',
+  ocr_text_limit: 5000,
+  prompt: ''
+})
+const savingTags = ref(false)
+
 // Fix guide modal
 const showFixGuideModal = ref(false)
 const currentFixGuide = ref(null)
@@ -1050,7 +1140,8 @@ const tabs = [
   { id: 'retention', label: 'Retention Policies' },
   { id: 'providers', label: 'OCR/AI Providers' },
   { id: 'llm', label: 'LLM Settings' },
-  { id: 'chatbot', label: 'Chatbot Policies' }
+  { id: 'chatbot', label: 'Chatbot Policies' },
+  { id: 'tags', label: 'Auto Tag Settings' }
 ]
 
 const availableLanguages = [
@@ -1079,6 +1170,7 @@ onMounted(async () => {
   await loadPurgeGracePeriod()
   await loadPrompts()
   await loadRAGSettings()
+  await loadTagSettings()
   // Load Ollama models when LLM tab is active
   if (activeTab.value === 'llm') {
     await loadOllamaModels()
@@ -1706,6 +1798,82 @@ const formatDate = (dateString) => {
   if (!dateString) return ''
   const date = new Date(dateString)
   return date.toLocaleDateString() + ' ' + date.toLocaleTimeString()
+}
+
+const loadTagSettings = async () => {
+  try {
+    const res = await settingsAPI.tags.get()
+    if (res.is_success) {
+      tagForm.value = {
+        max_tags: res.data.max_tags || 3,
+        max_length: res.data.max_length || 50,
+        prefix: res.data.prefix || 'auto_tag:',
+        ocr_text_limit: res.data.ocr_text_limit || 5000,
+        prompt: res.data.prompt || ''
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load tag settings', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to load tag settings', 'error')
+    }
+  }
+}
+
+const saveTagSettings = async () => {
+  // Validation
+  if (tagForm.value.max_tags < 1 || tagForm.value.max_tags > 20) {
+    if (window.$toast) {
+      window.$toast.show('Max tags must be between 1 and 20', 'error')
+    }
+    return
+  }
+  
+  if (tagForm.value.max_length < 5 || tagForm.value.max_length > 200) {
+    if (window.$toast) {
+      window.$toast.show('Max tag length must be between 5 and 200', 'error')
+    }
+    return
+  }
+  
+  if (tagForm.value.prefix && tagForm.value.prefix.length > 50) {
+    if (window.$toast) {
+      window.$toast.show('Tag prefix must be maximum 50 characters', 'error')
+    }
+    return
+  }
+  
+  if (tagForm.value.ocr_text_limit < 100 || tagForm.value.ocr_text_limit > 50000) {
+    if (window.$toast) {
+      window.$toast.show('OCR text limit must be between 100 and 50000', 'error')
+    }
+    return
+  }
+  
+  if (tagForm.value.prompt && tagForm.value.prompt.length > 5000) {
+    if (window.$toast) {
+      window.$toast.show('Prompt must be maximum 5000 characters', 'error')
+    }
+    return
+  }
+  
+  savingTags.value = true
+  try {
+    const res = await settingsAPI.tags.update(tagForm.value)
+    if (res.is_success) {
+      if (window.$toast) {
+        window.$toast.show('Tag settings saved successfully', 'success')
+      }
+      await loadTagSettings()
+    }
+  } catch (e) {
+    console.error('Failed to save tag settings', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to save tag settings', 'error')
+    }
+  } finally {
+    savingTags.value = false
+  }
 }
 </script>
 
@@ -2653,7 +2821,8 @@ const formatDate = (dateString) => {
   }
 }
 
-.prompts-section {
+.prompts-section,
+.tag-settings-section {
   background: var(--bg-light);
   padding: 2rem;
   border-radius: 8px;

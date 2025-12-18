@@ -289,6 +289,14 @@ async def get_document(
             version_data["renditions"] = renditions
         versions.append(version_data)
     
+    # Get tags for this document
+    tags_result = await session.execute(
+        select(Tag.name)
+        .join(DocumentTag, Tag.id == DocumentTag.tag_id)
+        .where(DocumentTag.document_id == doc.id)
+    )
+    tags = tags_result.scalars().all()
+    
     return success_response({
         "id": doc.id,
         "title": doc.title,
@@ -296,8 +304,12 @@ async def get_document(
         "size": doc.size,
         "status": doc.status,
         "owner_id": doc.owner_id,
+        "folder_id": doc.folder_id,
+        "retention_policy_id": doc.retention_policy_id,
+        "sensitivity": doc.sensitivity,
         "created_at": doc.created_at.isoformat(),
         "preview_url": preview_url,
+        "tags": list(tags) if tags else [],
         "versions": versions
     })
 

@@ -44,6 +44,7 @@ class UploadFinalizeRequest(BaseModel):
     allowed_users: Optional[list[int]] = None  # User IDs to share with
     allowed_roles: Optional[list[int]] = None  # Role IDs to share with (changed from list[str] to list[int])
     share_permissions: Optional[list[str]] = None  # Permissions: view, search, chat
+    auto_ai_tag: Optional[bool] = True  # Enable auto AI tag generation (default: True)
 
 
 @router.post("/init")
@@ -128,7 +129,8 @@ async def finalize_upload(
         "tags": request.tags,
         "folder_id": request.folder_id,
         "retention_policy_id": request.retention_policy_id,
-        "sensitivity": request.sensitivity
+        "sensitivity": request.sensitivity,
+        "auto_ai_tag": request.auto_ai_tag if request.auto_ai_tag is not None else True
     }
     
     # Create document
@@ -210,9 +212,14 @@ async def finalize_upload(
     
     if mime.startswith("image/") or mime == "application/pdf":
         # Create OCR job for images and PDFs
+        auto_ai_tag_flag = request.auto_ai_tag if request.auto_ai_tag is not None else True
         ocr_job = AIJob(
             job_type="ocr",
-            target={"document_id": doc.id, "version_id": version.id},
+            target={
+                "document_id": doc.id,
+                "version_id": version.id,
+                "auto_ai_tag": auto_ai_tag_flag
+            },
             provider="paddle",
             status="queued"
         )
@@ -229,9 +236,14 @@ async def finalize_upload(
         "text/plain"
     ]:
         # Create text extraction job for office/text files
+        auto_ai_tag_flag = request.auto_ai_tag if request.auto_ai_tag is not None else True
         text_extract_job = AIJob(
             job_type="text_extract",
-            target={"document_id": doc.id, "version_id": version.id},
+            target={
+                "document_id": doc.id,
+                "version_id": version.id,
+                "auto_ai_tag": auto_ai_tag_flag
+            },
             provider="native",
             status="queued"
         )

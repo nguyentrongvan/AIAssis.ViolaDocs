@@ -40,6 +40,20 @@
             <label>Tags (comma-separated)</label>
             <input v-model="file.metadata.tags" type="text" placeholder="e.g., invoice, 2024, important" />
           </div>
+          <div class="form-group">
+            <label>Auto AI Tag</label>
+            <div class="permissions-checkbox-group">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  v-model="file.metadata.auto_ai_tag"
+                  :checked="file.metadata.auto_ai_tag !== false"
+                />
+                <span>Enable automatic tag generation using AI</span>
+              </label>
+            </div>
+            <p class="hint-text">Automatically generate tags using AI based on document content after OCR</p>
+          </div>
           <div class="form-row">
             <div class="form-group">
               <label>Folder</label>
@@ -365,6 +379,7 @@ const addFiles = (fileList) => {
         share_permissions: ['view'], // Default: view permission
         title: '',
         tags: '',
+        auto_ai_tag: true, // Default: enabled
         folder_id: null,
         retention_policy_id: null,
         sensitivity: '',
@@ -469,6 +484,7 @@ const startUpload = async () => {
       const finalizeData = {
         title: fileItem.metadata.title || fileItem.name,
         tags: tags,
+        auto_ai_tag: fileItem.metadata.auto_ai_tag !== false, // Default to true if not explicitly false
         folder_id: fileItem.metadata.folder_id || null,
         retention_policy_id: fileItem.metadata.retention_policy_id || null,
         sensitivity: fileItem.metadata.sensitivity || null,
@@ -1241,24 +1257,99 @@ const getRoleName = (roleId) => {
 
 .permissions-checkbox-group {
   display: flex;
-  gap: 1rem;
+  gap: 2rem;
   flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.checkbox-wrapper {
   margin-top: 0.5rem;
 }
 
 .checkbox-label {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.875rem;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
+  margin: 0;
+  font-weight: 500;
+  color: var(--text-dark);
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-base);
+  position: relative;
+  user-select: none;
+}
+
+.checkbox-label:hover {
+  background: var(--bg-light);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .checkbox-label input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
   cursor: pointer;
-  accent-color: var(--primary);
+}
+
+.checkbox-label input[type="checkbox"] + span {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding-left: 32px;
+  line-height: 1.5;
+}
+
+.checkbox-label input[type="checkbox"] + span::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  background: var(--bg-white);
+  display: inline-block;
+  transition: all var(--transition-base);
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.checkbox-label:hover input[type="checkbox"] + span::before {
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(108, 92, 231, 0.25);
+  transform: translateY(-50%) scale(1.08);
+}
+
+.checkbox-label input[type="checkbox"]:checked + span::before {
+  background: var(--gradient-cyan-purple);
+  border-color: var(--primary);
+  box-shadow: 0 2px 12px rgba(108, 92, 231, 0.4);
+  transform: translateY(-50%) scale(1);
+}
+
+.checkbox-label input[type="checkbox"]:checked + span::after {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  color: white;
+  font-size: 15px;
+  font-weight: bold;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .hint-text {

@@ -126,6 +126,94 @@ async def process_ocr_job(job_id: int):
             
             await session.commit()
             
+            # Generate auto AI tags if enabled
+            try:
+                auto_ai_tag = job.target.get("auto_ai_tag", True)  # Default to True if not specified
+                print(f"[OCR Worker] Auto AI Tag enabled: {auto_ai_tag} for document {document.id}")
+                if auto_ai_tag:
+                    from ..services.settings_service import SettingsService
+                    from ..services.ai import get_llm_service
+                    from ..models.documents import Tag, DocumentTag
+                    
+                    # Load tag settings
+                    max_tags = await SettingsService.get_setting("auto_tag.max_tags", default=3, session=session)
+                    max_length = await SettingsService.get_setting("auto_tag.max_length", default=50, session=session)
+                    prefix = await SettingsService.get_setting("auto_tag.prefix", default="auto_tag:", session=session)
+                    ocr_text_limit = await SettingsService.get_setting("auto_tag.ocr_text_limit", default=5000, session=session)
+                    
+                    print(f"[OCR Worker] Tag settings - max_tags: {max_tags}, max_length: {max_length}, prefix: {prefix}, ocr_text_limit: {ocr_text_limit}")
+                    
+                    # Truncate OCR text if needed
+                    text_for_tagging = extracted_text
+                    if len(text_for_tagging) > ocr_text_limit:
+                        text_for_tagging = text_for_tagging[:ocr_text_limit]
+                        print(f"[OCR Worker] OCR text truncated from {len(extracted_text)} to {len(text_for_tagging)} characters")
+                    
+                    # Generate tags using LLM
+                    llm_service = get_llm_service()
+                    if llm_service:
+                        print(f"[OCR Worker] Calling LLM to generate tags...")
+                        tag_names = await llm_service.generate_tags_async(
+                            content=text_for_tagging,
+                            max_tags=max_tags,
+                            max_length=max_length,
+                            filename=document.title,
+                            session=session
+                        )
+                        
+                        print(f"[OCR Worker] LLM returned {len(tag_names) if tag_names else 0} tags: {tag_names}")
+                        
+                        if tag_names:
+                            created_tags = []
+                            # Apply prefix and length limits, then create tags
+                            for tag_name in tag_names:
+                                # Truncate tag name if needed
+                                if len(tag_name) > max_length:
+                                    tag_name = tag_name[:max_length]
+                                
+                                # Apply prefix
+                                final_tag_name = f"{prefix}{tag_name}" if prefix else tag_name
+                                
+                                # Check if tag exists
+                                tag_result = await session.execute(
+                                    select(Tag).where(Tag.name == final_tag_name)
+                                )
+                                tag = tag_result.scalar_one_or_none()
+                                
+                                if not tag:
+                                    # Create new tag
+                                    tag = Tag(name=final_tag_name)
+                                    session.add(tag)
+                                    await session.flush()
+                                    print(f"[OCR Worker] Created new tag: {final_tag_name}")
+                                
+                                # Check if document_tag association already exists
+                                doc_tag_result = await session.execute(
+                                    select(DocumentTag).where(
+                                        DocumentTag.document_id == document.id,
+                                        DocumentTag.tag_id == tag.id
+                                    )
+                                )
+                                doc_tag = doc_tag_result.scalar_one_or_none()
+                                
+                                if not doc_tag:
+                                    # Create association
+                                    doc_tag = DocumentTag(document_id=document.id, tag_id=tag.id)
+                                    session.add(doc_tag)
+                                    created_tags.append(final_tag_name)
+                            
+                            await session.commit()
+                            print(f"[OCR Worker] Successfully created {len(created_tags)} tags for document {document.id}: {created_tags}")
+                        else:
+                            print(f"[OCR Worker] No tags generated by LLM")
+                    else:
+                        print(f"[OCR Worker] LLM service not available, skipping tag generation")
+            except Exception as e:
+                # Log error but don't fail OCR job
+                import traceback
+                print(f"[OCR Worker] Error generating auto AI tags: {e}")
+                print(f"[OCR Worker] Traceback: {traceback.format_exc()}")
+            
             # Trigger embedding job after OCR completes
             try:
                 from ..models.ai import AIJob as EmbeddingJob
@@ -358,6 +446,94 @@ async def process_text_extract_job(job_id: int):
             }
             
             await session.commit()
+            
+            # Generate auto AI tags if enabled
+            try:
+                auto_ai_tag = job.target.get("auto_ai_tag", True)  # Default to True if not specified
+                print(f"[Text Extract Worker] Auto AI Tag enabled: {auto_ai_tag} for document {document.id}")
+                if auto_ai_tag:
+                    from ..services.settings_service import SettingsService
+                    from ..services.ai import get_llm_service
+                    from ..models.documents import Tag, DocumentTag
+                    
+                    # Load tag settings
+                    max_tags = await SettingsService.get_setting("auto_tag.max_tags", default=3, session=session)
+                    max_length = await SettingsService.get_setting("auto_tag.max_length", default=50, session=session)
+                    prefix = await SettingsService.get_setting("auto_tag.prefix", default="auto_tag:", session=session)
+                    ocr_text_limit = await SettingsService.get_setting("auto_tag.ocr_text_limit", default=5000, session=session)
+                    
+                    print(f"[Text Extract Worker] Tag settings - max_tags: {max_tags}, max_length: {max_length}, prefix: {prefix}, ocr_text_limit: {ocr_text_limit}")
+                    
+                    # Truncate extracted text if needed
+                    text_for_tagging = extracted_text
+                    if len(text_for_tagging) > ocr_text_limit:
+                        text_for_tagging = text_for_tagging[:ocr_text_limit]
+                        print(f"[Text Extract Worker] Text truncated from {len(extracted_text)} to {len(text_for_tagging)} characters")
+                    
+                    # Generate tags using LLM
+                    llm_service = get_llm_service()
+                    if llm_service:
+                        print(f"[Text Extract Worker] Calling LLM to generate tags...")
+                        tag_names = await llm_service.generate_tags_async(
+                            content=text_for_tagging,
+                            max_tags=max_tags,
+                            max_length=max_length,
+                            filename=document.title,
+                            session=session
+                        )
+                        
+                        print(f"[Text Extract Worker] LLM returned {len(tag_names) if tag_names else 0} tags: {tag_names}")
+                        
+                        if tag_names:
+                            created_tags = []
+                            # Apply prefix and length limits, then create tags
+                            for tag_name in tag_names:
+                                # Truncate tag name if needed
+                                if len(tag_name) > max_length:
+                                    tag_name = tag_name[:max_length]
+                                
+                                # Apply prefix
+                                final_tag_name = f"{prefix}{tag_name}" if prefix else tag_name
+                                
+                                # Check if tag exists
+                                tag_result = await session.execute(
+                                    select(Tag).where(Tag.name == final_tag_name)
+                                )
+                                tag = tag_result.scalar_one_or_none()
+                                
+                                if not tag:
+                                    # Create new tag
+                                    tag = Tag(name=final_tag_name)
+                                    session.add(tag)
+                                    await session.flush()
+                                    print(f"[Text Extract Worker] Created new tag: {final_tag_name}")
+                                
+                                # Check if document_tag association already exists
+                                doc_tag_result = await session.execute(
+                                    select(DocumentTag).where(
+                                        DocumentTag.document_id == document.id,
+                                        DocumentTag.tag_id == tag.id
+                                    )
+                                )
+                                doc_tag = doc_tag_result.scalar_one_or_none()
+                                
+                                if not doc_tag:
+                                    # Create association
+                                    doc_tag = DocumentTag(document_id=document.id, tag_id=tag.id)
+                                    session.add(doc_tag)
+                                    created_tags.append(final_tag_name)
+                            
+                            await session.commit()
+                            print(f"[Text Extract Worker] Successfully created {len(created_tags)} tags for document {document.id}: {created_tags}")
+                        else:
+                            print(f"[Text Extract Worker] No tags generated by LLM")
+                    else:
+                        print(f"[Text Extract Worker] LLM service not available, skipping tag generation")
+            except Exception as e:
+                # Log error but don't fail text extraction job
+                import traceback
+                print(f"[Text Extract Worker] Error generating auto AI tags: {e}")
+                print(f"[Text Extract Worker] Traceback: {traceback.format_exc()}")
             
             # Trigger embedding job after text extraction completes
             try:

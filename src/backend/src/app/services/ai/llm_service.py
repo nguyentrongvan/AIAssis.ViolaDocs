@@ -12,6 +12,8 @@ from ...prompts import (
     EXTRACT_ENTITIES_PROMPT,
     RAG_QA_PROMPT,
     COMPARE_DOCUMENTS_PROMPT,
+    GENERATE_TAGS_PROMPT,
+    GENERATE_TAG_FROM_FILENAME_PROMPT,
 )
 from ...services.settings_service import SettingsService
 
@@ -444,6 +446,144 @@ class LLMService:
             version2_content=version2_content
         )
         return self.provider.generate_response(prompt)
+    
+    async def generate_tags_async(
+        self,
+        content: str,
+        max_tags: int = 3,
+        max_length: int = 50,
+        filename: Optional[str] = None,
+        session=None
+    ) -> List[str]:
+        """
+        Generate tags from document content using LLM.
+        Returns list of tag names (without prefix).
+        One tag will be generated from filename, the rest from content.
+        """
+        if not self.provider:
+            return []
+        
+        tags = []
+        
+        # Generate 1 tag from filename if provided using LLM to generalize
+        if filename:
+            try:
+                # Use LLM to generalize filename into a meaningful tag
+                prompt_template = GENERATE_TAG_FROM_FILENAME_PROMPT
+                
+                # Format prompt with filename
+                prompt = prompt_template.format(
+                    filename=filename,
+                    max_length=max_length
+                )
+                
+                # Call LLM async to generalize filename
+                response_text, _ = await self.provider.generate_response_with_usage_async(
+                    prompt,
+                    system_prompt=None
+                )
+                
+                if response_text:
+                    # Clean up the response: remove quotes, trim whitespace
+                    filename_tag = response_text.strip().strip('"\'`.,;:!?').strip()
+                    
+                    # Remove common prefixes/phrases that LLM might add
+                    unwanted_prefixes = [
+                        "based on the filename",
+                        "based on filename",
+                        "tag:",
+                        "tag is:",
+                        "the tag is:",
+                        "generalized tag:",
+                        "extracted tag:",
+                    ]
+                    for prefix in unwanted_prefixes:
+                        if filename_tag.lower().startswith(prefix.lower()):
+                            filename_tag = filename_tag[len(prefix):].strip().strip(':"\'`.,;:!?').strip()
+                    
+                    # Extract first word/phrase if response contains multiple words (take first meaningful part)
+                    # Split by common separators and take the first meaningful part
+                    import re
+                    # Remove any leading text like "Based on..." and take first word/phrase
+                    parts = re.split(r'[:\n\r\t,;]', filename_tag)
+                    if parts:
+                        filename_tag = parts[0].strip().strip('"\'`.,;:!?').strip()
+                    
+                    # Remove any remaining explanatory text (keep only alphanumeric and hyphens)
+                    # Extract only the tag part (word or hyphenated phrase)
+                    tag_match = re.search(r'([a-z0-9]+(?:-[a-z0-9]+)*)', filename_tag.lower())
+                    if tag_match:
+                        filename_tag = tag_match.group(1)
+                    
+                    # Validate and truncate if needed
+                    if filename_tag and len(filename_tag) > 0 and len(filename_tag) <= max_length * 2:  # Allow some buffer for processing
+                        # Truncate if needed
+                        if len(filename_tag) > max_length:
+                            filename_tag = filename_tag[:max_length]
+                        tags.append(filename_tag)
+                        print(f"[LLM Service] Generated generalized tag from filename '{filename}': {filename_tag}")
+                    else:
+                        print(f"[LLM Service] LLM returned invalid tag from filename '{filename}': '{response_text}'")
+                        # Fallback: try to extract a simple tag from filename
+                        import re
+                        name_without_ext = re.sub(r'\.[^.]*$', '', filename)
+                        parts = re.split(r'[_\-\s\.]+', name_without_ext.lower())
+                        parts = [p.strip() for p in parts if p.strip() and len(p.strip()) > 2 and p.strip().isalpha()]
+                        if parts:
+                            fallback_tag = parts[0][:max_length]
+                            tags.append(fallback_tag)
+                            print(f"[LLM Service] Using fallback tag from filename '{filename}': {fallback_tag}")
+                else:
+                    print(f"[LLM Service] LLM returned no response for filename '{filename}'")
+                    
+            except Exception as e:
+                print(f"[LLM Service] Error generating tag from filename '{filename}': {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Generate remaining tags from content
+        remaining_tags_count = max_tags - len(tags)
+        if remaining_tags_count > 0 and content:
+            try:
+                # Load prompt from settings or use default
+                prompt_template = await SettingsService.get_setting(
+                    "auto_tag.prompt",
+                    default=GENERATE_TAGS_PROMPT,
+                    session=session
+                )
+                
+                # Format prompt with content and settings
+                prompt = prompt_template.format(
+                    content=content,
+                    max_tags=remaining_tags_count,
+                    max_length=max_length
+                )
+                
+                # Call LLM async
+                response_text, _ = await self.provider.generate_response_with_usage_async(
+                    prompt,
+                    system_prompt=None
+                )
+                
+                if response_text:
+                    # Parse response: split by comma, trim, filter empty
+                    content_tags = []
+                    for tag in response_text.split(','):
+                        tag = tag.strip()
+                        if tag:
+                            # Remove any leading/trailing quotes or special characters
+                            tag = tag.strip('"\'`.,;:!?')
+                            if tag:
+                                content_tags.append(tag)
+                    
+                    # Limit number of tags and add to list
+                    tags.extend(content_tags[:remaining_tags_count])
+                    print(f"[LLM Service] Generated {len(content_tags[:remaining_tags_count])} tags from content")
+            
+            except Exception as e:
+                print(f"[LLM Service] Error generating tags from content: {e}")
+        
+        return tags
     
     def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """Generic response generation"""

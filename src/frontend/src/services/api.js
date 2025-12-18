@@ -215,6 +215,10 @@ export const settingsAPI = {
     get: () => api.get('/settings/ocr'),
     update: (data) => api.post('/settings/ocr', data)
   },
+  tags: {
+    get: () => api.get('/settings/tags'),
+    update: (data) => api.post('/settings/tags', data)
+  },
   purgeGracePeriod: {
     get: () => api.get('/settings/purge_grace_period'),
     update: (days) => api.put('/settings/purge_grace_period', { days })
