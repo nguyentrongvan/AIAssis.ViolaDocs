@@ -1164,6 +1164,10 @@
     "unauthorized": "Không được phép. Vui lòng đăng nhập lại.",
     "notFound": "Không tìm thấy tài nguyên",
     "serverError": "Lỗi máy chủ. Vui lòng thử lại sau."
+  },
+  "footer": {
+    "copyright": "© {year} ViolaDocs. Bảo lưu mọi quyền.",
+    "version": "Phiên bản"
   }
 }
 

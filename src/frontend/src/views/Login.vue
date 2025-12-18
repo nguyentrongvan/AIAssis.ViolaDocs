@@ -27,6 +27,7 @@
         <p v-if="error" class="error">{{ error }}</p>
       </form>
     </div>
+    <Footer :fixed="true" />
   </div>
 </template>
 
@@ -36,6 +37,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../store/auth'
 import LanguageSelector from '../components/LanguageSelector.vue'
+import Footer from '../components/Footer.vue'
 
 const { t } = useI18n()
 

@@ -1165,6 +1165,10 @@
     "unauthorized": "Unauthorized. Please login again.",
     "notFound": "Resource not found",
     "serverError": "Server error. Please try again later."
+  },
+  "footer": {
+    "copyright": "© {year} ViolaDocs. All rights reserved.",
+    "version": "Version"
   }
 }
 

@@ -1162,6 +1162,10 @@
     "unauthorized": "未授权。请重新登录。",
     "notFound": "未找到资源",
     "serverError": "服务器错误。请稍后再试。"
+  },
+  "footer": {
+    "copyright": "© {year} ViolaDocs. 保留所有权利。",
+    "version": "版本"
   }
 }
 

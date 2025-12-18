@@ -108,6 +108,7 @@
           <router-view />
         </transition>
       </div>
+      <Footer />
     </main>
   </div>
 </template>
@@ -117,6 +118,7 @@ import { onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 import LanguageSelector from './LanguageSelector.vue'
+import Footer from './Footer.vue'
 import {
   Library,
   Upload,
@@ -544,6 +546,7 @@ nav {
   flex-direction: column;
   position: relative;
   overflow: hidden;
+  min-height: 0;
 }
 
 .content-background {
@@ -564,6 +567,7 @@ nav {
   overflow-y: auto;
   position: relative;
   z-index: 1;
+  min-height: 0;
 }
 
 /* Page Transition */

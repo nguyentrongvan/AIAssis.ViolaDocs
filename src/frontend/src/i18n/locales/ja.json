@@ -1162,6 +1162,10 @@
     "unauthorized": "認証されていません。再度ログインしてください。",
     "notFound": "リソースが見つかりません",
     "serverError": "サーバーエラー。後でもう一度お試しください。"
+  },
+  "footer": {
+    "copyright": "© {year} ViolaDocs. 全著作権所有。",
+    "version": "バージョン"
   }
 }
 
