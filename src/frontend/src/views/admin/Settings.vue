@@ -671,6 +671,61 @@
           </div>
         </div>
 
+        <!-- RAG Settings Section -->
+        <div class="section-header" style="margin-top: 3rem;">
+          <h2>RAG Settings</h2>
+        </div>
+        <div class="rag-settings-section">
+          <div class="form-section">
+            <div class="form-group">
+              <label for="rag_chunk_size">Chunk Size (tokens) *</label>
+              <input
+                id="rag_chunk_size"
+                v-model.number="ragForm.chunk_size"
+                type="number"
+                min="100"
+                max="4096"
+                placeholder="1024"
+              />
+              <small>Number of tokens per chunk when splitting documents for embedding. Default: 1024. Range: 100-4096.</small>
+            </div>
+            <div class="form-group">
+              <label for="rag_chunk_overlap">Chunk Overlap (tokens) *</label>
+              <input
+                id="rag_chunk_overlap"
+                v-model.number="ragForm.chunk_overlap"
+                type="number"
+                min="0"
+                :max="ragForm.chunk_size / 2"
+                placeholder="100"
+              />
+              <small>Number of tokens to overlap between chunks to preserve context. Must be less than chunk size. Default: 100.</small>
+            </div>
+            <div class="form-group">
+              <label for="rag_top_k">Top K Query *</label>
+              <input
+                id="rag_top_k"
+                v-model.number="ragForm.top_k"
+                type="number"
+                min="1"
+                max="100"
+                placeholder="20"
+              />
+              <small>Number of top chunks to retrieve for RAG queries. Default: 20. Range: 1-100.</small>
+            </div>
+            <div class="form-actions">
+              <button @click="saveRAGSettings" class="btn-primary" :disabled="savingRAG">
+                <Save :size="16" />
+                {{ savingRAG ? 'Saving...' : 'Save RAG Settings' }}
+              </button>
+              <button @click="loadRAGSettings" class="btn-secondary" :disabled="savingRAG">
+                <RefreshCw :size="16" />
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div class="section-header" style="margin-top: 3rem;">
           <h2>Chatbot Policies</h2>
         </div>
@@ -936,6 +991,14 @@ const promptsForm = ref({
 })
 const savingPrompts = ref(false)
 
+// RAG Settings
+const ragForm = ref({
+  chunk_size: 1024,
+  chunk_overlap: 100,
+  top_k: 20
+})
+const savingRAG = ref(false)
+
 // Ollama Models Management
 const ollamaModels = ref([])
 const loadingModels = ref(false)
@@ -1015,6 +1078,7 @@ onMounted(async () => {
   await loadOCRSettings()
   await loadPurgeGracePeriod()
   await loadPrompts()
+  await loadRAGSettings()
   // Load Ollama models when LLM tab is active
   if (activeTab.value === 'llm') {
     await loadOllamaModels()
@@ -1234,6 +1298,72 @@ const savePrompts = async () => {
     }
   } finally {
     savingPrompts.value = false
+  }
+}
+
+const loadRAGSettings = async () => {
+  try {
+    const res = await settingsAPI.chatbot.rag.get()
+    if (res.is_success) {
+      ragForm.value = {
+        chunk_size: res.data.chunk_size || 1024,
+        chunk_overlap: res.data.chunk_overlap || 100,
+        top_k: res.data.top_k || 20
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load RAG settings', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to load RAG settings', 'error')
+    }
+  }
+}
+
+const saveRAGSettings = async () => {
+  // Validation
+  if (ragForm.value.chunk_size < 100 || ragForm.value.chunk_size > 4096) {
+    if (window.$toast) {
+      window.$toast.show('Chunk size must be between 100 and 4096', 'error')
+    }
+    return
+  }
+  
+  if (ragForm.value.chunk_overlap < 0) {
+    if (window.$toast) {
+      window.$toast.show('Chunk overlap must be non-negative', 'error')
+    }
+    return
+  }
+  
+  if (ragForm.value.chunk_overlap >= ragForm.value.chunk_size) {
+    if (window.$toast) {
+      window.$toast.show('Chunk overlap must be less than chunk size', 'error')
+    }
+    return
+  }
+  
+  if (ragForm.value.top_k < 1 || ragForm.value.top_k > 100) {
+    if (window.$toast) {
+      window.$toast.show('Top K must be between 1 and 100', 'error')
+    }
+    return
+  }
+  
+  savingRAG.value = true
+  try {
+    const res = await settingsAPI.chatbot.rag.update(ragForm.value)
+    if (res.is_success) {
+      if (window.$toast) {
+        window.$toast.show('RAG settings saved successfully', 'success')
+      }
+    }
+  } catch (e) {
+    console.error('Failed to save RAG settings', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to save RAG settings', 'error')
+    }
+  } finally {
+    savingRAG.value = false
   }
 }
 

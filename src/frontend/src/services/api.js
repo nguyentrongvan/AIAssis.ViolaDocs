@@ -190,7 +190,11 @@ export const settingsAPI = {
     list: () => api.get('/settings/chatbot'),
     update: (data) => api.post('/settings/chatbot', data),
     getPrompts: () => api.get('/settings/chatbot/prompts'),
-    updatePrompts: (data) => api.post('/settings/chatbot/prompts', data)
+    updatePrompts: (data) => api.post('/settings/chatbot/prompts', data),
+    rag: {
+      get: () => api.get('/settings/chatbot/rag'),
+      update: (data) => api.post('/settings/chatbot/rag', data)
+    }
   },
   llm: {
     get: () => api.get('/settings/llm'),

@@ -190,6 +190,36 @@ export const useSettingsStore = defineStore('settings', {
       } finally {
         this.loading = false
       }
+    },
+    async fetchRAGSettings() {
+      this.loading = true
+      this.error = null
+      try {
+        const res = await settingsAPI.chatbot.rag.get()
+        if (res.is_success) {
+          return res.data
+        }
+      } catch (error) {
+        this.error = error.message
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+    async updateRAGSettings(data) {
+      this.loading = true
+      this.error = null
+      try {
+        const res = await settingsAPI.chatbot.rag.update(data)
+        if (res.is_success) {
+          return res.data
+        }
+      } catch (error) {
+        this.error = error.message
+        throw error
+      } finally {
+        this.loading = false
+      }
     }
   }
 })

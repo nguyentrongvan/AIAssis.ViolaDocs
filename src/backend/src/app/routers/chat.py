@@ -238,6 +238,14 @@ async def chat(
         embedding_service = get_embedding_service()
         if embedding_service and embedding_service.is_available():
             try:
+                # Load RAG settings for top_k
+                from ..services.settings_service import SettingsService
+                top_k = await SettingsService.get_setting(
+                    "rag_top_k",
+                    default=20,
+                    session=session
+                )
+                
                 query_embedding = embedding_service.generate_embedding(request.message)
                 
                 # Build search filters
@@ -249,20 +257,21 @@ async def chat(
                     # Qdrant supports list values for $in operator
                     search_filters["doc_id"] = accessible_doc_ids
                 
-                # Query vector store
+                # Query vector store with configurable top_k
                 vector_result = embedding_service.query_embeddings(
                     query_embedding=query_embedding,
                     where=search_filters if search_filters else None,
-                    top_k=20
+                    top_k=top_k
                 )
                 
-                # Process Qdrant results
-                doc_ids = []
-                doc_scores = {}  # Map doc_id to similarity score
+                # Process Qdrant results - handle chunks
+                # Group chunks by doc_id and aggregate
+                doc_chunks_map = {}  # doc_id -> list of chunks with scores
+                doc_scores = {}  # Map doc_id to best similarity score
                 
                 if vector_result and vector_result.get("metadatas"):
-                    # Extract all doc_ids with their scores
-                    all_results = []
+                    # Extract chunks with their scores
+                    all_chunk_results = []
                     for idx, metas in enumerate(vector_result["metadatas"]):
                         for meta_idx, meta in enumerate(metas):
                             doc_id = meta.get("doc_id")
@@ -284,35 +293,48 @@ async def chat(
                                     # Convert distance to similarity score (1 - distance for cosine)
                                     score = max(0, 1 - distance)
                                 
-                                all_results.append({
+                                chunk_text = meta.get("chunk_text")
+                                chunk_index = meta.get("chunk_index")
+                                
+                                all_chunk_results.append({
                                     "doc_id": int(doc_id),
-                                    "score": score
+                                    "score": score,
+                                    "chunk_text": chunk_text,
+                                    "chunk_index": chunk_index,
+                                    "meta": meta
                                 })
                     
-                    # Filter by accessible_doc_ids and sort by score
-                    filtered_results = [
-                        r for r in all_results
+                    # Filter by accessible_doc_ids and group by doc_id
+                    filtered_chunks = [
+                        r for r in all_chunk_results
                         if r["doc_id"] in accessible_doc_ids
                     ]
                     
-                    # Sort by score (descending) if available
-                    if any(r["score"] is not None for r in filtered_results):
-                        filtered_results.sort(key=lambda x: x["score"] if x["score"] is not None else 0, reverse=True)
+                    # Group chunks by doc_id
+                    for chunk_result in filtered_chunks:
+                        doc_id = chunk_result["doc_id"]
+                        if doc_id not in doc_chunks_map:
+                            doc_chunks_map[doc_id] = []
+                        doc_chunks_map[doc_id].append(chunk_result)
+                        
+                        # Track best score per document
+                        if chunk_result["score"] is not None:
+                            if doc_id not in doc_scores or chunk_result["score"] > doc_scores[doc_id]:
+                                doc_scores[doc_id] = chunk_result["score"]
                     
-                    # Get top 5 documents
-                    for result in filtered_results[:5]:
-                        doc_id = result["doc_id"]
-                        if doc_id not in doc_ids:
-                            doc_ids.append(doc_id)
-                            if result["score"] is not None:
-                                doc_scores[doc_id] = result["score"]
+                    # Sort documents by best score and get top 5
+                    sorted_doc_ids = sorted(
+                        doc_chunks_map.keys(),
+                        key=lambda d: doc_scores.get(d, 0),
+                        reverse=True
+                    )[:5]
                     
-                    if doc_ids:
+                    if sorted_doc_ids:
                         # Get documents from database
                         docs_result = await session.execute(
                             select(Document).where(
                                 and_(
-                                    Document.id.in_(doc_ids),
+                                    Document.id.in_(sorted_doc_ids),
                                     Document.deleted_at.is_(None),
                                     Document.status == "ready"
                                 )
@@ -328,7 +350,7 @@ async def chat(
                         if request.selected_document_ids:
                             selected_without_embedding = [
                                 doc_id for doc_id in request.selected_document_ids
-                                if doc_id not in doc_ids and doc_id in accessible_doc_ids
+                                if doc_id not in sorted_doc_ids and doc_id in accessible_doc_ids
                             ]
                             if selected_without_embedding:
                                 docs_without_embedding = selected_without_embedding
@@ -336,37 +358,75 @@ async def chat(
                         if docs_without_embedding:
                             warning = f"Some selected documents don't have embeddings yet ({len(docs_without_embedding)} documents)"
                         
-                        # Get text content for context
+                        # Aggregate chunks per document for context
                         from ..models.documents import DocumentVersion
                         for doc in docs:
-                            version_result = await session.execute(
-                                select(DocumentVersion)
-                                .where(DocumentVersion.document_id == doc.id)
-                                .order_by(DocumentVersion.version_no.desc())
-                                .limit(1)
-                            )
-                            version = version_result.scalar_one_or_none()
+                            doc_id = doc.id
+                            chunks_for_doc = doc_chunks_map.get(doc_id, [])
                             
-                            if version and version.text_uri:
-                                from ..services.diff import get_text_from_uri
-                                text_content = await get_text_from_uri(version.text_uri)
-                                if text_content:
-                                    # Use first 500 chars as context
-                                    doc_contexts.append(text_content[:500])
-                                    
-                                    # Create citation with improved structure
-                                    citation = {
-                                        "document_id": doc.id,
-                                        "doc_id": doc.id,  # Alias for frontend compatibility
-                                        "title": doc.title,
-                                        "snippet": text_content[:200]
-                                    }
-                                    
-                                    # Add score if available
-                                    if doc.id in doc_scores:
-                                        citation["score"] = doc_scores[doc.id]
-                                    
-                                    citations.append(citation)
+                            # Sort chunks by score (descending) and take top chunks
+                            chunks_for_doc.sort(
+                                key=lambda c: c["score"] if c["score"] is not None else 0,
+                                reverse=True
+                            )
+                            
+                            # Aggregate chunk texts
+                            chunk_texts = []
+                            for chunk_result in chunks_for_doc:
+                                chunk_text = chunk_result.get("chunk_text")
+                                if chunk_text:
+                                    chunk_texts.append(chunk_text)
+                            
+                            # If we have chunks, use them; otherwise fallback to full document text
+                            if chunk_texts:
+                                # Combine chunks with separator
+                                aggregated_text = "\n\n".join(chunk_texts)
+                                # Limit total context length (use first ~2000 chars)
+                                doc_contexts.append(aggregated_text[:2000])
+                                
+                                # Create citation with chunk snippet
+                                best_chunk = chunks_for_doc[0] if chunks_for_doc else None
+                                snippet = best_chunk.get("chunk_text", "")[:200] if best_chunk else ""
+                                
+                                citation = {
+                                    "document_id": doc.id,
+                                    "doc_id": doc.id,
+                                    "title": doc.title,
+                                    "snippet": snippet,
+                                    "chunk_count": len(chunks_for_doc)
+                                }
+                            else:
+                                # Fallback: get full document text (backward compatibility)
+                                version_result = await session.execute(
+                                    select(DocumentVersion)
+                                    .where(DocumentVersion.document_id == doc.id)
+                                    .order_by(DocumentVersion.version_no.desc())
+                                    .limit(1)
+                                )
+                                version = version_result.scalar_one_or_none()
+                                
+                                if version and version.text_uri:
+                                    from ..services.diff import get_text_from_uri
+                                    text_content = await get_text_from_uri(version.text_uri)
+                                    if text_content:
+                                        doc_contexts.append(text_content[:500])
+                                        
+                                        citation = {
+                                            "document_id": doc.id,
+                                            "doc_id": doc.id,
+                                            "title": doc.title,
+                                            "snippet": text_content[:200]
+                                        }
+                                    else:
+                                        continue
+                                else:
+                                    continue
+                            
+                            # Add score if available
+                            if doc.id in doc_scores:
+                                citation["score"] = doc_scores[doc.id]
+                            
+                            citations.append(citation)
                 
             except EmbeddingModelUnavailableError as e:
                 # If embedding service is unavailable, continue without vector search

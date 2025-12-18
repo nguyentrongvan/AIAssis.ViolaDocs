@@ -3,25 +3,6 @@ import json
 from typing import List, Optional, Dict, Any
 from ...config import settings
 
-# #region agent log
-DEBUG_LOG_PATH = r"d:\TrongVan\VanDMS\AIAssis.ViolaDocs\.cursor\debug.log"
-def _debug_log(location: str, message: str, data: dict, hypothesis_id: str = None):
-    try:
-        import time
-        log_entry = {
-            "sessionId": "qdrant-debug",
-            "runId": "run1",
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(time.time() * 1000)
-        }
-        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(log_entry) + "\n")
-    except:
-        pass
-# #endregion
 
 
 class QdrantVectorStore:
@@ -88,13 +69,6 @@ class QdrantVectorStore:
             except Exception as e:
                 error_msg = str(e)
                 error_type = type(e).__name__
-                # #region agent log
-                _debug_log("qdrant_store.py:88", "Exception when getting collection", {
-                    "error_type": error_type,
-                    "error_msg": error_msg[:200]
-                }, "A")
-                # #endregion
-                
                 # Check if it's a validation error (collection exists but config has issues)
                 # vs collection doesn't exist error
                 is_validation_error = (
@@ -107,12 +81,6 @@ class QdrantVectorStore:
                     # Collection exists but has config validation issue - check by listing collections
                     # Suppress error message - this is expected and handled gracefully
                     print(f"[QdrantVectorStore] Collection config has validation issue (using workaround)")
-                    # #region agent log
-                    _debug_log("qdrant_store.py:102", "Validation error detected, checking collections list", {
-                        "error_type": error_type,
-                        "error_msg": error_msg[:200]
-                    }, "A")
-                    # #endregion
                     try:
                         collections = self.client.get_collections().collections
                         collection_exists = any(col.name == self.collection_name for col in collections)
@@ -171,12 +139,70 @@ class QdrantVectorStore:
             
             # Get collection count before upsert
             collection_count_before = 0
+            existing_dim = None
+            collection_exists = False
+            
+            # Try to get collection info - handle validation errors gracefully
             try:
                 collection_info = self.client.get_collection(self.collection_name)
                 collection_count_before = collection_info.points_count
+                existing_dim = collection_info.config.params.vectors.size
+                collection_exists = True
+                print(f"[QdrantVectorStore] Collection exists: {collection_count_before} points, dimension: {existing_dim}")
             except Exception as e:
-                # Collection doesn't exist yet
-                print(f"[QdrantVectorStore] Collection doesn't exist yet, will create: {e}")
+                error_msg = str(e).lower()
+                error_type = type(e).__name__
+                
+                # Check if it's a validation error (collection exists but config has pydantic issues)
+                is_validation_error = (
+                    "validation" in error_msg or 
+                    "pydantic" in error_msg or 
+                    error_type == "ValidationError" or
+                    "max_optimization_threads" in error_msg
+                )
+                
+                if is_validation_error:
+                    # Collection exists but has validation error - use HTTP API bypass to get info
+                    print(f"[QdrantVectorStore] Collection has validation error (using HTTP API bypass): {e}")
+                    try:
+                        # Get collection info via raw HTTP API
+                        import urllib.request
+                        import json as json_lib
+                        base_url = None
+                        if hasattr(self.client, 'http') and hasattr(self.client.http, 'base_url'):
+                            base_url = str(self.client.http.base_url).rstrip('/')
+                        elif hasattr(self.client, '_client') and hasattr(self.client._client, 'base_url'):
+                            base_url = str(self.client._client.base_url).rstrip('/')
+                        else:
+                            scheme = "http"
+                            host = self.host if self.host != "localhost" else "localhost"
+                            base_url = f"{scheme}://{host}:{self.port}"
+                        
+                        url = f"{base_url}/collections/{self.collection_name}"
+                        req = urllib.request.Request(url)
+                        req.add_header('Content-Type', 'application/json')
+                        with urllib.request.urlopen(req, timeout=5) as response:
+                            data = json_lib.loads(response.read().decode('utf-8'))
+                            if "result" in data and isinstance(data["result"], dict):
+                                result = data["result"]
+                                collection_count_before = result.get("points_count", 0)
+                                # Get dimension from config
+                                if "config" in result and "params" in result["config"]:
+                                    vectors_config = result["config"]["params"].get("vectors", {})
+                                    if isinstance(vectors_config, dict):
+                                        existing_dim = vectors_config.get("size")
+                                    elif hasattr(vectors_config, "size"):
+                                        existing_dim = vectors_config.size
+                                collection_exists = True
+                                print(f"[QdrantVectorStore] Got collection info via HTTP API: {collection_count_before} points, dimension: {existing_dim}")
+                    except Exception as http_error:
+                        print(f"[QdrantVectorStore] Warning: Could not get collection info via HTTP API: {http_error}")
+                        # Assume collection doesn't exist if we can't verify
+                        collection_exists = False
+                else:
+                    # Collection doesn't exist
+                    print(f"[QdrantVectorStore] Collection doesn't exist: {e}")
+                    collection_exists = False
             
             # Log before upsert
             metadata_sample = metadatas[0] if metadatas else {}
@@ -186,50 +212,106 @@ class QdrantVectorStore:
             print(f"  - Payload sample: doc_id={metadata_sample.get('doc_id')}, version_id={metadata_sample.get('version_id')}")
             print(f"  - Collection count before: {collection_count_before}")
             
-            # Create collection if it doesn't exist
-            try:
-                collection_info = self.client.get_collection(self.collection_name)
-                existing_dim = collection_info.config.params.vectors.size
-                if existing_dim != embedding_dim:
-                    print(f"[QdrantVectorStore] ERROR: Dimension mismatch: embedding={embedding_dim}, collection={existing_dim}")
-                    print(f"[QdrantVectorStore] Deleting and recreating collection '{self.collection_name}' with dimension {embedding_dim}")
-                    self.client.delete_collection(self.collection_name)
-                    self._create_collection(embedding_dim)
-                    collection_count_before = 0
-            except Exception as e:
+            # Check if collection needs to be created or has dimension mismatch
+            if not collection_exists:
                 # Collection doesn't exist, create it
                 print(f"[QdrantVectorStore] Creating collection '{self.collection_name}' with dimension {embedding_dim}")
+                try:
+                    self._create_collection(embedding_dim)
+                    collection_count_before = 0
+                except Exception as create_error:
+                    # If create fails because collection exists (race condition), that's okay
+                    if "already exists" in str(create_error).lower():
+                        print(f"[QdrantVectorStore] Collection was created by another process, continuing...")
+                    else:
+                        raise
+            elif existing_dim is not None and existing_dim != embedding_dim:
+                # Dimension mismatch - this is a real problem, need to recreate
+                print(f"[QdrantVectorStore] ERROR: Dimension mismatch: embedding={embedding_dim}, collection={existing_dim}")
+                print(f"[QdrantVectorStore] WARNING: Deleting collection will lose all existing data!")
+                print(f"[QdrantVectorStore] Deleting and recreating collection '{self.collection_name}' with dimension {embedding_dim}")
+                self.client.delete_collection(self.collection_name)
                 self._create_collection(embedding_dim)
+                collection_count_before = 0
+            else:
+                # Collection exists and dimension matches (or couldn't verify dimension)
+                # Just proceed with upsert - don't delete collection!
+                if existing_dim is None:
+                    print(f"[QdrantVectorStore] Collection exists but couldn't verify dimension, proceeding with upsert (preserving existing data)")
+                else:
+                    print(f"[QdrantVectorStore] Collection exists with matching dimension ({existing_dim}), proceeding with upsert (preserving existing data)")
             
             # Prepare points for upsert
             points = []
+            print(f"[QdrantVectorStore] Preparing {len(ids)} points for upsert")
             for idx, (point_id, embedding, metadata) in enumerate(zip(ids, embeddings, metadatas)):
-                # Convert point_id to int if it's numeric string, otherwise use as string
+                print(f"[QdrantVectorStore] Processing point {idx+1}/{len(ids)}: original_id='{point_id}' (type: {type(point_id).__name__})")
+                # Convert point_id to integer ID (Qdrant gRPC requires int or UUID, not arbitrary strings)
+                # Hash string IDs to integers to ensure uniqueness
+                import hashlib
                 try:
-                    # Try to use numeric ID if possible (Qdrant prefers int IDs)
                     if point_id.startswith("embed-"):
-                        # Extract numeric part from "embed-123"
-                        numeric_id = int(point_id.split("-")[-1])
+                        # Check if it's a chunk ID (has "chunk-" in it)
+                        if "-chunk-" in point_id:
+                            # Hash chunk ID to integer (e.g., "embed-92-chunk-0" -> hash to int)
+                            # Use first 8 bytes of MD5 hash as integer (positive)
+                            hash_bytes = hashlib.md5(point_id.encode()).digest()[:8]
+                            point_id_typed = int.from_bytes(hash_bytes, byteorder='big', signed=False)
+                            print(f"[QdrantVectorStore] Converted chunk ID '{point_id}' -> {point_id_typed} (int)")
+                        else:
+                            # Extract numeric part from "embed-123"
+                            numeric_id = int(point_id.split("-")[-1])
+                            point_id_typed = numeric_id
+                            print(f"[QdrantVectorStore] Converted simple ID '{point_id}' -> {point_id_typed} (int)")
                     else:
+                        # Try to convert to int if it's numeric
                         numeric_id = int(point_id)
-                    point_id_typed = numeric_id
-                except (ValueError, IndexError):
-                    # Use string ID if not numeric
-                    point_id_typed = point_id
+                        point_id_typed = numeric_id
+                        print(f"[QdrantVectorStore] Converted numeric ID '{point_id}' -> {point_id_typed} (int)")
+                except (ValueError, IndexError) as e:
+                    # Hash string ID to integer if conversion fails
+                    hash_bytes = hashlib.md5(point_id.encode()).digest()[:8]
+                    point_id_typed = int.from_bytes(hash_bytes, byteorder='big', signed=False)
+                    print(f"[QdrantVectorStore] Hashed fallback ID '{point_id}' -> {point_id_typed} (int, error: {e})")
+                
+                # Ensure point_id_typed is an integer (Qdrant gRPC requirement)
+                # This is critical - Qdrant gRPC does NOT accept string IDs
+                if not isinstance(point_id_typed, int):
+                    # Force conversion to int if somehow still a string
+                    print(f"[QdrantVectorStore] ERROR: point_id_typed is not int! Type: {type(point_id_typed)}, Value: {point_id_typed}")
+                    print(f"[QdrantVectorStore] Original ID: {point_id}")
+                    if isinstance(point_id_typed, str):
+                        hash_bytes = hashlib.md5(point_id_typed.encode()).digest()[:8]
+                        point_id_typed = int.from_bytes(hash_bytes, byteorder='big', signed=False)
+                    else:
+                        try:
+                            point_id_typed = int(point_id_typed)
+                        except:
+                            # Last resort: hash the string representation
+                            hash_bytes = hashlib.md5(str(point_id_typed).encode()).digest()[:8]
+                            point_id_typed = int.from_bytes(hash_bytes, byteorder='big', signed=False)
+                    print(f"[QdrantVectorStore] Forced conversion result: {point_id_typed} (type: {type(point_id_typed).__name__})")
+                
+                # Final assertion - this should NEVER fail if code is correct
+                assert isinstance(point_id_typed, int), f"point_id_typed must be int, got {type(point_id_typed)}: {point_id_typed} (original: {point_id})"
                 
                 points.append(
                     PointStruct(
-                        id=point_id_typed,
+                        id=point_id_typed,  # Must be int for Qdrant gRPC
                         vector=embedding,
                         payload=metadata
                     )
                 )
             
             # Perform upsert
-            self.client.upsert(
-                collection_name=self.collection_name,
-                points=points
-            )
+            try:
+                self.client.upsert(
+                    collection_name=self.collection_name,
+                    points=points
+                )
+                
+            except Exception as upsert_error:
+                raise
             
             # Verify upsert success
             collection_count_after = 0
@@ -255,14 +337,25 @@ class QdrantVectorStore:
         """Create Qdrant collection with specified vector size"""
         from qdrant_client.models import Distance, VectorParams
         
-        self.client.create_collection(
-            collection_name=self.collection_name,
-            vectors_config=VectorParams(
-                size=vector_size,
-                distance=Distance.COSINE
+        # Create collection without optimizers_config to let Qdrant use defaults
+        # This avoids validation errors with required OptimizersConfig fields
+        try:
+            self.client.create_collection(
+                collection_name=self.collection_name,
+                vectors_config=VectorParams(
+                    size=vector_size,
+                    distance=Distance.COSINE
+                )
+                # Don't specify optimizers_config - let Qdrant use defaults
             )
-        )
-        print(f"[QdrantVectorStore] ✓ Collection '{self.collection_name}' created with vector size {vector_size}")
+            
+            print(f"[QdrantVectorStore] ✓ Collection '{self.collection_name}' created with vector size {vector_size}")
+        except Exception as e:
+            # If collection already exists, that's okay (might be race condition)
+            if "already exists" in str(e).lower():
+                print(f"[QdrantVectorStore] Collection '{self.collection_name}' already exists, skipping creation")
+            else:
+                raise
     
     def query(self, query_embeddings: List[List[float]], where: Optional[Dict[str, Any]], top_k: int):
         """Query Qdrant collection"""
@@ -345,86 +438,38 @@ class QdrantVectorStore:
             error_msg = str(e)
             # Handle validation error (collection exists but config has issues)
             if "validation error" in error_msg.lower() or "pydantic" in error_msg.lower():
-                # #region agent log
-                _debug_log("qdrant_store.py:306", "Validation error detected, attempting HTTP API bypass", {
-                    "error_msg": error_msg[:200],
-                    "collection_name": self.collection_name
-                }, "A")
-                # #endregion
-                
                 # Try to get count using raw HTTP request (bypasses pydantic validation)
                 try:
-                    # #region agent log
-                    _debug_log("qdrant_store.py:312", "Attempting raw HTTP request", {
-                        "has_http": hasattr(self.client, 'http'),
-                        "has_collections_api": hasattr(self.client, 'http') and hasattr(self.client.http, 'collections_api') if hasattr(self.client, 'http') else False
-                    }, "B")
-                    # #endregion
-                    
                     # Get base URL from client
                     base_url = None
                     if hasattr(self.client, 'http') and hasattr(self.client.http, 'base_url'):
                         base_url = str(self.client.http.base_url).rstrip('/')
-                        # #region agent log
-                        _debug_log("qdrant_store.py:320", "Got base_url from client.http", {"base_url": base_url}, "B")
-                        # #endregion
                     elif hasattr(self.client, '_client') and hasattr(self.client._client, 'base_url'):
                         base_url = str(self.client._client.base_url).rstrip('/')
-                        # #region agent log
-                        _debug_log("qdrant_store.py:323", "Got base_url from client._client", {"base_url": base_url}, "B")
-                        # #endregion
                     else:
                         # Construct from host/port
                         scheme = "http"
                         host = self.host if self.host != "localhost" else "localhost"
                         base_url = f"{scheme}://{host}:{self.port}"
-                        # #region agent log
-                        _debug_log("qdrant_store.py:330", "Constructed base_url from host/port", {"base_url": base_url, "host": host, "port": self.port}, "B")
-                        # #endregion
                     
                     # Make raw HTTP request using urllib to bypass pydantic
                     import urllib.request
                     import urllib.error
                     url = f"{base_url}/collections/{self.collection_name}"
-                    # #region agent log
-                    _debug_log("qdrant_store.py:337", "Making raw HTTP GET request", {"url": url}, "C")
-                    # #endregion
                     
                     req = urllib.request.Request(url)
                     req.add_header('Content-Type', 'application/json')
                     with urllib.request.urlopen(req, timeout=5) as response:
                         raw_json = response.read().decode('utf-8')
-                        # #region agent log
-                        _debug_log("qdrant_store.py:343", "Got raw HTTP response", {
-                            "status": response.status,
-                            "json_length": len(raw_json),
-                            "json_preview": raw_json[:500] if len(raw_json) > 500 else raw_json
-                        }, "C")
-                        # #endregion
                         
                         data = json.loads(raw_json)
-                        # #region agent log
-                        _debug_log("qdrant_store.py:349", "Parsed JSON response", {
-                            "has_result": "result" in data,
-                            "result_keys": list(data.get("result", {}).keys())[:10] if isinstance(data.get("result"), dict) else None
-                        }, "C")
-                        # #endregion
                         
                         if "result" in data and isinstance(data["result"], dict):
                             if "points_count" in data["result"]:
                                 count = data["result"]["points_count"]
-                                # #region agent log
-                                _debug_log("qdrant_store.py:356", "Successfully extracted points_count", {"count": count}, "C")
-                                # #endregion
                                 print(f"[QdrantVectorStore] Got collection count via raw HTTP API: {count}")
                                 return count
                 except Exception as e2:
-                    # #region agent log
-                    _debug_log("qdrant_store.py:361", "Raw HTTP request failed", {
-                        "error_type": type(e2).__name__,
-                        "error_msg": str(e2)[:200]
-                    }, "C")
-                    # #endregion
                     # Don't print full error, just a brief warning
                     print(f"[QdrantVectorStore] Warning: Could not get count via raw HTTP API, will use scroll method")
                 

@@ -22,6 +22,7 @@ Pillow==11.0.0
 pgvector==0.2.4
 openai==1.6.0
 qdrant-client==1.7.0
+tiktoken>=0.5.0
 # OCR providers
 pytesseract==0.3.10
 easyocr==1.7.0

@@ -724,6 +724,141 @@ async def update_chatbot_policy(
     })
 
 
+@router.get("/chatbot/rag")
+async def get_rag_settings(
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get RAG settings (chunk size, overlap, top_k)."""
+    from ..services.settings_service import SettingsService
+    
+    # Default values
+    default_chunk_size = 1024
+    default_chunk_overlap = 100
+    default_top_k = 20
+    
+    # Get settings from database, fallback to defaults
+    chunk_size = await SettingsService.get_setting(
+        "rag_chunk_size",
+        default=default_chunk_size,
+        session=session
+    )
+    chunk_overlap = await SettingsService.get_setting(
+        "rag_chunk_overlap",
+        default=default_chunk_overlap,
+        session=session
+    )
+    top_k = await SettingsService.get_setting(
+        "rag_top_k",
+        default=default_top_k,
+        session=session
+    )
+    
+    return success_response({
+        "chunk_size": chunk_size,
+        "chunk_overlap": chunk_overlap,
+        "top_k": top_k
+    })
+
+
+class RAGSettingsUpdate(BaseModel):
+    chunk_size: Optional[int] = None
+    chunk_overlap: Optional[int] = None
+    top_k: Optional[int] = None
+
+
+@router.post("/chatbot/rag")
+async def update_rag_settings(
+    payload: RAGSettingsUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update RAG settings (chunk size, overlap, top_k)."""
+    from ..services.settings_service import SettingsService
+    
+    # Validation
+    if payload.chunk_size is not None:
+        if payload.chunk_size < 100 or payload.chunk_size > 4096:
+            return error_response(
+                "chunk_size must be between 100 and 4096",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+    
+    if payload.chunk_overlap is not None:
+        if payload.chunk_overlap < 0:
+            return error_response(
+                "chunk_overlap must be non-negative",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        # Get current chunk_size to validate overlap
+        current_chunk_size = await SettingsService.get_setting(
+            "rag_chunk_size",
+            default=1024,
+            session=session
+        )
+        chunk_size_to_check = payload.chunk_size if payload.chunk_size is not None else current_chunk_size
+        if payload.chunk_overlap >= chunk_size_to_check:
+            return error_response(
+                "chunk_overlap must be less than chunk_size",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+    
+    if payload.top_k is not None:
+        if payload.top_k < 1 or payload.top_k > 100:
+            return error_response(
+                "top_k must be between 1 and 100",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+    
+    updated = []
+    
+    # Update chunk_size
+    if payload.chunk_size is not None:
+        await SettingsService.set_setting(
+            key="rag_chunk_size",
+            value=payload.chunk_size,
+            category="chatbot",
+            description="RAG chunk size in tokens",
+            sensitive=False,
+            user_id=current_user.id,
+            session=session
+        )
+        updated.append("chunk_size")
+    
+    # Update chunk_overlap
+    if payload.chunk_overlap is not None:
+        await SettingsService.set_setting(
+            key="rag_chunk_overlap",
+            value=payload.chunk_overlap,
+            category="chatbot",
+            description="RAG chunk overlap in tokens",
+            sensitive=False,
+            user_id=current_user.id,
+            session=session
+        )
+        updated.append("chunk_overlap")
+    
+    # Update top_k
+    if payload.top_k is not None:
+        await SettingsService.set_setting(
+            key="rag_top_k",
+            value=payload.top_k,
+            category="chatbot",
+            description="RAG top_k query parameter",
+            sensitive=False,
+            user_id=current_user.id,
+            session=session
+        )
+        updated.append("top_k")
+    
+    await session.commit()
+    
+    return success_response({
+        "message": f"Updated: {', '.join(updated)}" if updated else "No changes",
+        "updated": updated
+    })
+
+
 # LLM Settings Models
 class LLMSettingsUpdate(BaseModel):
     ollama_base_url: Optional[str] = None

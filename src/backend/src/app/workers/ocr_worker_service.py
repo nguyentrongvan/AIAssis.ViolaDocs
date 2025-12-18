@@ -627,17 +627,65 @@ class OCRWorkerService:
                     except Exception as e:
                         raise ValueError(f"Failed to read OCR text: {e}")
                     
-                    # Generate embedding
-                    print(f"[{self.worker_id}] Generating embedding...")
+                    # Load RAG settings for chunking
+                    from ..services.settings_service import SettingsService
+                    chunk_size = await SettingsService.get_setting(
+                        "rag_chunk_size",
+                        default=1024,
+                        session=session
+                    )
+                    chunk_overlap = await SettingsService.get_setting(
+                        "rag_chunk_overlap",
+                        default=100,
+                        session=session
+                    )
+                    
+                    # Chunk text
+                    from ..utils.text_chunker import get_default_chunker
+                    chunker = get_default_chunker()
+                    chunks = chunker.chunk_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
+                    print(f"[{self.worker_id}] ✓ Text chunked into {len(chunks)} chunks (chunk_size={chunk_size}, overlap={chunk_overlap})")
+                    
+                    # Generate embeddings for each chunk
+                    print(f"[{self.worker_id}] Generating embeddings for {len(chunks)} chunks...")
                     try:
-                        embedding_vector = embedding_service.generate_embedding(text)
-                        embedding_dim = len(embedding_vector)
-                        print(f"[{self.worker_id}] ✓ Embedding generated: dimension={embedding_dim}")
+                        # Generate embeddings in batch if possible, otherwise one by one
+                        chunk_texts = [chunk["text"] for chunk in chunks]
+                        if hasattr(embedding_service, 'generate_embeddings_batch'):
+                            embedding_vectors = embedding_service.generate_embeddings_batch(chunk_texts)
+                        else:
+                            # Fallback: generate one by one
+                            embedding_vectors = []
+                            for chunk_text in chunk_texts:
+                                embedding_vector = embedding_service.generate_embedding(chunk_text)
+                                embedding_vectors.append(embedding_vector)
+                        
+                        embedding_dim = len(embedding_vectors[0]) if embedding_vectors else 0
+                        print(f"[{self.worker_id}] ✓ Generated {len(embedding_vectors)} embeddings: dimension={embedding_dim}")
                     except EmbeddingModelUnavailableError as e:
                         raise ValueError(f"Embedding model unavailable: {str(e)}")
                     
-                    # Save embedding to vector store
-                    embed_id = f"embed-{job.id}"
+                    # Prepare IDs and metadatas for all chunks
+                    embed_ids = []
+                    metadatas_list = []
+                    
+                    for idx, (chunk, embedding_vector) in enumerate(zip(chunks, embedding_vectors)):
+                        embed_id = f"embed-{job.id}-chunk-{idx}"
+                        embed_ids.append(embed_id)
+                        
+                        metadata = {
+                            "doc_id": version.document_id,
+                            "version_id": version_id,
+                            "chunk_index": idx,
+                            "chunk_text": chunk["text"],
+                            "start_pos": chunk["start_pos"],
+                            "end_pos": chunk["end_pos"],
+                            "token_count": chunk["token_count"],
+                            "owner_id": document.owner_id if document else None,
+                            "provider": job.provider,
+                            "text_length": len(chunk["text"])
+                        }
+                        metadatas_list.append(metadata)
                     
                     # Get collection count before upsert
                     collection_count_before = 0
@@ -647,17 +695,11 @@ class OCRWorkerService:
                         except:
                             pass
                     
-                    print(f"[{self.worker_id}] Upserting embedding to Qdrant (collection count before: {collection_count_before})...")
+                    print(f"[{self.worker_id}] Upserting {len(embed_ids)} chunk embeddings to Qdrant (collection count before: {collection_count_before})...")
                     embedding_service.upsert_embeddings(
-                        ids=[embed_id],
-                        embeddings=[embedding_vector],
-                        metadatas=[{
-                            "doc_id": version.document_id,
-                            "version_id": version_id,
-                            "owner_id": document.owner_id if document else None,
-                            "provider": job.provider,
-                            "text_length": len(text)
-                        }]
+                        ids=embed_ids,
+                        embeddings=embedding_vectors,
+                        metadatas=metadatas_list
                     )
                     
                     # Verify collection count after upsert
@@ -674,8 +716,9 @@ class OCRWorkerService:
                     # Update job
                     job.status = "completed"
                     job.output_ref = {
-                        "embedding_id": embed_id,
-                        "vector_dimension": len(embedding_vector)
+                        "embedding_ids": embed_ids,
+                        "chunk_count": len(chunks),
+                        "vector_dimension": embedding_dim if embedding_vectors else 0
                     }
                     job.release()  # Clear worker tracking
                     

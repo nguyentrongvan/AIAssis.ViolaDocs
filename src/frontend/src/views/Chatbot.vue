@@ -196,7 +196,7 @@
         <div class="messages" ref="messagesContainer">
           <div v-if="messages.length === 0" class="welcome-message">
             <div class="welcome-icon-wrapper">
-              <MessageSquare class="welcome-icon" :size="64" />
+              <img src="/chatbot.png" alt="Chatbot" class="welcome-icon" />
               <div class="welcome-glow"></div>
             </div>
             <h3 class="gradient-text">Ask me anything about your documents</h3>
@@ -213,7 +213,7 @@
                   <User :size="20" />
                 </div>
                 <div v-else class="avatar-circle ai-avatar">
-                  <MessageSquare :size="20" />
+                  <img src="/chatbot.png" alt="Chatbot" class="avatar-image" />
                   <div class="avatar-pulse"></div>
                 </div>
               </div>
@@ -268,7 +268,7 @@
             <div v-if="sending" class="message assistant">
               <div class="message-avatar">
                 <div class="avatar-circle ai-avatar">
-                  <MessageSquare :size="20" />
+                  <img src="/chatbot.png" alt="Chatbot" class="avatar-image" />
                   <div class="avatar-pulse animate-pulse"></div>
                 </div>
               </div>
@@ -1320,11 +1320,15 @@ const formatDate = (dateStr) => {
 .welcome-icon {
   width: 90px;
   height: 90px;
-  color: var(--primary);
   position: relative;
   z-index: 2;
   animation: float 3s var(--ease-in-out) infinite;
   filter: drop-shadow(0 0 30px rgba(0, 217, 255, 0.5));
+  object-fit: contain;
+  border-radius: 50%;
+  background: var(--gradient-cyan-purple);
+  padding: 8px;
+  box-sizing: border-box;
 }
 
 .welcome-glow {
@@ -1389,7 +1393,7 @@ const formatDate = (dateStr) => {
 .avatar-circle {
   width: 44px;
   height: 44px;
-  border-radius: var(--radius-full);
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1397,6 +1401,7 @@ const formatDate = (dateStr) => {
   transition: all var(--transition-base);
   border: 3px solid transparent;
   background-clip: padding-box;
+  overflow: hidden;
 }
 
 .user-avatar {
@@ -1406,9 +1411,17 @@ const formatDate = (dateStr) => {
 }
 
 .ai-avatar {
-  background: var(--gradient-cyan-purple);
-  color: white;
-  box-shadow: 0 4px 12px rgba(0, 217, 255, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  background: transparent;
+  padding: 0;
+  box-shadow: 0 4px 12px rgba(0, 217, 255, 0.4);
+}
+
+.avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+  display: block;
 }
 
 .avatar-pulse {
