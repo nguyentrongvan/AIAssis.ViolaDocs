@@ -8,6 +8,7 @@
         </div>
         <div class="logo-tagline">{{ $t('common.tagline') }}</div>
       </div>
+      <LanguageSelector />
       <nav>
         <router-link to="/" :class="['nav-item', { 'router-link-active': isActiveRoute('/') }]" active-class="" exact-active-class="">
           <Library class="nav-icon" />
@@ -84,7 +85,6 @@
           </router-link>
         </template>
       </nav>
-      <LanguageSelector />
       <div class="user-menu">
         <div class="user-info">
           <div :class="['user-avatar', getUserRoleColor]">

@@ -69,7 +69,6 @@ const animatedStats = ref({
 })
 
 const statCards = computed(() => {
-  const { t } = useI18n()
   return [
     {
       key: 'totalDocuments',
@@ -93,7 +92,6 @@ const statCards = computed(() => {
 })
 
 const actions = computed(() => {
-  const { t } = useI18n()
   return [
     {
       path: '/documents',

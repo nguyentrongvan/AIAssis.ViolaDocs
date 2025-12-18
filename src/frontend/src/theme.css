@@ -1,24 +1,24 @@
 :root {
   /* Primary Colors */
-  --primary: #6C5CE7;
-  --primary-dark: #4B3BCC;
-  --primary-light: #DAD7FF;
+  --primary: #3E2FA6;
+  --primary-dark: #251A7A;
+  --primary-light: #A495EF;
   
   /* AI Accent Colors */
   --ai-cyan: #00D9FF;
   --ai-teal: #00F5FF;
   --ai-electric: #00B8FF;
-  --ai-purple: #8B5CF6;
+  --ai-purple: #5A4BD6;
   --ai-pink: #EC4899;
   
   /* Gradients */
-  --gradient-start: #6C5CE7;
-  --gradient-end: #9B8CFF;
-  --gradient-ai: linear-gradient(135deg, #00D9FF 0%, #6C5CE7 50%, #EC4899 100%);
-  --gradient-ai-soft: linear-gradient(135deg, rgba(0, 217, 255, 0.1) 0%, rgba(108, 92, 231, 0.1) 50%, rgba(236, 72, 153, 0.1) 100%);
+  --gradient-start: #3E2FA6;
+  --gradient-end: #5A4BD6;
+  --gradient-ai: linear-gradient(135deg, #00D9FF 0%, #3E2FA6 50%, #EC4899 100%);
+  --gradient-ai-soft: linear-gradient(135deg, rgba(0, 217, 255, 0.1) 0%, rgba(62, 47, 166, 0.25) 50%, rgba(236, 72, 153, 0.1) 100%);
   --gradient-primary: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
-  --gradient-cyan-purple: linear-gradient(135deg, #00D9FF 0%, #6C5CE7 100%);
-  --gradient-purple-pink: linear-gradient(135deg, #6C5CE7 0%, #EC4899 100%);
+  --gradient-cyan-purple: linear-gradient(135deg, #00D9FF 0%, #3E2FA6 100%);
+  --gradient-purple-pink: linear-gradient(135deg, #3E2FA6 0%, #EC4899 100%);
   
   /* Status Colors */
   --success: #2ECC71;
@@ -58,9 +58,9 @@
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  --shadow-glow: 0 0 20px rgba(108, 92, 231, 0.3);
+  --shadow-glow: 0 0 20px rgba(62, 47, 166, 0.6);
   --shadow-glow-cyan: 0 0 20px rgba(0, 217, 255, 0.4);
-  --shadow-glow-ai: 0 0 30px rgba(0, 217, 255, 0.3), 0 0 60px rgba(108, 92, 231, 0.2);
+  --shadow-glow-ai: 0 0 30px rgba(0, 217, 255, 0.3), 0 0 60px rgba(62, 47, 166, 0.5);
   
   /* Animation */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);

@@ -1,6 +1,9 @@
 <template>
   <div class="login-container">
     <div class="particles-background"></div>
+    <div class="language-selector-wrapper">
+      <LanguageSelector />
+    </div>
     <div class="login-card glass-strong">
       <div class="logo-container">
         <div class="logo-wrapper">
@@ -32,6 +35,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../store/auth'
+import LanguageSelector from '../components/LanguageSelector.vue'
 
 const { t } = useI18n()
 
@@ -66,6 +70,55 @@ const handleLogin = async () => {
   background: var(--gradient-ai);
   position: relative;
   overflow: hidden;
+}
+
+.language-selector-wrapper {
+  position: absolute;
+  top: var(--space-xl);
+  right: var(--space-xl);
+  z-index: 10;
+  width: 200px;
+}
+
+.language-selector-wrapper :deep(.language-trigger) {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%);
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.language-selector-wrapper :deep(.language-trigger:hover) {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.25) 100%);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.language-selector-wrapper :deep(.language-trigger.is-open) {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.3) 100%);
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3), 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.language-selector-wrapper :deep(.language-code) {
+  background: rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.language-selector-wrapper :deep(.language-dropdown) {
+  background: linear-gradient(135deg, rgba(26, 26, 46, 0.98) 0%, rgba(30, 30, 60, 0.98) 100%);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 768px) {
+  .language-selector-wrapper {
+    top: var(--space-md);
+    right: var(--space-md);
+    width: 180px;
+  }
 }
 
 .particles-background {
