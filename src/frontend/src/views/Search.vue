@@ -109,7 +109,7 @@
                   <div class="tags">
                     <span v-for="tag in doc.tags" :key="tag" class="tag">{{ tag }}</span>
                   </div>
-                  <StatusBadge :status="doc.status" />
+                  <StatusBadge :status="doc.status || 'unknown'" />
                 </div>
               </div>
             </div>
@@ -162,7 +162,7 @@
                       <span v-for="tag in doc.tags" :key="tag" class="tag-small">{{ tag }}</span>
                     </div>
                   </td>
-                  <td><StatusBadge :status="doc.status" /></td>
+                  <td><StatusBadge :status="doc.status || 'unknown'" /></td>
                   <td>{{ formatDate(doc.created_at) }}</td>
                   <td>
                     <button
@@ -314,7 +314,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useFoldersStore } from '../store/folders'
@@ -353,6 +353,7 @@ const tagFilter = ref('')
 const folders = ref([])
 const users = ref([])
 const retentionPolicies = ref([])
+const isMounted = ref(true)
 
 const filters = ref({
   types: [],
@@ -391,15 +392,22 @@ const onSearchBlur = () => {
 }
 
 onMounted(async () => {
+  isMounted.value = true
   await loadFolders()
   await loadUsers()
   await loadRetentionPolicies()
 })
 
+onBeforeUnmount(() => {
+  isMounted.value = false
+})
+
 const loadFolders = async () => {
   try {
     await foldersStore.fetchFolders()
-    folders.value = foldersStore.folders
+    if (isMounted.value) {
+      folders.value = foldersStore.folders
+    }
   } catch (e) {
     console.error('Failed to load folders', e)
   }
@@ -408,7 +416,7 @@ const loadFolders = async () => {
 const loadUsers = async () => {
   try {
     const res = await usersAPI.list()
-    if (res.is_success) {
+    if (res.is_success && isMounted.value) {
       users.value = res.data || []
     }
   } catch (e) {
@@ -419,7 +427,9 @@ const loadUsers = async () => {
 const loadRetentionPolicies = async () => {
   try {
     await settingsStore.fetchRetentionPolicies()
-    retentionPolicies.value = settingsStore.retentionPolicies
+    if (isMounted.value) {
+      retentionPolicies.value = settingsStore.retentionPolicies
+    }
   } catch (e) {
     console.error('Failed to load retention policies', e)
   }
@@ -464,18 +474,20 @@ const doSearch = async () => {
     }
 
     const res = await searchAPI.search(searchData)
-    if (res.is_success) {
+    if (res.is_success && isMounted.value) {
       results.value = res.data.results || res.data.items || []
       totalResults.value = res.data.total || results.value.length
       totalPages.value = res.data.pages || Math.ceil(totalResults.value / 20)
     }
   } catch (e) {
     console.error('Search failed', e)
-    if (window.$toast) {
+    if (window.$toast && isMounted.value) {
       window.$toast.show(t('search.searchFailed'), 'error')
     }
   } finally {
-    loading.value = false
+    if (isMounted.value) {
+      loading.value = false
+    }
   }
 }
 
@@ -566,16 +578,18 @@ const confirmMove = async () => {
     for (const docId of docIds) {
       await documentsAPI.update(docId, { folder_id: moveFolderId.value })
     }
-    if (window.$toast) {
+    if (window.$toast && isMounted.value) {
       window.$toast.show(t('search.documentsMoved', { count: docIds.length }), 'success')
     }
-    selectedDocs.value.clear()
-    showMoveModal.value = false
-    moveFolderId.value = null
-    doSearch()
+    if (isMounted.value) {
+      selectedDocs.value.clear()
+      showMoveModal.value = false
+      moveFolderId.value = null
+      doSearch()
+    }
   } catch (e) {
     console.error('Failed to move documents', e)
-    if (window.$toast) {
+    if (window.$toast && isMounted.value) {
       window.$toast.show(t('search.failedToMoveDocuments'), 'error')
     }
   }
@@ -589,14 +603,16 @@ const bulkDelete = async () => {
     for (const docId of docIds) {
       await documentsAPI.delete(docId)
     }
-    if (window.$toast) {
+    if (window.$toast && isMounted.value) {
       window.$toast.show(t('search.documentsDeleted', { count: docIds.length }), 'success')
     }
-    selectedDocs.value.clear()
-    doSearch()
+    if (isMounted.value) {
+      selectedDocs.value.clear()
+      doSearch()
+    }
   } catch (e) {
     console.error('Failed to delete documents', e)
-    if (window.$toast) {
+    if (window.$toast && isMounted.value) {
       window.$toast.show(t('search.failedToDeleteDocuments'), 'error')
     }
   }

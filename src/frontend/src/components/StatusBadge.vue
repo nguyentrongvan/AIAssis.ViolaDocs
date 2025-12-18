@@ -10,7 +10,8 @@ import { useI18n } from 'vue-i18n'
 const props = defineProps({
   status: {
     type: String,
-    required: true
+    required: false,
+    default: 'unknown'
   },
   label: {
     type: String,
@@ -21,6 +22,9 @@ const props = defineProps({
 const { t } = useI18n()
 
 const getStatusLabel = (status) => {
+  if (!status || typeof status !== 'string') {
+    return t('status.unknown') || 'Unknown'
+  }
   const statusKey = `status.${status.toLowerCase()}`
   const translated = t(statusKey)
   // If translation exists (not the same as key), use it, otherwise use status as-is
@@ -120,6 +124,11 @@ const getStatusLabel = (status) => {
 .status-not_available {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.status-unknown {
+  background: #e5e7eb;
+  color: #374151;
 }
 </style>
 
