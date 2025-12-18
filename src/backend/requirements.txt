@@ -29,6 +29,7 @@ easyocr==1.7.0
 # Text extraction for office files
 python-docx==1.1.0
 openpyxl==3.1.2
+python-pptx==0.6.21
 chardet==5.2.0
 # Testing dependencies
 pytest==7.4.3

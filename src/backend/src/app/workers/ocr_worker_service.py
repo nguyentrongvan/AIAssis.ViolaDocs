@@ -314,6 +314,10 @@ class OCRWorkerService:
                     
                     ocr_service = OcrService(provider=ocr_provider)
                     
+                    # Track processing time
+                    import time
+                    processing_start = time.time()
+                    
                     # Process OCR
                     if mime.startswith("image/"):
                         ocr_result = await ocr_service.process_image_async(file_bytes, languages)
@@ -321,6 +325,8 @@ class OCRWorkerService:
                         ocr_result = await ocr_service.process_pdf_async(file_bytes, languages)
                     else:
                         raise ValueError(f"Unsupported MIME type for OCR: {mime}")
+                    
+                    processing_time_ms = int((time.time() - processing_start) * 1000)
                     
                     if ocr_result.get("error"):
                         raise ValueError(ocr_result["error"])
@@ -351,6 +357,22 @@ class OCRWorkerService:
                             "languages": languages
                         }
                     }
+                    
+                    # Add processing metadata to metadata_snapshot
+                    from ..services.metadata_service import MetadataService
+                    processing_meta = MetadataService.extract_processing_metadata(
+                        processing_result=ocr_result,
+                        processing_time_ms=processing_time_ms
+                    )
+                    processing_meta["ocr_provider"] = ocr_result.get("provider", provider_name)
+                    processing_meta["text_length"] = len(extracted_text)
+                    
+                    # Merge processing metadata into existing metadata_snapshot
+                    if version.metadata_snapshot is None:
+                        version.metadata_snapshot = {}
+                    if "processing" not in version.metadata_snapshot:
+                        version.metadata_snapshot["processing"] = {}
+                    version.metadata_snapshot["processing"].update(processing_meta)
                     
                     # Update document status
                     document.status = "ready"
@@ -549,7 +571,13 @@ class OCRWorkerService:
                     # Extract text using TextExtractionService
                     from ..services.text_extraction_service import TextExtractionService
                     
+                    # Track processing time
+                    import time
+                    processing_start = time.time()
+                    
                     extract_result = await TextExtractionService.extract_text(mime, file_bytes)
+                    
+                    processing_time_ms = int((time.time() - processing_start) * 1000)
                     
                     if extract_result.get("error"):
                         raise ValueError(extract_result["error"])
@@ -582,6 +610,22 @@ class OCRWorkerService:
                             "mime": mime
                         }
                     }
+                    
+                    # Add processing metadata to metadata_snapshot
+                    from ..services.metadata_service import MetadataService
+                    processing_meta = MetadataService.extract_processing_metadata(
+                        processing_result=extract_result,
+                        processing_time_ms=processing_time_ms
+                    )
+                    processing_meta["text_extraction_method"] = "native"
+                    processing_meta["text_length"] = len(extracted_text)
+                    
+                    # Merge processing metadata into existing metadata_snapshot
+                    if version.metadata_snapshot is None:
+                        version.metadata_snapshot = {}
+                    if "processing" not in version.metadata_snapshot:
+                        version.metadata_snapshot["processing"] = {}
+                    version.metadata_snapshot["processing"].update(processing_meta)
                     
                     # Update document status
                     document.status = "ready"

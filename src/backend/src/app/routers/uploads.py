@@ -3,7 +3,7 @@ import uuid
 import logging
 from typing import Optional, Dict
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +13,8 @@ from ..models.users import User
 from ..models.documents import Document, DocumentVersion, Tag, DocumentTag, Share
 from ..models.workflows import Workflow
 from ..models.roles import Role
-from ..services.storage import generate_presigned_upload_url
+from ..services.storage import generate_presigned_upload_url, get_file_bytes_from_minio
+from ..services.metadata_service import MetadataService
 from ..utils.response import success_response, error_response
 from ..config import settings
 from sqlalchemy import select
@@ -91,6 +92,7 @@ async def init_upload(
 async def finalize_upload(
     upload_id: str,
     request: UploadFinalizeRequest,
+    http_request: Request,
     current_user: User = Depends(require_permission("upload")),
     session: AsyncSession = Depends(get_session)
 ):
@@ -123,7 +125,31 @@ async def finalize_upload(
             status_code=status.HTTP_400_BAD_REQUEST
         )
     
-    # Prepare metadata snapshot
+    # Extract file metadata from uploaded file
+    file_metadata = None
+    try:
+        # Download file from MinIO to extract metadata
+        file_bytes = await get_file_bytes_from_minio(metadata["object_name"])
+        if file_bytes:
+            # Get upload IP and user agent
+            upload_ip = http_request.client.host if http_request.client else None
+            upload_user_agent = http_request.headers.get("user-agent")
+            
+            # Extract comprehensive metadata
+            file_metadata = await MetadataService.extract_file_metadata(
+                mime=metadata["mime"],
+                file_bytes=file_bytes,
+                filename=metadata["filename"],
+                checksum=metadata.get("checksum"),
+                upload_method="web",
+                upload_ip=upload_ip,
+                upload_user_agent=upload_user_agent
+            )
+    except Exception as e:
+        logger.warning(f"Failed to extract file metadata: {e}", exc_info=True)
+        # Continue without metadata if extraction fails
+    
+    # Prepare metadata snapshot (user-provided metadata)
     metadata_snapshot = {
         "title": request.title or metadata["filename"],
         "tags": request.tags,
@@ -132,6 +158,10 @@ async def finalize_upload(
         "sensitivity": request.sensitivity,
         "auto_ai_tag": request.auto_ai_tag if request.auto_ai_tag is not None else True
     }
+    
+    # Merge file metadata into snapshot if available
+    if file_metadata:
+        metadata_snapshot["file_metadata"] = file_metadata
     
     # Create document
     doc = Document(
@@ -144,7 +174,8 @@ async def finalize_upload(
         status="processing",
         folder_id=request.folder_id,
         retention_policy_id=request.retention_policy_id,
-        sensitivity=request.sensitivity
+        sensitivity=request.sensitivity,
+        file_metadata=file_metadata  # Store comprehensive metadata in Document
     )
     session.add(doc)
     await session.flush()

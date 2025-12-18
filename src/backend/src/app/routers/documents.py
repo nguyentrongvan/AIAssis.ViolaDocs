@@ -271,7 +271,8 @@ async def get_document(
             "status": v.status,
             "text_uri": v.text_uri,
             "ocr_uri": v.ocr_uri,
-            "thumbnail_uri": v.thumbnail_uri
+            "thumbnail_uri": v.thumbnail_uri,
+            "metadata_snapshot": v.metadata_snapshot  # Include metadata snapshot
         }
         # Add rendition URLs if available
         renditions = {}
@@ -310,7 +311,8 @@ async def get_document(
         "created_at": doc.created_at.isoformat(),
         "preview_url": preview_url,
         "tags": list(tags) if tags else [],
-        "versions": versions
+        "versions": versions,
+        "metadata": doc.file_metadata  # Include comprehensive metadata
     })
 
 

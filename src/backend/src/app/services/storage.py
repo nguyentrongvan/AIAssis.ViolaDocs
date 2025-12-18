@@ -81,3 +81,20 @@ def get_object_url(object_name: str) -> str:
     protocol = "https" if settings.minio_secure else "http"
     return f"{protocol}://{settings.minio_endpoint}/{settings.minio_bucket}/{object_name}"
 
+
+async def get_file_bytes_from_minio(object_name: str) -> Optional[bytes]:
+    """Get file bytes from MinIO for processing"""
+    try:
+        client = get_minio_client()
+        response = client.get_object(settings.minio_bucket, object_name)
+        file_bytes = response.read()
+        response.close()
+        response.release_conn()
+        return file_bytes
+    except S3Error as e:
+        print(f"Error getting file from MinIO: {e}")
+        return None
+    except Exception as e:
+        print(f"Error reading file from MinIO: {e}")
+        return None
+

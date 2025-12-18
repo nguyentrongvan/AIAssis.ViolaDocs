@@ -25,6 +25,11 @@ class Document(BaseModel):
     deleted_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     purge_at = Column(DateTime, nullable=True)
     
+    # File metadata (JSON field for storing comprehensive file metadata)
+    # Note: Using 'file_metadata' as attribute name to avoid conflict with SQLAlchemy's reserved 'metadata'
+    # but column name in DB is 'metadata'
+    file_metadata = Column("metadata", JSON, nullable=True)
+    
     versions = relationship("DocumentVersion", back_populates="document", cascade="all, delete-orphan")
 
 
