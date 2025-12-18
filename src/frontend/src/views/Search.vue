@@ -1,6 +1,6 @@
 <template>
   <div class="search-page">
-    <h1 class="page-header">Search Documents</h1>
+    <h1 class="page-header">{{ $t('search.title') }}</h1>
 
     <div class="search-container">
       <div class="search-main">
@@ -14,55 +14,55 @@
               @keyup.enter="doSearch"
               @focus="onSearchFocus"
               @blur="onSearchBlur"
-              placeholder="Search documents..."
+              :placeholder="$t('search.searchPlaceholder')"
               class="search-input"
             />
             <button @click="doSearch" class="btn-primary search-btn">
               <Search :size="18" />
-              Search
+              {{ $t('common.search') }}
             </button>
           </div>
           <div class="search-mode">
             <label>
               <input type="radio" v-model="mode" value="keyword" />
-              Keyword
+              {{ $t('search.keyword') }}
             </label>
             <label>
               <input type="radio" v-model="mode" value="vector" />
-              Semantic
+              {{ $t('search.semantic') }}
             </label>
             <label>
               <input type="radio" v-model="mode" value="hybrid" />
-              Hybrid
+              {{ $t('search.hybrid') }}
             </label>
           </div>
         </div>
 
         <div v-if="selectedCount > 0" class="bulk-actions-bar">
-          <span>{{ selectedCount }} selected</span>
+          <span>{{ selectedCount }} {{ $t('search.selected') }}</span>
           <div class="bulk-actions">
             <button @click="bulkShare" class="btn-small">
               <Share2 :size="16" />
-              Share
+              {{ $t('common.share') }}
             </button>
             <button @click="bulkMove" class="btn-small">
               <Folder :size="16" />
-              Move
+              {{ $t('common.move') }}
             </button>
             <button @click="bulkDelete" class="btn-small btn-danger">
               <Trash2 :size="16" />
-              Delete
+              {{ $t('common.delete') }}
             </button>
             <button @click="clearSelection" class="btn-small">
-              Clear
+              {{ $t('common.clear') }}
             </button>
           </div>
         </div>
 
-        <div v-if="loading" class="loading">Searching...</div>
+        <div v-if="loading" class="loading">{{ $t('search.searching') }}</div>
         <div v-else-if="results.length > 0" class="results">
           <div class="results-header">
-            <span>{{ totalResults }} results found</span>
+            <span>{{ $t('search.resultsFound', { count: totalResults }) }}</span>
             <div class="view-options">
               <button
                 @click="viewMode = 'cards'"
@@ -98,7 +98,7 @@
               <div class="card-content" @click.stop="$router.push(`/documents/${doc.id}`)">
                 <h3>{{ doc.title }}</h3>
                 <p class="meta">
-                  <span>{{ doc.owner?.name || 'Unknown' }}</span>
+                  <span>{{ doc.owner?.name || $t('common.unknown') }}</span>
                   <span>•</span>
                   <span>{{ formatDate(doc.created_at) }}</span>
                   <span v-if="doc.folder">•</span>
@@ -127,13 +127,13 @@
                       @change="toggleSelectAll"
                     />
                   </th>
-                  <th>Title</th>
-                  <th>Owner</th>
-                  <th>Folder</th>
-                  <th>Tags</th>
-                  <th>Status</th>
-                  <th>Created</th>
-                  <th>Actions</th>
+                  <th>{{ $t('search.tableTitle') }}</th>
+                  <th>{{ $t('search.tableOwner') }}</th>
+                  <th>{{ $t('search.tableFolder') }}</th>
+                  <th>{{ $t('search.tableTags') }}</th>
+                  <th>{{ $t('search.tableStatus') }}</th>
+                  <th>{{ $t('search.tableCreated') }}</th>
+                  <th>{{ $t('search.tableActions') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -155,8 +155,8 @@
                       {{ doc.title }}
                     </a>
                   </td>
-                  <td>{{ doc.owner?.name || 'Unknown' }}</td>
-                  <td>{{ doc.folder?.name || '-' }}</td>
+                  <td>{{ doc.owner?.name || $t('common.unknown') }}</td>
+                  <td>{{ doc.folder?.name || $t('common.na') }}</td>
                   <td>
                     <div class="tags">
                       <span v-for="tag in doc.tags" :key="tag" class="tag-small">{{ tag }}</span>
@@ -169,7 +169,7 @@
                       @click.stop="$router.push(`/documents/${doc.id}`)"
                       class="btn-link-small"
                     >
-                      View
+                      {{ $t('search.view') }}
                     </button>
                   </td>
                 </tr>
@@ -184,19 +184,19 @@
           />
         </div>
         <div v-else-if="searched" class="no-results">
-          No documents found
+          {{ $t('search.noDocumentsFound') }}
         </div>
       </div>
 
       <!-- Filters Sidebar -->
       <div class="filters-sidebar">
         <div class="filters-header">
-          <h3>Filters</h3>
-          <button @click="clearFilters" class="btn-link-small">Clear All</button>
+          <h3>{{ $t('search.filters') }}</h3>
+          <button @click="clearFilters" class="btn-link-small">{{ $t('search.clearAll') }}</button>
         </div>
 
         <div class="filter-section">
-          <div class="filter-label">Type</div>
+          <div class="filter-label">{{ $t('search.filterType') }}</div>
           <div class="filter-options">
             <label v-for="type in fileTypes" :key="type.value" class="checkbox-label">
               <input
@@ -210,7 +210,7 @@
         </div>
 
         <div class="filter-section">
-          <div class="filter-label">Status</div>
+          <div class="filter-label">{{ $t('search.filterStatus') }}</div>
           <div class="filter-options">
             <label v-for="status in statuses" :key="status" class="checkbox-label">
               <input
@@ -218,15 +218,15 @@
                 :value="status"
                 v-model="filters.statuses"
               />
-              <span>{{ status }}</span>
+              <span>{{ $t(`status.${status}`) }}</span>
             </label>
           </div>
         </div>
 
         <div class="filter-section">
-          <div class="filter-label">Folder</div>
+          <div class="filter-label">{{ $t('search.filterFolder') }}</div>
           <select v-model.number="filters.folder_id">
-            <option :value="null">All Folders</option>
+            <option :value="null">{{ $t('search.allFolders') }}</option>
             <option v-for="f in folders" :key="f.id" :value="f.id">
               {{ f.name }}
             </option>
@@ -234,9 +234,9 @@
         </div>
 
         <div class="filter-section">
-          <div class="filter-label">Owner</div>
+          <div class="filter-label">{{ $t('search.filterOwner') }}</div>
           <select v-model.number="filters.owner_id">
-            <option :value="null">All Owners</option>
+            <option :value="null">{{ $t('search.allOwners') }}</option>
             <option v-for="u in users" :key="u.id" :value="u.id">
               {{ u.name }}
             </option>
@@ -244,11 +244,11 @@
         </div>
 
         <div class="filter-section">
-          <div class="filter-label">Tags</div>
+          <div class="filter-label">{{ $t('search.filterTags') }}</div>
           <input
             v-model="tagFilter"
             @keyup.enter="addTagFilter"
-            placeholder="Press Enter to add"
+            :placeholder="$t('search.pressEnterToAdd')"
           />
           <div class="selected-tags">
             <span
@@ -263,24 +263,24 @@
         </div>
 
         <div class="filter-section">
-          <div class="filter-label">Date Range</div>
+          <div class="filter-label">{{ $t('search.dateRange') }}</div>
           <input
             v-model="filters.date_from"
             type="date"
-            placeholder="From"
+            :placeholder="$t('search.from')"
           />
           <input
             v-model="filters.date_to"
             type="date"
-            placeholder="To"
+            :placeholder="$t('search.to')"
             style="margin-top: 0.5rem;"
           />
         </div>
 
         <div class="filter-section">
-          <div class="filter-label">Retention Policy</div>
+          <div class="filter-label">{{ $t('search.retentionPolicy') }}</div>
           <select v-model.number="filters.retention_policy_id">
-            <option :value="null">All</option>
+            <option :value="null">{{ $t('common.all') }}</option>
             <option
               v-for="p in retentionPolicies"
               :key="p.id"
@@ -292,21 +292,21 @@
         </div>
 
         <button @click="applyFilters" class="btn-primary" style="width: 100%; margin-top: 1rem;">
-          Apply Filters
+          {{ $t('search.applyFilters') }}
         </button>
       </div>
     </div>
 
     <!-- Bulk Move Modal -->
-    <Modal v-model:show="showMoveModal" title="Move Documents">
+    <Modal v-model:show="showMoveModal" :title="$t('search.moveDocuments')">
       <FolderTree
         :folders="folderTree"
         @select="selectMoveFolder"
       />
       <template #footer>
-        <button @click="showMoveModal = false" class="btn-secondary">Cancel</button>
+        <button @click="showMoveModal = false" class="btn-secondary">{{ $t('common.cancel') }}</button>
         <button @click="confirmMove" class="btn-primary" :disabled="!moveFolderId">
-          Move
+          {{ $t('search.move') }}
         </button>
       </template>
     </Modal>
@@ -316,8 +316,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useFoldersStore } from '../store/folders'
 import { useSettingsStore } from '../store/settings'
+
+const { t } = useI18n()
 import { searchAPI, documentsAPI, usersAPI } from '../services/api'
 import { StatusBadge, Pagination, Modal, FolderTree } from '../components'
 import {
@@ -469,7 +472,7 @@ const doSearch = async () => {
   } catch (e) {
     console.error('Search failed', e)
     if (window.$toast) {
-      window.$toast.show('Search failed', 'error')
+      window.$toast.show(t('search.searchFailed'), 'error')
     }
   } finally {
     loading.value = false
@@ -543,7 +546,7 @@ const bulkShare = async () => {
   if (docIds.length === 0) return
   // Implementation for bulk share
   if (window.$toast) {
-    window.$toast.show('Bulk share not yet implemented', 'info')
+    window.$toast.show(t('search.bulkShareNotImplemented'), 'info')
   }
 }
 
@@ -564,7 +567,7 @@ const confirmMove = async () => {
       await documentsAPI.update(docId, { folder_id: moveFolderId.value })
     }
     if (window.$toast) {
-      window.$toast.show(`${docIds.length} documents moved`, 'success')
+      window.$toast.show(t('search.documentsMoved', { count: docIds.length }), 'success')
     }
     selectedDocs.value.clear()
     showMoveModal.value = false
@@ -573,7 +576,7 @@ const confirmMove = async () => {
   } catch (e) {
     console.error('Failed to move documents', e)
     if (window.$toast) {
-      window.$toast.show('Failed to move documents', 'error')
+      window.$toast.show(t('search.failedToMoveDocuments'), 'error')
     }
   }
 }
@@ -581,20 +584,20 @@ const confirmMove = async () => {
 const bulkDelete = async () => {
   const docIds = Array.from(selectedDocs.value)
   if (docIds.length === 0) return
-  if (!confirm(`Delete ${docIds.length} documents?`)) return
+  if (!confirm(t('search.deleteDocumentsConfirm', { count: docIds.length }))) return
   try {
     for (const docId of docIds) {
       await documentsAPI.delete(docId)
     }
     if (window.$toast) {
-      window.$toast.show(`${docIds.length} documents deleted`, 'success')
+      window.$toast.show(t('search.documentsDeleted', { count: docIds.length }), 'success')
     }
     selectedDocs.value.clear()
     doSearch()
   } catch (e) {
     console.error('Failed to delete documents', e)
     if (window.$toast) {
-      window.$toast.show('Failed to delete documents', 'error')
+      window.$toast.show(t('search.failedToDeleteDocuments'), 'error')
     }
   }
 }

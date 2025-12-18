@@ -1,11 +1,11 @@
 <template>
   <div class="documents-page">
     <div class="page-header">
-      <h1>Documents</h1>
+      <h1>{{ $t('documents.title') }}</h1>
       <div class="header-actions">
         <router-link to="/upload" class="btn-primary">
           <Upload :size="18" />
-          Upload
+          {{ $t('documents.upload') }}
         </router-link>
       </div>
     </div>
@@ -13,39 +13,39 @@
     <!-- Filters -->
     <div class="filters-bar">
       <div class="filter-group">
-        <label>Status</label>
+        <label>{{ $t('documents.status') }}</label>
         <select v-model="filters.status">
-          <option value="">All</option>
-          <option value="ready">Ready</option>
-          <option value="processing">Processing</option>
-          <option value="failed">Failed</option>
+          <option value="">{{ $t('documents.all') }}</option>
+          <option value="ready">{{ $t('documents.ready') }}</option>
+          <option value="processing">{{ $t('documents.processing') }}</option>
+          <option value="failed">{{ $t('documents.failed') }}</option>
         </select>
       </div>
       <div class="filter-group">
-        <label>Folder</label>
+        <label>{{ $t('common.folder') }}</label>
         <select v-model.number="filters.folder_id">
-          <option :value="null">All Folders</option>
+          <option :value="null">{{ $t('documents.allFolders') }}</option>
           <option v-for="f in folders" :key="f.id" :value="f.id">
             {{ f.name }}
           </option>
         </select>
       </div>
       <div class="filter-group">
-        <label>Search</label>
+        <label>{{ $t('common.search') }}</label>
         <input
           v-model="filters.search"
           @keyup.enter="loadDocuments"
-          placeholder="Search documents..."
+          :placeholder="$t('documents.searchDocuments')"
           class="search-input"
         />
       </div>
       <button @click="loadDocuments" class="btn-secondary">
         <Search :size="16" />
-        Filter
+        {{ $t('common.filter') }}
       </button>
       <button @click="clearFilters" class="btn-clear">
         <X :size="16" />
-        Clear
+        {{ $t('common.clear') }}
       </button>
     </div>
 
@@ -66,12 +66,12 @@
         </button>
       </div>
       <div class="results-count">
-        {{ total }} document{{ total !== 1 ? 's' : '' }}
+        {{ $t('documents.totalDocuments', { count: total }) }}
       </div>
     </div>
 
     <!-- Loading State -->
-    <div v-if="loading" class="loading">Loading documents...</div>
+    <div v-if="loading" class="loading">{{ $t('documents.loadingDocuments') }}</div>
 
     <!-- Documents List -->
     <div v-else-if="documents.length > 0" class="documents-content">
@@ -91,7 +91,7 @@
           </div>
           <div class="card-content">
             <div class="card-header">
-              <h3>{{ doc.title || 'Untitled Document' }}</h3>
+              <h3>{{ doc.title || $t('documents.untitledDocument') }}</h3>
               <span 
                 v-if="doc.document_type || doc.file_extension" 
                 :class="['doc-type-badge', getDocumentTypeClass(doc)]"
@@ -116,7 +116,7 @@
                 <span class="tag-more">+{{ doc.tags.length - 3 }}</span>
                 <div class="tag-tooltip">
                   <div class="tag-tooltip-content">
-                    <div class="tag-tooltip-title">All Tags</div>
+                    <div class="tag-tooltip-title">{{ $t('documents.allTags') }}</div>
                     <div class="tag-tooltip-tags">
                       <span v-for="tag in doc.tags" :key="tag" class="tag-tooltip-item">
                         {{ tag }}
@@ -132,20 +132,20 @@
               @click.stop="$router.push(`/documents/${doc.id}`)"
               class="btn-link-small"
             >
-              View
+              {{ $t('common.view') }}
             </button>
             <button
               @click.stop="downloadDocument(doc.id)"
               class="btn-link-small"
             >
-              Download
+              {{ $t('common.download') }}
             </button>
             <button
               @click.stop="confirmDelete(doc)"
               class="btn-link-small btn-danger"
             >
               <Trash2 :size="14" />
-              Delete
+              {{ $t('common.delete') }}
             </button>
           </div>
         </div>
@@ -156,12 +156,12 @@
         <table>
           <thead>
             <tr>
-              <th>Title</th>
-              <th>Status</th>
-              <th>Size</th>
-              <th>Folder</th>
-              <th>Created</th>
-              <th>Actions</th>
+              <th>{{ $t('common.title') }}</th>
+              <th>{{ $t('common.status') }}</th>
+              <th>{{ $t('common.size') }}</th>
+              <th>{{ $t('common.folder') }}</th>
+              <th>{{ $t('common.date') }}</th>
+              <th>{{ $t('common.actions') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -181,7 +181,7 @@
                     >
                       {{ getDocumentTypeLabel(doc) }}
                     </span>
-                    <span class="table-title-text">{{ doc.title || 'Untitled Document' }}</span>
+                    <span class="table-title-text">{{ doc.title || $t('documents.untitledDocument') }}</span>
                   </div>
                 </div>
               </td>
@@ -195,19 +195,19 @@
                     @click="$router.push(`/documents/${doc.id}`)"
                     class="btn-link-small"
                   >
-                    View
+                    {{ $t('common.view') }}
                   </button>
                   <button
                     @click="downloadDocument(doc.id)"
                     class="btn-link-small"
                   >
-                    Download
+                    {{ $t('common.download') }}
                   </button>
                   <button
                     @click="confirmDelete(doc)"
                     class="btn-link-small btn-danger"
                   >
-                    Delete
+                    {{ $t('common.delete') }}
                   </button>
                 </div>
               </td>
@@ -227,25 +227,25 @@
     <!-- Empty State -->
     <div v-else-if="!loading && documents.length === 0" class="empty-state">
       <FileText :size="48" />
-      <p>No documents found</p>
+      <p>{{ $t('documents.noDocuments') }}</p>
       <router-link to="/upload" class="btn-primary">
-        Upload your first document
+        {{ $t('documents.upload') }}
       </router-link>
     </div>
 
     <!-- Delete Confirmation Modal -->
     <Modal
       :show="showDeleteModal"
-      title="Delete Document"
+      :title="$t('common.delete') + ' ' + $t('documents.title')"
       @update:show="showDeleteModal = $event"
     >
       <p v-if="documentToDelete">
-        Are you sure you want to delete "{{ documentToDelete.title }}"? 
-        It will be permanently deleted after {{ purgeGracePeriodDays }} day(s).
+        {{ $t('documents.deleteConfirm') }} "{{ documentToDelete.title }}"? 
+        {{ $t('common.delete') }} {{ purgeGracePeriodDays }} {{ $t('upload.days') }}.
       </p>
       <template #footer>
-        <button @click="showDeleteModal = false" class="btn-secondary">Cancel</button>
-        <button @click="deleteDocument" class="btn-danger">Delete</button>
+        <button @click="showDeleteModal = false" class="btn-secondary">{{ $t('common.cancel') }}</button>
+        <button @click="deleteDocument" class="btn-danger">{{ $t('common.delete') }}</button>
       </template>
     </Modal>
   </div>
@@ -254,6 +254,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useDocumentsStore } from '../store/documents'
 import { useFoldersStore } from '../store/folders'
 import { documentsAPI, settingsAPI } from '../services/api'
@@ -272,6 +273,8 @@ import {
 const router = useRouter()
 const documentsStore = useDocumentsStore()
 const foldersStore = useFoldersStore()
+
+const { t } = useI18n()
 
 const documents = ref([])
 const folders = ref([])
@@ -434,7 +437,7 @@ const loadDocuments = async () => {
   } catch (e) {
     console.error('Failed to load documents', e)
     if (window.$toast) {
-      window.$toast.show('Failed to load documents', 'error')
+      window.$toast.show(t('documents.failedToLoadDocuments'), 'error')
     }
   } finally {
     loading.value = false
@@ -466,7 +469,7 @@ const downloadDocument = async (docId) => {
   } catch (e) {
     console.error('Failed to download document', e)
     if (window.$toast) {
-      window.$toast.show('Failed to download document', 'error')
+      window.$toast.show(t('documents.failedToDownloadDocument'), 'error')
     }
   }
 }
@@ -493,20 +496,20 @@ const deleteDocument = async () => {
     const res = await documentsAPI.delete(documentToDelete.value.id)
     if (res.is_success) {
       if (window.$toast) {
-        window.$toast.show('Document deleted successfully', 'success')
+        window.$toast.show(t('documents.documentDeleted'), 'success')
       }
       showDeleteModal.value = false
       documentToDelete.value = null
       await loadDocuments()
     } else {
       if (window.$toast) {
-        window.$toast.show(res.message || 'Failed to delete document', 'error')
+        window.$toast.show(res.message || t('documents.failedToDeleteDocument'), 'error')
       }
     }
   } catch (e) {
     console.error('Failed to delete document', e)
     if (window.$toast) {
-      window.$toast.show('Failed to delete document', 'error')
+      window.$toast.show(t('documents.failedToDeleteDocument'), 'error')
     }
   }
 }

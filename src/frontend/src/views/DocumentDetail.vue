@@ -1,9 +1,9 @@
 <template>
-  <div v-if="loading" class="loading">Loading...</div>
+  <div v-if="loading" class="loading">{{ $t('common.loading') }}</div>
   <div v-else-if="document" class="document-detail">
     <div class="page-header">
       <div>
-        <h1>{{ document?.title || 'Document' }}</h1>
+        <h1>{{ document?.title || $t('nav.documents') }}</h1>
         <StatusBadge :status="document.status" />
       </div>
       <div class="header-actions">
@@ -12,7 +12,7 @@
           class="btn-danger"
         >
           <Trash2 :size="16" />
-          Delete
+          {{ $t('common.delete') }}
         </button>
       </div>
     </div>
@@ -39,11 +39,11 @@
               @click="showOcrText = !showOcrText"
               :class="['btn-small', { 'btn-active': showOcrText }]"
             >
-              {{ showOcrText ? 'Hide' : 'Show' }} OCR Text
+              {{ showOcrText ? $t('common.hide') : $t('common.show') }} {{ $t('documentDetail.ocrText') }}
             </button>
             <select v-model="selectedVersion" @change="loadVersionPreview" class="version-select">
               <option v-for="v in versions" :key="v.id" :value="v.id">
-                Version {{ v.version_no }}
+                {{ $t('documentDetail.version') }} {{ v.version_no }}
               </option>
             </select>
           </div>
@@ -59,11 +59,11 @@
           <div v-else-if="showOcrText || isOfficeOrTextFile" class="ocr-text-view">
             <div v-if="ocrText" class="ocr-text-content">
               <div class="ocr-text-header">
-                <span>{{ isOfficeOrTextFile ? 'Document Content' : 'OCR Text' }}</span>
+                <span>{{ isOfficeOrTextFile ? $t('documentDetail.documentContent') : $t('documentDetail.ocrText') }}</span>
                 <div class="text-actions">
                   <button @click="copyOcrText" class="btn-small">
                     <Copy :size="14" />
-                    Copy
+                    {{ $t('common.copy') }}
                   </button>
                   <button 
                     v-if="isOfficeOrTextFile && previewUrl"
@@ -71,17 +71,17 @@
                     class="btn-small"
                   >
                     <Download :size="14" />
-                    Download Original
+                    {{ $t('documentDetail.downloadOriginal') }}
                   </button>
                 </div>
               </div>
               <pre class="ocr-text-pre">{{ ocrText }}</pre>
             </div>
             <div v-else class="ocr-text-empty">
-              <p>{{ isOfficeOrTextFile ? 'Content not available. The document may still be processing.' : 'OCR text not available for this version' }}</p>
+              <p>{{ isOfficeOrTextFile ? $t('documentDetail.contentNotAvailable') : $t('documentDetail.ocrTextNotAvailable') }}</p>
             </div>
           </div>
-          <div v-else class="preview-placeholder">Preview not available</div>
+          <div v-else class="preview-placeholder">{{ $t('documentDetail.previewNotAvailable') }}</div>
         </div>
       </div>
 
@@ -89,40 +89,40 @@
       <div v-if="activeTab === 'metadata'" class="tab-content">
         <!-- Editable Metadata Form -->
         <div class="metadata-section">
-          <h3>Document Information</h3>
+          <h3>{{ $t('documentDetail.documentInformation') }}</h3>
           <div class="metadata-form">
             <div class="form-group">
-              <label>Title *</label>
+              <label>{{ $t('common.title') }} *</label>
               <input v-model="metadataForm.title" />
             </div>
             <div class="form-group">
-              <label>Folder</label>
+              <label>{{ $t('common.folder') }}</label>
               <select v-model.number="metadataForm.folder_id">
-                <option :value="null">None</option>
+                <option :value="null">{{ $t('common.none') }}</option>
                 <option v-for="f in folders" :key="f.id" :value="f.id">
                   {{ f.name }}
                 </option>
               </select>
             </div>
             <div class="form-group">
-              <label>Retention Policy</label>
+              <label>{{ $t('upload.retentionPolicy') }}</label>
               <select v-model.number="metadataForm.retention_policy_id">
-                <option :value="null">Default</option>
+                <option :value="null">{{ $t('upload.default') }}</option>
                 <option
                   v-for="p in retentionPolicies"
                   :key="p.id"
                   :value="p.id"
                 >
-                  {{ p.name }} ({{ p.duration_days }} days)
+                  {{ p.name }} ({{ p.duration_days }} {{ $t('upload.days') }})
                 </option>
               </select>
             </div>
             <div class="form-group">
-              <label>Tags</label>
+              <label>{{ $t('common.tags') }}</label>
               <input
                 v-model="tagInput"
                 @keyup.enter="addTag"
-                placeholder="Press Enter to add tag"
+                :placeholder="$t('documentDetail.pressEnterToAddTag')"
               />
               <div class="tags-list">
                 <span
@@ -136,53 +136,53 @@
               </div>
             </div>
             <div class="form-group">
-              <label>Owner</label>
-              <span>{{ document.owner?.name || 'Unknown' }}</span>
+              <label>{{ $t('documentDetail.owner') }}</label>
+              <span>{{ document.owner?.name || $t('common.unknown') }}</span>
             </div>
             <div class="form-group">
-              <label>Created</label>
+              <label>{{ $t('documentDetail.created') }}</label>
               <span>{{ formatDate(document.created_at) }}</span>
             </div>
             <div class="form-group">
-              <label>Size</label>
+              <label>{{ $t('common.size') }}</label>
               <span>{{ formatSize(document.size) }}</span>
             </div>
             <div class="form-actions">
-              <button @click="saveMetadata" class="btn-primary">Save Changes</button>
+              <button @click="saveMetadata" class="btn-primary">{{ $t('documentDetail.saveChanges') }}</button>
             </div>
           </div>
         </div>
 
         <!-- Extracted File Metadata -->
         <div v-if="document.metadata" class="metadata-section">
-          <h3>File Metadata</h3>
+          <h3>{{ $t('documentDetail.fileMetadata') }}</h3>
           <div class="extracted-metadata">
             <!-- File System Metadata -->
             <div v-if="document.metadata.file" class="metadata-group">
-              <h4>File Information</h4>
+              <h4>{{ $t('documentDetail.fileInformation') }}</h4>
               <div class="metadata-grid">
                 <div v-if="document.metadata.file.original_filename" class="metadata-item">
-                  <label>Original Filename:</label>
+                  <label>{{ $t('documentDetail.originalFilename') }}</label>
                   <span>{{ document.metadata.file.original_filename }}</span>
                 </div>
                 <div v-if="document.metadata.file.size" class="metadata-item">
-                  <label>File Size:</label>
+                  <label>{{ $t('documentDetail.fileSize') }}</label>
                   <span>{{ formatSize(document.metadata.file.size) }}</span>
                 </div>
                 <div v-if="document.metadata.file.mime" class="metadata-item">
-                  <label>MIME Type:</label>
+                  <label>{{ $t('documentDetail.mimeType') }}</label>
                   <span>{{ document.metadata.file.mime }}</span>
                 </div>
                 <div v-if="document.metadata.file.checksum" class="metadata-item">
-                  <label>Checksum:</label>
+                  <label>{{ $t('documentDetail.checksum') }}</label>
                   <span class="monospace">{{ document.metadata.file.checksum }}</span>
                 </div>
                 <div v-if="document.metadata.file.upload_method" class="metadata-item">
-                  <label>Upload Method:</label>
+                  <label>{{ $t('documentDetail.uploadMethod') }}</label>
                   <span>{{ document.metadata.file.upload_method }}</span>
                 </div>
                 <div v-if="document.metadata.file.upload_timestamp" class="metadata-item">
-                  <label>Upload Time:</label>
+                  <label>{{ $t('documentDetail.uploadTime') }}</label>
                   <span>{{ formatDate(document.metadata.file.upload_timestamp) }}</span>
                 </div>
               </div>
@@ -190,35 +190,35 @@
 
             <!-- EXIF Metadata (Images) -->
             <div v-if="document.metadata.exif" class="metadata-group">
-              <h4>Image EXIF Data</h4>
+              <h4>{{ $t('documentDetail.imageExifData') }}</h4>
               <div class="metadata-grid">
                 <div v-if="document.metadata.exif.camera_make" class="metadata-item">
-                  <label>Camera Make:</label>
+                  <label>{{ $t('documentDetail.cameraMake') }}</label>
                   <span>{{ document.metadata.exif.camera_make }}</span>
                 </div>
                 <div v-if="document.metadata.exif.camera_model" class="metadata-item">
-                  <label>Camera Model:</label>
+                  <label>{{ $t('documentDetail.cameraModel') }}</label>
                   <span>{{ document.metadata.exif.camera_model }}</span>
                 </div>
                 <div v-if="document.metadata.exif.date_taken" class="metadata-item">
-                  <label>Date Taken:</label>
+                  <label>{{ $t('documentDetail.dateTaken') }}</label>
                   <span>{{ document.metadata.exif.date_taken }}</span>
                 </div>
                 <div v-if="document.metadata.exif.resolution" class="metadata-item">
-                  <label>Resolution:</label>
+                  <label>{{ $t('documentDetail.resolution') }}</label>
                   <span>{{ document.metadata.exif.resolution.width }} × {{ document.metadata.exif.resolution.height }}</span>
                   <span v-if="document.metadata.exif.resolution.dpi_x"> ({{ document.metadata.exif.resolution.dpi_x }} DPI)</span>
                 </div>
                 <div v-if="document.metadata.exif.gps" class="metadata-item">
-                  <label>GPS Location:</label>
+                  <label>{{ $t('documentDetail.gpsLocation') }}</label>
                   <span>{{ document.metadata.exif.gps.lat }}, {{ document.metadata.exif.gps.lon }}</span>
                 </div>
                 <div v-if="document.metadata.exif.software" class="metadata-item">
-                  <label>Software:</label>
+                  <label>{{ $t('documentDetail.software') }}</label>
                   <span>{{ document.metadata.exif.software }}</span>
                 </div>
                 <div v-if="document.metadata.exif.copyright" class="metadata-item">
-                  <label>Copyright:</label>
+                  <label>{{ $t('documentDetail.copyright') }}</label>
                   <span>{{ document.metadata.exif.copyright }}</span>
                 </div>
               </div>
@@ -226,50 +226,50 @@
 
             <!-- PDF Metadata -->
             <div v-if="document.metadata.pdf" class="metadata-group">
-              <h4>PDF Properties</h4>
+              <h4>{{ $t('documentDetail.pdfProperties') }}</h4>
               <div class="metadata-grid">
                 <div v-if="document.metadata.pdf.title" class="metadata-item">
-                  <label>Title:</label>
+                  <label>{{ $t('common.title') }}:</label>
                   <span>{{ document.metadata.pdf.title }}</span>
                 </div>
                 <div v-if="document.metadata.pdf.author" class="metadata-item">
-                  <label>Author:</label>
+                  <label>{{ $t('documentDetail.author') }}</label>
                   <span>{{ document.metadata.pdf.author }}</span>
                 </div>
                 <div v-if="document.metadata.pdf.subject" class="metadata-item">
-                  <label>Subject:</label>
+                  <label>{{ $t('documentDetail.subject') }}</label>
                   <span>{{ document.metadata.pdf.subject }}</span>
                 </div>
                 <div v-if="document.metadata.pdf.keywords" class="metadata-item">
-                  <label>Keywords:</label>
+                  <label>{{ $t('documentDetail.keywords') }}</label>
                   <span>{{ document.metadata.pdf.keywords }}</span>
                 </div>
                 <div v-if="document.metadata.pdf.creator" class="metadata-item">
-                  <label>Creator:</label>
+                  <label>{{ $t('documentDetail.creator') }}</label>
                   <span>{{ document.metadata.pdf.creator }}</span>
                 </div>
                 <div v-if="document.metadata.pdf.producer" class="metadata-item">
-                  <label>Producer:</label>
+                  <label>{{ $t('documentDetail.producer') }}</label>
                   <span>{{ document.metadata.pdf.producer }}</span>
                 </div>
                 <div v-if="document.metadata.pdf.page_count" class="metadata-item">
-                  <label>Page Count:</label>
+                  <label>{{ $t('documentDetail.pageCount') }}</label>
                   <span>{{ document.metadata.pdf.page_count }}</span>
                 </div>
                 <div v-if="document.metadata.pdf.pdf_version" class="metadata-item">
-                  <label>PDF Version:</label>
+                  <label>{{ $t('documentDetail.pdfVersion') }}</label>
                   <span>{{ document.metadata.pdf.pdf_version }}</span>
                 </div>
                 <div v-if="document.metadata.pdf.is_encrypted !== undefined" class="metadata-item">
-                  <label>Encrypted:</label>
-                  <span>{{ document.metadata.pdf.is_encrypted ? 'Yes' : 'No' }}</span>
+                  <label>{{ $t('documentDetail.encrypted') }}</label>
+                  <span>{{ document.metadata.pdf.is_encrypted ? $t('documentDetail.yes') : $t('documentDetail.no') }}</span>
                 </div>
                 <div v-if="document.metadata.pdf.creation_date" class="metadata-item">
-                  <label>Creation Date:</label>
+                  <label>{{ $t('documentDetail.creationDate') }}</label>
                   <span>{{ document.metadata.pdf.creation_date }}</span>
                 </div>
                 <div v-if="document.metadata.pdf.modification_date" class="metadata-item">
-                  <label>Modification Date:</label>
+                  <label>{{ $t('documentDetail.modificationDate') }}</label>
                   <span>{{ document.metadata.pdf.modification_date }}</span>
                 </div>
               </div>
@@ -277,54 +277,54 @@
 
             <!-- Office Document Metadata -->
             <div v-if="document.metadata.office" class="metadata-group">
-              <h4>Office Document Properties</h4>
+              <h4>{{ $t('documentDetail.officeDocumentProperties') }}</h4>
               <div class="metadata-grid">
                 <div v-if="document.metadata.office.title" class="metadata-item">
-                  <label>Title:</label>
+                  <label>{{ $t('common.title') }}:</label>
                   <span>{{ document.metadata.office.title }}</span>
                 </div>
                 <div v-if="document.metadata.office.author" class="metadata-item">
-                  <label>Author:</label>
+                  <label>{{ $t('documentDetail.author') }}</label>
                   <span>{{ document.metadata.office.author }}</span>
                 </div>
                 <div v-if="document.metadata.office.subject" class="metadata-item">
-                  <label>Subject:</label>
+                  <label>{{ $t('documentDetail.subject') }}</label>
                   <span>{{ document.metadata.office.subject }}</span>
                 </div>
                 <div v-if="document.metadata.office.keywords" class="metadata-item">
-                  <label>Keywords:</label>
+                  <label>{{ $t('documentDetail.keywords') }}</label>
                   <span>{{ document.metadata.office.keywords }}</span>
                 </div>
                 <div v-if="document.metadata.office.created_date" class="metadata-item">
-                  <label>Created Date:</label>
+                  <label>{{ $t('documentDetail.created') }}:</label>
                   <span>{{ formatDate(document.metadata.office.created_date) }}</span>
                 </div>
                 <div v-if="document.metadata.office.modified_date" class="metadata-item">
-                  <label>Modified Date:</label>
+                  <label>{{ $t('documentDetail.modificationDate') }}</label>
                   <span>{{ formatDate(document.metadata.office.modified_date) }}</span>
                 </div>
                 <div v-if="document.metadata.office.last_modified_by" class="metadata-item">
-                  <label>Last Modified By:</label>
+                  <label>{{ $t('documentDetail.lastModifiedBy') }}</label>
                   <span>{{ document.metadata.office.last_modified_by }}</span>
                 </div>
                 <div v-if="document.metadata.office.application" class="metadata-item">
-                  <label>Application:</label>
+                  <label>{{ $t('documentDetail.application') }}</label>
                   <span>{{ document.metadata.office.application }}</span>
                 </div>
                 <div v-if="document.metadata.office.word_count" class="metadata-item">
-                  <label>Word Count:</label>
+                  <label>{{ $t('documentDetail.wordCount') }}</label>
                   <span>{{ document.metadata.office.word_count }}</span>
                 </div>
                 <div v-if="document.metadata.office.page_count" class="metadata-item">
-                  <label>Page Count:</label>
+                  <label>{{ $t('documentDetail.pageCount') }}</label>
                   <span>{{ document.metadata.office.page_count }}</span>
                 </div>
                 <div v-if="document.metadata.office.sheet_count" class="metadata-item">
-                  <label>Sheet Count:</label>
+                  <label>{{ $t('documentDetail.sheetCount') }}</label>
                   <span>{{ document.metadata.office.sheet_count }}</span>
                 </div>
                 <div v-if="document.metadata.office.slide_count" class="metadata-item">
-                  <label>Slide Count:</label>
+                  <label>{{ $t('documentDetail.slideCount') }}</label>
                   <span>{{ document.metadata.office.slide_count }}</span>
                 </div>
               </div>
@@ -332,27 +332,27 @@
 
             <!-- Processing Metadata -->
             <div v-if="latestVersionMetadata?.processing" class="metadata-group">
-              <h4>Processing Information</h4>
+              <h4>{{ $t('documentDetail.processingInformation') }}</h4>
               <div class="metadata-grid">
                 <div v-if="latestVersionMetadata.processing.ocr_provider" class="metadata-item">
-                  <label>OCR Provider:</label>
+                  <label>{{ $t('documentDetail.ocrProvider') }}</label>
                   <span>{{ latestVersionMetadata.processing.ocr_provider }}</span>
                 </div>
                 <div v-if="latestVersionMetadata.processing.ocr_confidence" class="metadata-item">
-                  <label>OCR Confidence:</label>
+                  <label>{{ $t('documentDetail.ocrConfidence') }}</label>
                   <span>{{ (latestVersionMetadata.processing.ocr_confidence * 100).toFixed(1) }}%</span>
                 </div>
                 <div v-if="latestVersionMetadata.processing.text_extraction_method" class="metadata-item">
-                  <label>Text Extraction Method:</label>
+                  <label>{{ $t('documentDetail.textExtractionMethod') }}</label>
                   <span>{{ latestVersionMetadata.processing.text_extraction_method }}</span>
                 </div>
                 <div v-if="latestVersionMetadata.processing.processing_time_ms" class="metadata-item">
-                  <label>Processing Time:</label>
-                  <span>{{ latestVersionMetadata.processing.processing_time_ms }}ms</span>
+                  <label>{{ $t('documentDetail.processingTime') }}</label>
+                  <span>{{ latestVersionMetadata.processing.processing_time_ms }}{{ $t('documentDetail.milliseconds') }}</span>
                 </div>
                 <div v-if="latestVersionMetadata.processing.text_length" class="metadata-item">
-                  <label>Extracted Text Length:</label>
-                  <span>{{ latestVersionMetadata.processing.text_length }} characters</span>
+                  <label>{{ $t('documentDetail.extractedTextLength') }}</label>
+                  <span>{{ latestVersionMetadata.processing.text_length }} {{ $t('documentDetail.characters') }}</span>
                 </div>
               </div>
             </div>
@@ -373,7 +373,7 @@
               <div class="comment-header">
                 <div class="comment-author">
                   <User :size="16" />
-                  <span>{{ comment.user?.name || 'Unknown' }}</span>
+                  <span>{{ comment.user?.name || $t('documentDetail.unknown') }}</span>
                 </div>
                 <span class="comment-date">{{ formatDate(comment.created_at) }}</span>
                 <button
@@ -386,11 +386,11 @@
               </div>
               <div class="comment-content">{{ comment.content }}</div>
               <div v-if="comment.position" class="comment-position">
-                Position: {{ JSON.stringify(comment.position) }}
+                {{ $t('documentDetail.position') }} {{ JSON.stringify(comment.position) }}
               </div>
             </div>
             <div v-if="comments.length === 0" class="empty-state">
-              No comments yet
+              {{ $t('documentDetail.noCommentsYet') }}
             </div>
           </div>
           <div class="comment-form">
@@ -401,7 +401,7 @@
                   v-model="commentForm.type"
                   value="comment"
                 />
-                Comment
+                {{ $t('documentDetail.comment') }}
               </label>
               <label>
                 <input
@@ -409,23 +409,23 @@
                   v-model="commentForm.type"
                   value="annotation"
                 />
-                Annotation
+                {{ $t('documentDetail.annotation') }}
               </label>
             </div>
             <textarea
               v-model="commentForm.content"
-              placeholder="Add a comment or annotation..."
+              :placeholder="$t('documentDetail.addCommentPlaceholder')"
               rows="3"
             ></textarea>
             <div v-if="commentForm.type === 'annotation'" class="annotation-position">
-              <label>Position (JSON):</label>
+              <label>{{ $t('documentDetail.positionJson') }}</label>
               <input
                 v-model="commentForm.position"
                 placeholder='{"page": 1, "x": 100, "y": 200}'
               />
             </div>
             <button @click="addComment" class="btn-primary" :disabled="!commentForm.content">
-              Add {{ commentForm.type === 'annotation' ? 'Annotation' : 'Comment' }}
+              {{ commentForm.type === 'annotation' ? $t('documentDetail.addAnnotationButton') : $t('documentDetail.addCommentButton') }}
             </button>
           </div>
         </div>
@@ -443,18 +443,18 @@
             <div class="version-content">
               <div class="version-header">
                 <div>
-                  <h4>Version {{ version.version_no }}</h4>
+                  <h4>{{ $t('documentDetail.versionNumber', { number: version.version_no }) }}</h4>
                   <div class="version-meta">
-                    <span>{{ version.created_by_user?.name || 'Unknown' }}</span>
+                    <span>{{ version.created_by_user?.name || $t('documentDetail.unknown') }}</span>
                     <span>{{ formatDate(version.created_at) }}</span>
-                    <span v-if="version.source">Source: {{ version.source }}</span>
-                    <span v-if="version.device">Device: {{ version.device }}</span>
+                    <span v-if="version.source">{{ $t('documentDetail.source') }} {{ version.source }}</span>
+                    <span v-if="version.device">{{ $t('documentDetail.device') }} {{ version.device }}</span>
                   </div>
                 </div>
                 <div class="version-actions">
                   <button @click="viewVersion(version)" class="btn-small">
                     <Eye :size="16" />
-                    View
+                    {{ $t('documentDetail.view') }}
                   </button>
                   <button
                     v-if="versions.length > 1"
@@ -462,11 +462,11 @@
                     class="btn-small"
                   >
                     <GitCompare :size="16" />
-                    Compare
+                    {{ $t('documentDetail.compare') }}
                   </button>
                   <button @click="downloadVersion(version)" class="btn-small">
                     <Download :size="16" />
-                    Download
+                    {{ $t('documentDetail.download') }}
                   </button>
                   <button
                     v-if="authStore.isAdmin && version.version_no !== latestVersion"
@@ -474,7 +474,7 @@
                     class="btn-small"
                   >
                     <RotateCcw :size="16" />
-                    Restore
+                    {{ $t('documentDetail.restore') }}
                   </button>
                 </div>
               </div>
@@ -486,17 +486,17 @@
       <!-- Share Tab -->
       <div v-if="activeTab === 'share'" class="tab-content">
         <div class="share-section">
-          <h3>Share Document</h3>
+          <h3>{{ $t('documentDetail.shareDocument') }}</h3>
           <div class="share-form">
             <div class="form-group">
-              <label>Share with Users</label>
+              <label>{{ $t('documentDetail.shareWithUsers') }}</label>
               <input
                 v-model="shareForm.userEmails"
-                placeholder="Enter email addresses (comma-separated)"
+                :placeholder="$t('documentDetail.enterEmailAddresses')"
               />
             </div>
             <div class="form-group">
-              <label>Share with Roles</label>
+              <label>{{ $t('documentDetail.shareWithRoles') }}</label>
               <select v-model="shareForm.roleIds" multiple>
                 <option v-for="role in roles" :key="role.id" :value="role.id">
                   {{ role.name }}
@@ -504,7 +504,7 @@
               </select>
             </div>
             <div class="form-group">
-              <label>Permissions</label>
+              <label>{{ $t('documentDetail.permissions') }}</label>
               <div class="permissions-checkbox-group">
                 <label class="checkbox-label">
                   <input
@@ -513,7 +513,7 @@
                     value="view"
                     checked
                   />
-                  <span>View</span>
+                  <span>{{ $t('documentDetail.viewPermission') }}</span>
                 </label>
                 <label class="checkbox-label">
                   <input
@@ -521,7 +521,7 @@
                     v-model="shareForm.permissions"
                     value="search"
                   />
-                  <span>Search</span>
+                  <span>{{ $t('documentDetail.searchPermission') }}</span>
                 </label>
                 <label class="checkbox-label">
                   <input
@@ -529,19 +529,19 @@
                     v-model="shareForm.permissions"
                     value="chat"
                   />
-                  <span>Chat</span>
+                  <span>{{ $t('documentDetail.chatPermission') }}</span>
                 </label>
               </div>
-              <p class="hint-text">Select permissions for shared users/roles. View is required.</p>
+              <p class="hint-text">{{ $t('documentDetail.selectPermissionsHint') }}</p>
             </div>
             <div class="form-group">
-              <label>Expires At (optional)</label>
+              <label>{{ $t('documentDetail.expiresAtOptional') }}</label>
               <input v-model="shareForm.expires_at" type="datetime-local" />
             </div>
-            <button @click="shareDocument" class="btn-primary">Share</button>
+            <button @click="shareDocument" class="btn-primary">{{ $t('documentDetail.shareButton') }}</button>
           </div>
           <div v-if="shares.length > 0" class="shares-list">
-            <h4>Current Shares</h4>
+            <h4>{{ $t('documentDetail.currentShares') }}</h4>
             <div v-for="share in shares" :key="share.id" class="share-item">
               <div class="share-info">
                 <span v-if="share.user">{{ share.user.name }}</span>
@@ -549,7 +549,7 @@
                 <span class="share-permission">{{ Array.isArray(share.permissions) ? share.permissions.join(', ') : (share.permissions || 'view') }}</span>
               </div>
               <button @click="removeShare(share.id)" class="btn-small btn-danger">
-                Remove
+                {{ $t('documentDetail.remove') }}
               </button>
             </div>
           </div>
@@ -573,7 +573,7 @@
                 <span class="activity-date">{{ formatDate(activity.created_at) }}</span>
               </div>
               <div class="activity-actor">
-                by {{ activity.actor?.name || 'Unknown' }}
+                {{ $t('documentDetail.by') }} {{ activity.actor?.name || $t('documentDetail.unknown') }}
               </div>
               <div v-if="activity.metadata" class="activity-metadata">
                 {{ JSON.stringify(activity.metadata) }}
@@ -581,7 +581,7 @@
             </div>
           </div>
           <div v-if="activities.length === 0" class="empty-state">
-            No activity recorded
+            {{ $t('documentDetail.noActivityRecorded') }}
           </div>
         </div>
       </div>
@@ -599,16 +599,15 @@
     <!-- Delete Confirmation Modal -->
     <Modal
       :show="showDeleteModal"
-      title="Delete Document"
+      :title="$t('documentDetail.deleteDocumentTitle')"
       @update:show="showDeleteModal = $event"
     >
       <p v-if="document">
-        Are you sure you want to delete "{{ document.title }}"? 
-        It will be permanently deleted after {{ purgeGracePeriodDays }} day(s).
+        {{ $t('documentDetail.deleteDocumentConfirm', { title: document.title, days: purgeGracePeriodDays }) }}
       </p>
       <template #footer>
-        <button @click="showDeleteModal = false" class="btn-secondary">Cancel</button>
-        <button @click="deleteDocument" class="btn-danger">Delete</button>
+        <button @click="showDeleteModal = false" class="btn-secondary">{{ $t('documentDetail.cancel') }}</button>
+        <button @click="deleteDocument" class="btn-danger">{{ $t('documentDetail.delete') }}</button>
       </template>
     </Modal>
   </div>
@@ -617,6 +616,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../store/auth'
 import { useDocumentsStore } from '../store/documents'
 import { useFoldersStore } from '../store/folders'
@@ -624,6 +624,8 @@ import { useSettingsStore } from '../store/settings'
 import { useRolesStore } from '../store/roles'
 import { documentsAPI, foldersAPI, settingsAPI, rolesAPI } from '../services/api'
 import { StatusBadge, VersionCompare, Modal } from '../components'
+
+const { t } = useI18n()
 import {
   User,
   Trash2,
@@ -667,14 +669,17 @@ const compareV2 = ref(null)
 const showDeleteModal = ref(false)
 const purgeGracePeriodDays = ref(1)
 
-const tabs = [
-  { id: 'preview', label: 'Preview', icon: FileText },
-  { id: 'metadata', label: 'Metadata', icon: FileText },
-  { id: 'comments', label: 'Comments', icon: MessageSquare },
-  { id: 'versions', label: 'Versions', icon: Clock },
-  { id: 'share', label: 'Share', icon: Share2 },
-  { id: 'activity', label: 'Activity', icon: Clock }
-]
+const tabs = computed(() => {
+  const { t } = useI18n()
+  return [
+    { id: 'preview', label: t('documentDetail.preview'), icon: FileText },
+    { id: 'metadata', label: t('documentDetail.metadata'), icon: FileText },
+    { id: 'comments', label: t('documentDetail.comments'), icon: MessageSquare },
+    { id: 'versions', label: t('documentDetail.versions'), icon: Clock },
+    { id: 'share', label: t('documentDetail.share'), icon: Share2 },
+    { id: 'activity', label: t('documentDetail.activity'), icon: Clock }
+  ]
+})
 
 const metadataForm = ref({
   title: '',
@@ -769,7 +774,7 @@ const loadDocument = async (docId) => {
     const statusCode = e?.response?.status || e?.status || (e?.message?.includes('404') ? 404 : null)
     if (statusCode === 404) {
       if (window.$toast) {
-        window.$toast.show('Document not found. It may have been deleted. Redirecting to Recycle Bin...', 'error')
+        window.$toast.show(t('documents.documentNotFoundRedirect'), 'error')
       }
       // Redirect to Recycle Bin after a short delay
       setTimeout(() => {
@@ -777,7 +782,7 @@ const loadDocument = async (docId) => {
       }, 2000)
     } else {
       if (window.$toast) {
-        window.$toast.show('Failed to load document', 'error')
+        window.$toast.show(t('documents.failedToLoadDocument'), 'error')
       }
     }
   } finally {
@@ -828,12 +833,12 @@ const copyOcrText = async () => {
   try {
     await navigator.clipboard.writeText(ocrText.value)
     if (window.$toast) {
-      window.$toast.show('OCR text copied to clipboard', 'success')
+      window.$toast.show(t('documents.ocrTextCopied'), 'success')
     }
   } catch (e) {
     console.error('Failed to copy text', e)
     if (window.$toast) {
-      window.$toast.show('Failed to copy text', 'error')
+      window.$toast.show(t('documents.failedToCopyText'), 'error')
     }
   }
 }
@@ -878,12 +883,12 @@ const saveMetadata = async () => {
   try {
     await documentsStore.updateDocument(document.value.id, metadataForm.value)
     if (window.$toast) {
-      window.$toast.show('Metadata saved', 'success')
+      window.$toast.show(t('documents.metadataSaved'), 'success')
     }
   } catch (e) {
     console.error('Failed to save metadata', e)
     if (window.$toast) {
-      window.$toast.show('Failed to save metadata', 'error')
+      window.$toast.show(t('documents.failedToSaveMetadata'), 'error')
     }
   }
 }
@@ -911,7 +916,7 @@ const addComment = async () => {
         data.position = JSON.parse(commentForm.value.position)
       } catch (e) {
         if (window.$toast) {
-          window.$toast.show('Invalid position JSON', 'error')
+          window.$toast.show(t('documents.invalidPositionJson'), 'error')
         }
         return
       }
@@ -919,12 +924,12 @@ const addComment = async () => {
     await documentsStore.createComment(document.value.id, data)
     commentForm.value = { content: '', type: 'comment', position: null }
     if (window.$toast) {
-      window.$toast.show('Comment added', 'success')
+      window.$toast.show(t('documents.commentAdded'), 'success')
     }
   } catch (e) {
     console.error('Failed to add comment', e)
     if (window.$toast) {
-      window.$toast.show('Failed to add comment', 'error')
+      window.$toast.show(t('documents.failedToAddComment'), 'error')
     }
   }
 }
@@ -933,12 +938,12 @@ const deleteComment = async (commentId) => {
   try {
     await documentsStore.deleteComment(document.value.id, commentId)
     if (window.$toast) {
-      window.$toast.show('Comment deleted', 'success')
+      window.$toast.show(t('documents.commentDeleted'), 'success')
     }
   } catch (e) {
     console.error('Failed to delete comment', e)
     if (window.$toast) {
-      window.$toast.show('Failed to delete comment', 'error')
+      window.$toast.show(t('documents.failedToDeleteComment'), 'error')
     }
   }
 }
@@ -963,11 +968,11 @@ const downloadVersion = (version) => {
 }
 
 const restoreVersion = async (version) => {
-  if (confirm(`Restore to version ${version.version_no}?`)) {
+  if (confirm(t('documents.restoreVersionConfirm', { version: version.version_no }))) {
     try {
       // Implementation depends on backend API
       if (window.$toast) {
-        window.$toast.show('Version restore not yet implemented', 'info')
+        window.$toast.show(t('documents.versionRestoreNotImplemented'), 'info')
       }
     } catch (e) {
       console.error('Failed to restore version', e)
@@ -999,12 +1004,12 @@ const shareDocument = async () => {
     shareForm.value = { userEmails: '', roleIds: [], permissions: ['view'], expires_at: null }
     await loadDocument(document.value.id) // Reload to refresh shares
     if (window.$toast) {
-      window.$toast.show('Document shared', 'success')
+      window.$toast.show(t('documents.documentShared'), 'success')
     }
   } catch (e) {
     console.error('Failed to share document', e)
     if (window.$toast) {
-      window.$toast.show('Failed to share document', 'error')
+      window.$toast.show(t('documents.failedToShareDocument'), 'error')
     }
   }
 }
@@ -1013,7 +1018,7 @@ const removeShare = async (shareId) => {
   try {
     // Implementation depends on backend API
     if (window.$toast) {
-      window.$toast.show('Remove share not yet implemented', 'info')
+      window.$toast.show(t('documents.removeShareNotImplemented'), 'info')
     }
   } catch (e) {
     console.error('Failed to remove share', e)
@@ -1064,7 +1069,7 @@ const deleteDocument = async () => {
     const res = await documentsAPI.delete(document.value.id)
     if (res.is_success) {
       if (window.$toast) {
-        window.$toast.show('Document deleted successfully. Redirecting to Recycle Bin...', 'success')
+        window.$toast.show(t('documents.documentDeletedRedirect'), 'success')
       }
       showDeleteModal.value = false
       // Redirect to Recycle Bin after deletion
@@ -1073,13 +1078,13 @@ const deleteDocument = async () => {
       }, 1500)
     } else {
       if (window.$toast) {
-        window.$toast.show(res.message || 'Failed to delete document', 'error')
+        window.$toast.show(res.message || t('documents.failedToDeleteDocument'), 'error')
       }
     }
   } catch (e) {
     console.error('Failed to delete document', e)
     if (window.$toast) {
-      window.$toast.show('Failed to delete document', 'error')
+      window.$toast.show(t('documents.failedToDeleteDocument'), 'error')
     }
   }
 }

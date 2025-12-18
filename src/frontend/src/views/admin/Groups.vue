@@ -1,10 +1,10 @@
 <template>
   <div class="admin-page">
     <div class="page-header">
-      <h1>Document Groups</h1>
+      <h1>{{ $t('admin.groups.title') }}</h1>
       <button @click="showCreateModal = true" class="btn-primary">
         <Plus :size="20" />
-        Create Group
+        {{ $t('admin.groups.createGroup') }}
       </button>
     </div>
 
@@ -20,41 +20,41 @@
           {{ group.description }}
         </p>
         <div class="group-meta">
-          <span>Documents: {{ group.document_count || 0 }}</span>
-          <span>Members: {{ group.member_count || 0 }}</span>
-          <span>Owners: {{ group.owners?.length || 0 }}</span>
+          <span>{{ $t('nav.documents') }}: {{ group.document_count || 0 }}</span>
+          <span>{{ $t('admin.groups.members') }}: {{ group.member_count || 0 }}</span>
+          <span>{{ $t('admin.groups.owners') }}: {{ group.owners?.length || 0 }}</span>
         </div>
         <div class="group-actions">
           <button @click.stop="editGroup(group)" class="btn-small">
             <Edit :size="16" />
-            Edit
+            {{ $t('common.edit') }}
           </button>
           <button @click.stop="deleteGroup(group)" class="btn-small btn-danger">
             <Trash2 :size="16" />
-            Delete
+            {{ $t('common.delete') }}
           </button>
         </div>
       </div>
       <div v-if="groups.length === 0" class="empty-state">
-        No groups found. Create your first group.
+        {{ $t('admin.groups.noGroups') }}
       </div>
     </div>
 
     <!-- Create/Edit Group Modal -->
     <Modal
       v-model:show="showCreateModal"
-      :title="editingGroup ? 'Edit Group' : 'Create Group'"
+      :title="editingGroup ? $t('admin.groups.editGroup') : $t('admin.groups.createGroup')"
     >
       <div class="form-group">
-        <label>Name *</label>
+        <label>{{ $t('admin.groups.name') }} *</label>
         <input v-model="groupForm.name" required />
       </div>
       <div class="form-group">
-        <label>Description</label>
+        <label>{{ $t('common.description') }}</label>
         <textarea v-model="groupForm.description" rows="3"></textarea>
       </div>
       <div class="form-group">
-        <label>Owners</label>
+        <label>{{ $t('admin.groups.owners') }}</label>
         <div class="multi-select">
           <div class="selected-items">
             <span
@@ -67,7 +67,7 @@
             </span>
           </div>
           <select @change="addOwner($event.target.value)">
-            <option value="">Add owner...</option>
+            <option value="">{{ $t('admin.groups.addOwner') }}</option>
             <option
               v-for="user in users"
               :key="user.id"
@@ -80,7 +80,7 @@
         </div>
       </div>
       <div class="form-group">
-        <label>Allowed Roles</label>
+        <label>{{ $t('admin.groups.allowedRoles') }}</label>
         <div class="multi-select">
           <div class="selected-items">
             <span
@@ -93,7 +93,7 @@
             </span>
           </div>
           <select @change="addAllowedRole($event.target.value)">
-            <option value="">Add role...</option>
+            <option value="">{{ $t('admin.groups.addRole') }}</option>
             <option
               v-for="role in roles"
               :key="role.name"
@@ -106,7 +106,7 @@
         </div>
       </div>
       <div class="form-group">
-        <label>Allowed Users</label>
+        <label>{{ $t('admin.groups.allowedUsers') }}</label>
         <div class="multi-select">
           <div class="selected-items">
             <span
@@ -119,7 +119,7 @@
             </span>
           </div>
           <select @change="addAllowedUser($event.target.value)">
-            <option value="">Add user...</option>
+            <option value="">{{ $t('admin.groups.addUser') }}</option>
             <option
               v-for="user in users"
               :key="user.id"
@@ -132,11 +132,11 @@
         </div>
       </div>
       <div class="form-group">
-        <label>Chatbot Policy (JSON)</label>
+        <label>{{ $t('admin.groups.chatbotPolicyJson') }}</label>
         <textarea
           v-model="chatbotPolicyJson"
           rows="4"
-          placeholder='{"allowed_sources": ["docs"], "allow_preview": true}'
+          :placeholder="$t('admin.groups.chatbotPolicyPlaceholder')"
         ></textarea>
       </div>
       <template #footer>
@@ -145,21 +145,21 @@
           @click="showCreateModal = false"
           class="btn-secondary"
         >
-          Cancel
+          {{ $t('common.cancel') }}
         </button>
-        <button type="button" @click="saveGroup" class="btn-primary">Save</button>
+        <button type="button" @click="saveGroup" class="btn-primary">{{ $t('common.save') }}</button>
       </template>
     </Modal>
 
     <!-- Group Detail Modal -->
-    <Modal v-model:show="showDetailModal" :title="currentGroup?.name || 'Group Details'">
+    <Modal v-model:show="showDetailModal" :title="currentGroup?.name || $t('admin.groups.groupDetails')">
       <div v-if="currentGroup" class="group-detail">
         <div class="detail-section">
-          <h4>Description</h4>
-          <p>{{ currentGroup.description || 'No description' }}</p>
+          <h4>{{ $t('common.description') }}</h4>
+          <p>{{ currentGroup.description || $t('admin.groups.noDescription') }}</p>
         </div>
         <div class="detail-section">
-          <h4>Owners</h4>
+          <h4>{{ $t('admin.groups.owners') }}</h4>
           <div class="member-list">
             <span
               v-for="ownerId in currentGroup.owners || []"
@@ -171,7 +171,7 @@
           </div>
         </div>
         <div class="detail-section">
-          <h4>Allowed Roles</h4>
+          <h4>{{ $t('admin.groups.allowedRoles') }}</h4>
           <div class="member-list">
             <span
               v-for="roleName in currentGroup.allowed_roles || []"
@@ -183,7 +183,7 @@
           </div>
         </div>
         <div class="detail-section">
-          <h4>Allowed Users</h4>
+          <h4>{{ $t('admin.groups.allowedUsers') }}</h4>
           <div class="member-list">
             <span
               v-for="userId in currentGroup.allowed_users || []"
@@ -195,45 +195,45 @@
           </div>
         </div>
         <div class="detail-section">
-          <h4>Associated Documents</h4>
+          <h4>{{ $t('admin.groups.associatedDocuments') }}</h4>
           <div class="associations">
             <button @click="associateDocuments" class="btn-small">
               <FileText :size="16" />
-              Manage Documents
+              {{ $t('admin.groups.manageDocuments') }}
             </button>
-            <span class="count">{{ currentGroup.document_count || 0 }} documents</span>
+            <span class="count">{{ currentGroup.document_count || 0 }} {{ $t('admin.groups.documents') }}</span>
           </div>
         </div>
         <div class="detail-section">
-          <h4>Associated Folders</h4>
+          <h4>{{ $t('admin.groups.associatedFolders') }}</h4>
           <div class="associations">
             <button @click="associateFolders" class="btn-small">
               <Folder :size="16" />
-              Manage Folders
+              {{ $t('admin.groups.manageFolders') }}
             </button>
-            <span class="count">{{ currentGroup.folder_count || 0 }} folders</span>
+            <span class="count">{{ currentGroup.folder_count || 0 }} {{ $t('admin.groups.folders') }}</span>
           </div>
         </div>
         <div class="detail-section">
-          <h4>Associated Tags</h4>
+          <h4>{{ $t('admin.groups.associatedTags') }}</h4>
           <div class="associations">
             <button @click="associateTags" class="btn-small">
               <Tag :size="16" />
-              Manage Tags
+              {{ $t('admin.groups.manageTags') }}
             </button>
-            <span class="count">{{ currentGroup.tag_count || 0 }} tags</span>
+            <span class="count">{{ currentGroup.tag_count || 0 }} {{ $t('admin.groups.tags') }}</span>
           </div>
         </div>
         <div class="detail-section">
-          <h4>Actions</h4>
+          <h4>{{ $t('admin.groups.actions') }}</h4>
           <button @click="reindexGroup" class="btn-primary">
             <RefreshCw :size="16" />
-            Reindex Group
+            {{ $t('admin.groups.reindexGroup') }}
           </button>
         </div>
       </div>
       <template #footer>
-        <button @click="showDetailModal = false" class="btn-secondary">Close</button>
+        <button @click="showDetailModal = false" class="btn-secondary">{{ $t('common.close') }}</button>
       </template>
     </Modal>
   </div>
@@ -241,11 +241,14 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useGroupsStore } from '../../store/groups'
 import { useRolesStore } from '../../store/roles'
 import { groupsAPI, usersAPI } from '../../services/api'
 import { Modal } from '../../components'
 import { Plus, Edit, Trash2, FileText, Folder, Tag, RefreshCw } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const groupsStore = useGroupsStore()
 const rolesStore = useRolesStore()
@@ -282,7 +285,7 @@ const loadGroups = async () => {
   } catch (e) {
     console.error('Failed to load groups', e)
     if (window.$toast) {
-      window.$toast.show('Failed to load groups', 'error')
+      window.$toast.show(t('admin.groups.failedToLoadGroups'), 'error')
     }
   }
 }
@@ -315,7 +318,7 @@ const viewGroup = async (group) => {
   } catch (e) {
     console.error('Failed to load group details', e)
     if (window.$toast) {
-      window.$toast.show('Failed to load group details', 'error')
+      window.$toast.show(t('admin.groups.failedToLoadGroupDetails'), 'error')
     }
   }
 }
@@ -344,11 +347,12 @@ const saveGroup = async () => {
         data.chatbot_policy = JSON.parse(chatbotPolicyJson.value)
       } catch (e) {
         if (window.$toast) {
-          window.$toast.show('Invalid chatbot policy JSON', 'error')
+          window.$toast.show(t('admin.groups.invalidChatbotPolicyJson'), 'error')
         }
         return
       }
     }
+    const wasEditing = !!editingGroup.value
     if (editingGroup.value) {
       await groupsStore.updateGroup(editingGroup.value.id, data)
     } else {
@@ -368,30 +372,30 @@ const saveGroup = async () => {
     chatbotPolicyJson.value = ''
     if (window.$toast) {
       window.$toast.show(
-        editingGroup.value ? 'Group updated' : 'Group created',
+        wasEditing ? t('admin.groups.groupUpdated') : t('admin.groups.groupCreated'),
         'success'
       )
     }
   } catch (e) {
     console.error('Failed to save group', e)
     if (window.$toast) {
-      window.$toast.show('Failed to save group', 'error')
+      window.$toast.show(t('admin.groups.failedToSaveGroup'), 'error')
     }
   }
 }
 
 const deleteGroup = async (group) => {
-  if (confirm(`Delete group "${group.name}"?`)) {
+  if (confirm(t('admin.groups.deleteGroupConfirm', { name: group.name }))) {
     try {
       await groupsStore.deleteGroup(group.id)
       await loadGroups()
       if (window.$toast) {
-        window.$toast.show('Group deleted', 'success')
+        window.$toast.show(t('admin.groups.groupDeleted'), 'success')
       }
     } catch (e) {
       console.error('Failed to delete group', e)
       if (window.$toast) {
-        window.$toast.show('Failed to delete group', 'error')
+        window.$toast.show(t('admin.groups.failedToDeleteGroup'), 'error')
       }
     }
   }
@@ -447,39 +451,39 @@ const removeAllowedUser = (userId) => {
 
 const getUserName = (userId) => {
   const user = users.value.find(u => u.id === userId)
-  return user ? `${user.name} (${user.email})` : `User ${userId}`
+  return user ? `${user.name} (${user.email})` : t('admin.groups.userFallback', { id: userId })
 }
 
 const associateDocuments = () => {
   if (window.$toast) {
-    window.$toast.show('Document association not yet implemented', 'info')
+    window.$toast.show(t('admin.groups.documentAssociationNotImplemented'), 'info')
   }
 }
 
 const associateFolders = () => {
   if (window.$toast) {
-    window.$toast.show('Folder association not yet implemented', 'info')
+    window.$toast.show(t('admin.groups.folderAssociationNotImplemented'), 'info')
   }
 }
 
 const associateTags = () => {
   if (window.$toast) {
-    window.$toast.show('Tag association not yet implemented', 'info')
+    window.$toast.show(t('admin.groups.tagAssociationNotImplemented'), 'info')
   }
 }
 
 const reindexGroup = async () => {
   if (!currentGroup.value) return
-  if (confirm('Reindex this group? This may take a while.')) {
+  if (confirm(t('admin.groups.reindexGroupConfirm'))) {
     try {
       await groupsStore.reindexGroup(currentGroup.value.id)
       if (window.$toast) {
-        window.$toast.show('Reindexing started', 'success')
+        window.$toast.show(t('admin.groups.reindexingStarted'), 'success')
       }
     } catch (e) {
       console.error('Failed to reindex group', e)
       if (window.$toast) {
-        window.$toast.show('Failed to reindex group', 'error')
+        window.$toast.show(t('admin.groups.failedToReindexGroup'), 'error')
       }
     }
   }

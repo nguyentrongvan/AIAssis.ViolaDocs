@@ -1,18 +1,18 @@
 <template>
   <div class="admin-page">
     <div class="page-header">
-      <h1>User Management</h1>
-      <button @click="showCreateModal = true" class="btn-primary">+ Add User</button>
+      <h1>{{ $t('admin.users.title') }}</h1>
+      <button @click="showCreateModal = true" class="btn-primary">+ {{ $t('admin.users.createUser') }}</button>
     </div>
       <table class="data-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Role</th>
-            <th>Status</th>
-            <th>Expires</th>
-            <th>Actions</th>
+            <th>{{ $t('admin.users.name') }}</th>
+            <th>{{ $t('admin.users.email') }}</th>
+            <th>{{ $t('admin.users.role') }}</th>
+            <th>{{ $t('admin.users.status') }}</th>
+            <th>{{ $t('admin.users.expires') }}</th>
+            <th>{{ $t('admin.users.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -34,17 +34,17 @@
             <td>
               <span :class="['status-badge', user.status]">{{ user.status }}</span>
             </td>
-            <td>{{ user.expires_at ? formatDate(user.expires_at) : 'Never' }}</td>
+            <td>{{ user.expires_at ? formatDate(user.expires_at) : $t('admin.users.never') }}</td>
             <td>
               <div class="action-buttons">
                 <button @click="editUser(user)" class="btn-action btn-edit">
-                  Edit
+                  {{ $t('common.edit') }}
                 </button>
                 <button 
                   @click="toggleUserStatus(user)" 
                   :class="['btn-action', user.status === 'active' ? 'btn-deactivate' : 'btn-activate']"
                 >
-                  {{ user.status === 'active' ? 'Deactivate' : 'Activate' }}
+                  {{ user.status === 'active' ? $t('admin.users.deactivate') : $t('admin.users.activate') }}
                 </button>
               </div>
             </td>
@@ -54,30 +54,30 @@
     </div>
     <div v-if="showCreateModal" class="modal" @click.self="showCreateModal = false">
       <div class="modal-content">
-        <h2>Create User</h2>
+        <h2>{{ $t('admin.users.createUser') }}</h2>
         <form @submit.prevent="createUser">
           <div class="form-group">
-            <label>Name</label>
+            <label>{{ $t('admin.users.name') }}</label>
             <input v-model="newUser.name" required />
           </div>
           <div class="form-group">
-            <label>Email</label>
+            <label>{{ $t('admin.users.email') }}</label>
             <input v-model="newUser.email" type="email" required />
           </div>
           <div class="form-group">
-            <label>Password</label>
+            <label>{{ $t('common.password') }}</label>
             <input v-model="newUser.password" type="password" required />
           </div>
           <div class="form-group">
-            <label>Role</label>
+            <label>{{ $t('admin.users.role') }}</label>
             <select v-model="newUser.role" required>
-              <option value="user">User</option>
-              <option value="staff">Staff</option>
-              <option value="admin">Admin</option>
+              <option value="user">{{ $t('common.user') }}</option>
+              <option value="staff">{{ $t('admin.users.staff') }}</option>
+              <option value="admin">{{ $t('admin.users.admin') }}</option>
             </select>
           </div>
           <div class="form-group">
-            <label>Menu Roles</label>
+            <label>{{ $t('admin.users.menuRoles') }}</label>
             <div class="acl-selector">
               <div class="selected-items">
                 <span
@@ -94,18 +94,18 @@
                 class="btn-add-acl"
                 type="button"
               >
-                + Add Menu Roles
+                + {{ $t('admin.users.addMenuRoles') }}
               </button>
             </div>
-            <p class="hint-text">Select menu roles to control menu access. Editor and Manager require staff/admin role.</p>
+            <p class="hint-text">{{ $t('admin.users.menuRolesHint') }}</p>
           </div>
           <div class="form-group">
-            <label>Expires At (optional)</label>
+            <label>{{ $t('admin.users.expiresAt') }}</label>
             <input v-model="newUser.expires_at" type="date" />
           </div>
           <div class="form-actions">
-            <button type="submit" class="btn-primary">Create</button>
-            <button type="button" @click="showCreateModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" class="btn-primary">{{ $t('common.create') }}</button>
+            <button type="button" @click="showCreateModal = false" class="btn-secondary">{{ $t('common.cancel') }}</button>
           </div>
         </form>
       </div>
@@ -113,26 +113,26 @@
     <!-- Edit User Modal -->
     <div v-if="showEditModal && editingUser" class="modal" @click.self="showEditModal = false">
       <div class="modal-content">
-        <h2>Edit User</h2>
+        <h2>{{ $t('admin.users.editUser') }}</h2>
         <form @submit.prevent="updateUser">
           <div class="form-group">
-            <label>Name</label>
+            <label>{{ $t('admin.users.name') }}</label>
             <input v-model="editingUser.name" required />
           </div>
           <div class="form-group">
-            <label>Email</label>
+            <label>{{ $t('admin.users.email') }}</label>
             <input v-model="editingUser.email" type="email" required />
           </div>
           <div class="form-group">
-            <label>Role</label>
+            <label>{{ $t('admin.users.role') }}</label>
             <select v-model="editingUser.role" required>
-              <option value="user">User</option>
-              <option value="staff">Staff</option>
-              <option value="admin">Admin</option>
+              <option value="user">{{ $t('common.user') }}</option>
+              <option value="staff">{{ $t('admin.users.staff') }}</option>
+              <option value="admin">{{ $t('admin.users.admin') }}</option>
             </select>
           </div>
           <div class="form-group">
-            <label>Menu Roles</label>
+            <label>{{ $t('admin.users.menuRoles') }}</label>
             <div class="acl-selector">
               <div class="selected-items">
                 <span
@@ -149,25 +149,25 @@
                 class="btn-add-acl"
                 type="button"
               >
-                + Add Menu Roles
+                + {{ $t('admin.users.addMenuRoles') }}
               </button>
             </div>
-            <p class="hint-text">Select menu roles to control menu access. Editor and Manager require staff/admin role.</p>
+            <p class="hint-text">{{ $t('admin.users.menuRolesHint') }}</p>
           </div>
           <div class="form-group">
-            <label>Status</label>
+            <label>{{ $t('admin.users.status') }}</label>
             <select v-model="editingUser.status" required>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
+              <option value="active">{{ $t('admin.users.active') }}</option>
+              <option value="inactive">{{ $t('admin.users.inactive') }}</option>
             </select>
           </div>
           <div class="form-group">
-            <label>Expires At (optional)</label>
+            <label>{{ $t('admin.users.expiresAt') }}</label>
             <input v-model="editingUser.expires_at" type="date" />
           </div>
           <div class="form-actions">
-            <button type="submit" class="btn-primary">Update</button>
-            <button type="button" @click="showEditModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" class="btn-primary">{{ $t('common.update') }}</button>
+            <button type="button" @click="showEditModal = false" class="btn-secondary">{{ $t('common.cancel') }}</button>
           </div>
         </form>
       </div>
@@ -175,12 +175,12 @@
     <!-- Role Picker Modal for New User -->
     <div v-if="showRolePickerForNew" class="modal" @click.self="showRolePickerForNew = false">
       <div class="modal-content role-picker-modal">
-        <h3>Select Menu Roles</h3>
+        <h3>{{ $t('admin.users.selectMenuRoles') }}</h3>
         <div class="picker-search">
           <input
             v-model="roleSearchQuery"
             type="text"
-            placeholder="Search roles by name..."
+            :placeholder="$t('admin.users.searchRolesPlaceholder')"
             class="search-input"
           />
         </div>
@@ -200,30 +200,30 @@
               />
               <span class="picker-label">
                 <strong>{{ role.name }}</strong>
-                <span v-if="isRoleDisabled(role.name, newUser.role)" class="picker-hint">(staff/admin only)</span>
+                <span v-if="isRoleDisabled(role.name, newUser.role)" class="picker-hint">{{ $t('admin.users.staffAdminOnly') }}</span>
                 <span class="role-description">{{ getRoleDescription(role.name) }}</span>
               </span>
             </label>
           </div>
           <div v-if="filteredRoles.length === 0" class="picker-empty">
-            {{ roleSearchQuery ? 'No roles found' : 'No roles available' }}
+            {{ roleSearchQuery ? $t('admin.users.noRolesFound') : $t('admin.users.noRolesAvailable') }}
           </div>
         </div>
         <div class="form-actions">
-          <button @click="showRolePickerForNew = false" class="btn-secondary">Cancel</button>
-          <button @click="confirmRolesForNewUser" class="btn-primary">Confirm ({{ tempSelectedRoles?.length || 0 }})</button>
+          <button @click="showRolePickerForNew = false" class="btn-secondary">{{ $t('common.cancel') }}</button>
+          <button @click="confirmRolesForNewUser" class="btn-primary">{{ $t('admin.users.confirmWithCount', { count: tempSelectedRoles?.length || 0 }) }}</button>
         </div>
       </div>
     </div>
     <!-- Role Picker Modal for Editing User -->
     <div v-if="showRolePickerForEdit && editingUser" class="modal" @click.self="showRolePickerForEdit = false">
       <div class="modal-content role-picker-modal">
-        <h3>Select Menu Roles</h3>
+        <h3>{{ $t('admin.users.selectMenuRoles') }}</h3>
         <div class="picker-search">
           <input
             v-model="roleSearchQuery"
             type="text"
-            placeholder="Search roles by name..."
+            :placeholder="$t('admin.users.searchRolesPlaceholder')"
             class="search-input"
           />
         </div>
@@ -243,18 +243,18 @@
               />
               <span class="picker-label">
                 <strong>{{ role.name }}</strong>
-                <span v-if="isRoleDisabled(role.name, editingUser.role)" class="picker-hint">(staff/admin only)</span>
+                <span v-if="isRoleDisabled(role.name, editingUser.role)" class="picker-hint">{{ $t('admin.users.staffAdminOnly') }}</span>
                 <span class="role-description">{{ getRoleDescription(role.name) }}</span>
               </span>
             </label>
           </div>
           <div v-if="filteredRoles.length === 0" class="picker-empty">
-            {{ roleSearchQuery ? 'No roles found' : 'No roles available' }}
+            {{ roleSearchQuery ? $t('admin.users.noRolesFound') : $t('admin.users.noRolesAvailable') }}
           </div>
         </div>
         <div class="form-actions">
-          <button @click="showRolePickerForEdit = false" class="btn-secondary">Cancel</button>
-          <button @click="confirmRolesForEditingUser" class="btn-primary">Confirm ({{ tempSelectedRoles?.length || 0 }})</button>
+          <button @click="showRolePickerForEdit = false" class="btn-secondary">{{ $t('common.cancel') }}</button>
+          <button @click="confirmRolesForEditingUser" class="btn-primary">{{ $t('admin.users.confirmWithCount', { count: tempSelectedRoles?.length || 0 }) }}</button>
         </div>
       </div>
     </div>
@@ -262,8 +262,11 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import api from '../../services/api'
 import { useRolesStore } from '../../store/roles'
+
+const { t, locale } = useI18n()
 
 const users = ref([])
 const showCreateModal = ref(false)
@@ -317,13 +320,13 @@ const createUser = async () => {
       showCreateModal.value = false
       newUser.value = { name: '', email: '', password: '', role: 'user', expires_at: '', role_ids: [] }
       if (window.$toast) {
-        window.$toast.show('User created successfully', 'success')
+        window.$toast.show(t('admin.users.userCreated'), 'success')
       }
     }
   } catch (e) {
     console.error('Failed to create user', e)
     if (window.$toast) {
-      window.$toast.show(e.response?.data?.message || 'Failed to create user', 'error')
+      window.$toast.show(e.response?.data?.message || t('admin.users.failedToCreateUser'), 'error')
     } else if (e.response?.data?.message) {
       alert(e.response.data.message)
     }
@@ -354,13 +357,13 @@ const updateUser = async () => {
       showEditModal.value = false
       editingUser.value = null
       if (window.$toast) {
-        window.$toast.show('User updated successfully', 'success')
+        window.$toast.show(t('admin.users.userUpdated'), 'success')
       }
     }
   } catch (e) {
     console.error('Failed to update user', e)
     if (window.$toast) {
-      window.$toast.show(e.response?.data?.message || 'Failed to update user', 'error')
+      window.$toast.show(e.response?.data?.message || t('admin.users.failedToUpdateUser'), 'error')
     } else if (e.response?.data?.message) {
       alert(e.response.data.message)
     }
@@ -426,24 +429,15 @@ const isRoleDisabled = (roleName, userRole) => {
 const getRoleName = (roleId) => {
   const rolesList = roles.value || []
   if (!Array.isArray(rolesList)) {
-    return `Role ${roleId}`
+    return t('admin.users.roleFallback', { id: roleId })
   }
   const role = rolesList.find(r => r && r.id === roleId)
-  return role ? role.name : `Role ${roleId}`
+  return role ? role.name : t('admin.users.roleFallback', { id: roleId })
 }
 
 const getRoleDescription = (roleName) => {
-  const descriptions = {
-    'viewer': 'No menu access. Only document-level view permission when shared.',
-    'searcher': 'Access to Search menu - can search documents',
-    'chatter': 'Access to Chatbot menu - can chat with AI about documents',
-    'uploader': 'Access to Upload menu - can upload new documents',
-    'scanner': 'Access to Scan Inbox menu - can manage scanned documents',
-    'deleter': 'Access to Recycle Bin menu - can view and manage deleted documents',
-    'editor': 'Access to Upload, Search, Scan Inbox, Chatbot, and Folders menus',
-    'manager': 'Access to Upload, Search, Scan Inbox, Chatbot, Folders, Settings, Reports, and Users menus'
-  }
-  return descriptions[roleName] || ''
+  const key = `admin.users.roleDescriptions.${roleName}`
+  return t(key) || ''
 }
 
 const openRolePickerForNewUser = () => {
@@ -497,13 +491,13 @@ const toggleUserStatus = async (user) => {
       await loadUsers()
       if (window.$toast) {
         const newStatus = user.status === 'active' ? 'deactivated' : 'activated'
-        window.$toast.show(`User ${newStatus} successfully`, 'success')
+        window.$toast.show(t('admin.users.userStatusUpdated', { status: newStatus }), 'success')
       }
     }
   } catch (e) {
     console.error('Failed to toggle status', e)
     if (window.$toast) {
-      window.$toast.show('Failed to update user status', 'error')
+      window.$toast.show(t('admin.users.failedToUpdateUserStatus'), 'error')
     }
   }
 }

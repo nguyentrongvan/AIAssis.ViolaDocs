@@ -1,6 +1,6 @@
 <template>
   <div class="admin-page">
-    <h1 class="page-header">Settings</h1>
+    <h1 class="page-header">{{ $t('admin.settings.title') }}</h1>
 
     <div class="settings-tabs">
       <button
@@ -18,38 +18,38 @@
       <div v-if="activeTab === 'retention'" class="tab-content">
         <!-- Document Deletion Settings Section -->
         <div class="deletion-settings-section">
-          <h2>Document Deletion Settings</h2>
+          <h2>{{ $t('admin.settings.documentDeletionSettings') }}</h2>
           <div class="form-section">
             <div class="form-group">
-              <label for="purge_grace_period">Purge Grace Period (days) *</label>
+              <label for="purge_grace_period">{{ $t('admin.settings.purgeGracePeriod') }} *</label>
               <input
                 id="purge_grace_period"
                 v-model.number="purgeGracePeriodForm.days"
                 type="number"
                 min="0"
                 max="365"
-                placeholder="1"
+                :placeholder="$t('admin.settings.purgeGracePeriodPlaceholder')"
               />
-              <small>Number of days before soft-deleted documents are permanently purged. Default: 1 day. Min: 0, Max: 365.</small>
+              <small>{{ $t('admin.settings.purgeGracePeriodHint') }}</small>
             </div>
             <div class="form-actions">
               <button @click="savePurgeGracePeriod" class="btn-primary" :disabled="savingPurgeGracePeriod">
                 <Save :size="16" />
-                {{ savingPurgeGracePeriod ? 'Saving...' : 'Save Settings' }}
+                {{ savingPurgeGracePeriod ? $t('admin.settings.saving') : $t('admin.settings.saveSettings') }}
               </button>
               <button @click="loadPurgeGracePeriod" class="btn-secondary" :disabled="savingPurgeGracePeriod">
                 <RefreshCw :size="16" />
-                Reset
+                {{ $t('common.refresh') }}
               </button>
             </div>
           </div>
         </div>
 
         <div class="section-header">
-          <h2>Retention Policies</h2>
+          <h2>{{ $t('admin.settings.retentionPolicies') }}</h2>
           <button @click="showRetentionModal = true" class="btn-primary">
             <Plus :size="20" />
-            New Policy
+            {{ $t('admin.settings.createPolicy') }}
           </button>
         </div>
         <div class="policies-list">
@@ -63,31 +63,31 @@
               <div class="policy-actions">
                 <button @click="editRetentionPolicy(policy)" class="btn-small">
                   <Edit :size="16" />
-                  Edit
+                  {{ $t('common.edit') }}
                 </button>
                 <button @click="deleteRetentionPolicy(policy)" class="btn-small btn-danger">
                   <Trash2 :size="16" />
-                  Delete
+                  {{ $t('common.delete') }}
                 </button>
               </div>
             </div>
             <div class="policy-details">
               <div class="detail-item">
-                <span class="label">Duration:</span>
-                <span>{{ policy.duration_days }} days</span>
+                <span class="label">{{ $t('admin.settings.duration') }}:</span>
+                <span>{{ policy.duration_days }} {{ $t('upload.days') }}</span>
               </div>
               <div class="detail-item">
-                <span class="label">Disposition:</span>
+                <span class="label">{{ $t('admin.settings.disposition') }}:</span>
                 <span>{{ policy.disposition }}</span>
               </div>
               <div class="detail-item">
-                <span class="label">Legal Hold:</span>
-                <span>{{ policy.legal_hold ? 'Yes' : 'No' }}</span>
+                <span class="label">{{ $t('admin.settings.legalHold') }}:</span>
+                <span>{{ policy.legal_hold ? $t('common.yes') : $t('common.no') }}</span>
               </div>
             </div>
           </div>
           <div v-if="retentionPolicies.length === 0" class="empty-state">
-            No retention policies. Create your first policy.
+            {{ $t('admin.settings.noRetentionPolicies') }}
           </div>
         </div>
       </div>
@@ -95,30 +95,30 @@
       <!-- OCR/AI Providers Tab -->
       <div v-if="activeTab === 'providers'" class="tab-content">
         <div class="section-header">
-          <h2>OCR/AI Providers</h2>
+          <h2>{{ $t('admin.settings.ocrProviders') }}</h2>
           <button @click="checkProviderHealth" class="btn-secondary">
             <Activity :size="20" />
-            Check Health
+            {{ $t('admin.settings.checkHealth') }}
           </button>
         </div>
         
         <!-- OCR Settings Section -->
         <div class="ocr-settings-section">
-          <h3>OCR Settings</h3>
+          <h3>{{ $t('admin.settings.ocrSettings') }}</h3>
           <div class="form-section">
             <div class="form-group">
-              <label for="ocr_provider">OCR Provider *</label>
+              <label for="ocr_provider">{{ $t('admin.settings.ocrProvider') }} *</label>
               <select id="ocr_provider" v-model="ocrForm.provider">
-                <option value="paddle">PaddleOCR</option>
-                <option value="tesseract">Tesseract</option>
-                <option value="easyocr">EasyOCR</option>
-                <option value="auto">Auto (Try all)</option>
+                <option value="paddle">{{ $t('admin.settings.ocrProviderPaddle') }}</option>
+                <option value="tesseract">{{ $t('admin.settings.ocrProviderTesseract') }}</option>
+                <option value="easyocr">{{ $t('admin.settings.ocrProviderEasyocr') }}</option>
+                <option value="auto">{{ $t('admin.settings.autoTryAll') }}</option>
               </select>
-              <small>Select the OCR provider to use for document processing</small>
+              <small>{{ $t('admin.settings.selectOCRProvider') }}</small>
             </div>
             
             <div class="form-group">
-              <label>Languages *</label>
+              <label>{{ $t('admin.settings.languages') }} *</label>
               <div class="language-checkboxes">
                 <label v-for="lang in availableLanguages" :key="lang.code" class="language-checkbox">
                   <input 
@@ -129,17 +129,17 @@
                   <span>{{ lang.name }} ({{ lang.code }})</span>
                 </label>
               </div>
-              <small>Select languages for OCR recognition</small>
+              <small>{{ $t('admin.settings.selectLanguages') }}</small>
             </div>
             
             <div class="form-actions">
               <button @click="saveOCRSettings" class="btn-primary" :disabled="savingOCR">
                 <Save :size="16" />
-                {{ savingOCR ? 'Saving...' : 'Save OCR Settings' }}
+                {{ savingOCR ? $t('admin.settings.saving') : $t('admin.settings.saveOCRSettings') }}
               </button>
               <button @click="loadOCRSettings" class="btn-secondary" :disabled="savingOCR">
                 <RefreshCw :size="16" />
-                Reset
+                {{ $t('common.refresh') }}
               </button>
             </div>
           </div>
@@ -147,7 +147,7 @@
         
         <div v-if="providers" class="providers-config">
           <div class="provider-section">
-            <h3>OCR Providers</h3>
+            <h3>{{ $t('admin.settings.ocrProvidersSection') }}</h3>
             <div class="provider-list">
               <div
                 v-for="provider in providers.ocr || []"
@@ -166,10 +166,10 @@
                 <div class="provider-config">
                   <label>
                     <input type="checkbox" v-model="provider.enabled" />
-                    Enabled
+                    {{ $t('admin.settings.enabled') }}
                   </label>
                   <div v-if="provider.quota" class="quota-info">
-                    Quota: {{ provider.quota.used }} / {{ provider.quota.limit }}
+                    {{ $t('admin.settings.quota') }}: {{ provider.quota.used }} / {{ provider.quota.limit }}
                   </div>
                   <div v-if="provider.health === 'error' || provider.health === 'system_not_found'" class="provider-actions">
                     <button 
@@ -178,13 +178,13 @@
                       class="btn-small btn-primary"
                       :disabled="fixingProvider === provider.name"
                     >
-                      {{ fixingProvider === provider.name ? 'Fixing...' : 'Auto Fix' }}
+                      {{ fixingProvider === provider.name ? $t('admin.settings.fixing') : $t('admin.settings.autoFix') }}
                     </button>
                     <button 
                       @click="showFixGuide(provider)" 
                       class="btn-small btn-secondary"
                     >
-                      View Guide
+                      {{ $t('admin.settings.viewGuide') }}
                     </button>
                   </div>
                 </div>
@@ -192,7 +192,7 @@
             </div>
           </div>
           <div class="provider-section">
-            <h3>Embedding Providers</h3>
+            <h3>{{ $t('admin.settings.embeddingProvidersSection') }}</h3>
             <div class="provider-list">
               <div
                 v-for="provider in providers.embedding || []"
@@ -206,14 +206,14 @@
                 <div class="provider-config">
                   <label>
                     <input type="checkbox" v-model="provider.enabled" />
-                    Enabled
+                    {{ $t('admin.settings.enabled') }}
                   </label>
                 </div>
               </div>
             </div>
           </div>
           <div class="provider-section">
-            <h3>LLM Providers</h3>
+            <h3>{{ $t('admin.settings.llmProvidersSection') }}</h3>
             <div class="provider-list">
               <div
                 v-for="provider in providers.llm || []"
@@ -227,10 +227,10 @@
                 <div class="provider-config">
                   <label>
                     <input type="checkbox" v-model="provider.enabled" />
-                    Enabled
+                    {{ $t('admin.settings.enabled') }}
                   </label>
                   <div v-if="provider.models" class="models-list">
-                    <label>Available Models:</label>
+                    <label>{{ $t('admin.settings.available') }} {{ $t('admin.settings.llmModelsSection') }}:</label>
                     <div class="models">
                       <span
                         v-for="model in provider.models"
@@ -246,116 +246,115 @@
             </div>
           </div>
           <div class="section-actions">
-            <button @click="saveProviders" class="btn-primary">Save Providers</button>
+            <button @click="saveProviders" class="btn-primary">{{ $t('admin.settings.saveProviders') }}</button>
           </div>
         </div>
-        <div v-else class="loading">Loading providers...</div>
+        <div v-else class="loading">{{ $t('admin.settings.loadingProviders') }}</div>
       </div>
 
       <!-- LLM Settings Tab -->
       <div v-if="activeTab === 'llm'" class="tab-content">
         <div class="section-header">
-          <h2>LLM Settings (Ollama)</h2>
+          <h2>{{ $t('admin.settings.llmSettingsTitle') }}</h2>
         </div>
         <div class="llm-settings-form">
           <div class="config-warning">
             <AlertTriangle :size="20" />
             <div>
-              <strong>Note:</strong> Changes require server restart to take effect. 
-              API key is optional for local Ollama instances.
+              <strong>{{ $t('admin.settings.note') }}:</strong> {{ $t('admin.settings.changesRequireRestart') }}
             </div>
           </div>
           
           <div v-if="llmSettings" class="form-section">
             <div class="form-group">
-              <label for="ollama_base_url">Ollama Base URL *</label>
+              <label for="ollama_base_url">{{ $t('admin.settings.ollamaBaseUrl') }} *</label>
               <input
                 id="ollama_base_url"
                 v-model="llmForm.ollama_base_url"
                 type="text"
-                placeholder="http://localhost:11434"
+                :placeholder="$t('admin.settings.ollamaBaseUrlPlaceholder')"
               />
-              <small>Use http://ollama:11434 in docker, http://localhost:11434 for local</small>
+              <small>{{ $t('admin.settings.ollamaBaseUrlHint') }}</small>
             </div>
             
             <div class="form-group">
-              <label for="ollama_api_key">Ollama API Key (Optional)</label>
+              <label for="ollama_api_key">{{ $t('admin.settings.ollamaApiKey') }}</label>
               <input
                 id="ollama_api_key"
                 v-model="llmForm.ollama_api_key"
                 type="password"
-                placeholder="Leave empty for local Ollama"
+                :placeholder="$t('admin.settings.ollamaApiKeyPlaceholder')"
               />
-              <small>Current value is hidden. Enter new value to update.</small>
+              <small>{{ $t('admin.settings.currentValueHidden') }}</small>
             </div>
             
             <div class="form-group">
-              <label for="ollama_llm_model">LLM Model *</label>
+              <label for="ollama_llm_model">{{ $t('admin.settings.ollamaLlmModel') }} *</label>
               <select
                 id="ollama_llm_model"
                 v-model="llmForm.ollama_llm_model"
               >
-                <option value="">-- Select LLM Model --</option>
+                <option value="">{{ $t('admin.settings.selectLlmModel') }}</option>
                 <option
                   v-for="model in availableLLMModels"
                   :key="model.name"
                   :value="model.name"
                 >
-                  {{ model.name }}{{ model.is_current_llm ? ' (Current)' : '' }}
+                  {{ model.name }}{{ model.is_current_llm ? ` (${$t('admin.settings.current')})` : '' }}
                 </option>
               </select>
-              <small>Select an available model for chat. Only downloaded models are shown.</small>
+              <small>{{ $t('admin.settings.selectLlmModelHint') }}</small>
             </div>
             
             <div class="form-group">
-              <label for="ollama_embedding_model">Embedding Model *</label>
+              <label for="ollama_embedding_model">{{ $t('admin.settings.ollamaEmbeddingModel') }} *</label>
               <select
                 id="ollama_embedding_model"
                 v-model="llmForm.ollama_embedding_model"
               >
-                <option value="">-- Select Embedding Model --</option>
+                <option value="">{{ $t('admin.settings.selectEmbeddingModel') }}</option>
                 <option
                   v-for="model in availableEmbeddingModels"
                   :key="model.name"
                   :value="model.name"
                 >
-                  {{ model.name }}{{ model.is_current_embedding ? ' (Current)' : '' }}
+                  {{ model.name }}{{ model.is_current_embedding ? ` (${$t('admin.settings.current')})` : '' }}
                 </option>
               </select>
-              <small>Select an available model for embeddings. Only downloaded models are shown.</small>
+              <small>{{ $t('admin.settings.selectEmbeddingModelHint') }}</small>
             </div>
             
             <div class="form-actions">
               <button @click="saveLLMSettings" class="btn-primary" :disabled="savingLLM">
                 <Save :size="16" />
-                {{ savingLLM ? 'Saving...' : 'Save LLM Settings' }}
+                {{ savingLLM ? $t('admin.settings.saving') : $t('admin.settings.saveLlmSettings') }}
               </button>
               <button @click="loadLLMSettings" class="btn-secondary" :disabled="savingLLM">
                 <RefreshCw :size="16" />
-                Reset
+                {{ $t('admin.settings.reset') }}
               </button>
             </div>
           </div>
           
-          <div v-else class="loading">Loading LLM settings...</div>
+          <div v-else class="loading">{{ $t('admin.settings.loadingLlmSettings') }}</div>
         </div>
 
         <!-- Ollama Models Management Section -->
         <div class="ollama-models-section">
           <div class="section-header">
-            <h2>Ollama Models</h2>
+            <h2>{{ $t('admin.settings.ollamaModels') }}</h2>
             <button @click="loadOllamaModels" class="btn-secondary" :disabled="loadingModels">
               <RefreshCw :size="20" :class="{ 'spinning': loadingModels }" />
-              Refresh
+              {{ $t('common.refresh') }}
             </button>
           </div>
 
           <div v-if="!ollamaConnected" class="warning-box">
             <AlertTriangle :size="20" />
-            <span>Cannot connect to Ollama. Please check your Ollama Base URL configuration.</span>
+            <span>{{ $t('admin.settings.cannotConnectOllama') }}</span>
           </div>
 
-          <div v-else-if="loadingModels" class="loading">Loading models...</div>
+          <div v-else-if="loadingModels" class="loading">{{ $t('admin.settings.loadingModels') }}</div>
           
           <div v-else>
             <!-- Search Box -->
@@ -365,7 +364,7 @@
                 <input
                   v-model="modelSearchQuery"
                   type="text"
-                  placeholder="Search models by name, description, or tags..."
+                  :placeholder="$t('admin.settings.searchModelsPlaceholder')"
                   class="models-search-input"
                 />
                 <button
@@ -378,14 +377,14 @@
                 </button>
               </div>
               <div v-if="modelSearchQuery" class="search-results-info">
-                Found {{ llmModels.length + embeddingModels.length }} model(s)
+                {{ $t('admin.settings.foundModels', { count: llmModels.length + embeddingModels.length }) }}
               </div>
             </div>
             
             <!-- LLM Models Section -->
             <div class="models-subsection">
               <div class="subsection-header" @click="toggleSection('llm')">
-                <h3>LLM Models</h3>
+                <h3>{{ $t('admin.settings.llmModelsSection') }}</h3>
                 <button class="expand-toggle" type="button">
                   <ChevronDown v-if="expandedSections.llm" :size="20" />
                   <ChevronUp v-else :size="20" />
@@ -402,7 +401,7 @@
                     <div class="model-info">
                       <h4>
                         {{ model.name }}
-                        <span v-if="model.is_current_llm" class="current-badge">Current</span>
+                        <span v-if="model.is_current_llm" class="current-badge">{{ $t('admin.settings.current') }}</span>
                       </h4>
                       <div class="model-meta">
                         <span v-if="model.size > 0">{{ formatSize(model.size) }}</span>
@@ -417,9 +416,9 @@
                       <StatusBadge 
                         :status="model.downloaded ? 'available' : (model.available ? 'pending' : 'not_available')" 
                       />
-                      <span v-if="model.downloaded" class="status-text">Downloaded</span>
-                      <span v-else-if="model.available" class="status-text">Available</span>
-                      <span v-else class="status-text">Unknown</span>
+                      <span v-if="model.downloaded" class="status-text">{{ $t('admin.settings.downloaded') }}</span>
+                      <span v-else-if="model.available" class="status-text">{{ $t('admin.settings.available') }}</span>
+                      <span v-else class="status-text">{{ $t('common.unknown') }}</span>
                       <div class="action-buttons">
                         <button
                           v-if="!model.downloaded && model.available"
@@ -428,7 +427,7 @@
                           :disabled="pullingModel === model.name"
                         >
                           <Download :size="14" />
-                          {{ pullingModel === model.name ? 'Downloading...' : 'Download' }}
+                          {{ pullingModel === model.name ? $t('admin.settings.downloading') : $t('admin.settings.download') }}
                         </button>
                         <div v-if="model.downloaded" class="test-dropdown">
                           <button
@@ -437,14 +436,14 @@
                             :disabled="testingModel === model.name"
                           >
                             <TestTube :size="14" />
-                            Test
+                            {{ $t('admin.settings.test') }}
                           </button>
                           <div v-if="testDropdownOpen === model.name" class="dropdown-menu" @click.stop>
                             <button @click="testModel(model.name, 'llm', true)" class="dropdown-item">
-                              Quick Test
+                              {{ $t('admin.settings.quickTest') }}
                             </button>
                             <button @click="showCustomTest(model.name, 'llm')" class="dropdown-item">
-                              Custom Test
+                              {{ $t('admin.settings.customTest') }}
                             </button>
                           </div>
                         </div>
@@ -457,42 +456,42 @@
                     <input
                       v-model="customTestInput"
                       type="text"
-                      placeholder="Enter test prompt..."
+                      :placeholder="$t('admin.settings.enterTestPrompt')"
                       @keyup.enter="testModel(model.name, 'llm', false)"
                     />
                     <button @click="testModel(model.name, 'llm', false)" class="btn-small btn-primary">
-                      Run Test
+                      {{ $t('admin.settings.runTest') }}
                     </button>
                     <button @click="cancelCustomTest" class="btn-small btn-secondary">
-                      Cancel
+                      {{ $t('common.cancel') }}
                     </button>
                   </div>
 
                   <!-- Test Result -->
                   <div v-if="testResults[model.name]" class="test-result">
                     <div class="test-result-header" @click="toggleTestResult(model.name)">
-                      <span>Test Result</span>
+                      <span>{{ $t('admin.settings.testResult') }}</span>
                       <span>{{ testResults[model.name].success ? '✓' : '✗' }}</span>
                     </div>
                     <div v-if="expandedTestResults[model.name]" class="test-result-content">
                       <div v-if="testResults[model.name].success">
                         <div v-if="testResults[model.name].result.response" class="test-response">
-                          <strong>Response:</strong>
+                          <strong>{{ $t('admin.settings.response') }}:</strong>
                           <pre>{{ testResults[model.name].result.response }}</pre>
                         </div>
                         <div v-if="testResults[model.name].result.token_usage" class="test-meta">
-                          <span>Duration: {{ testResults[model.name].duration_ms }}ms</span>
-                          <span>Tokens: {{ testResults[model.name].result.token_usage.total_tokens }}</span>
+                          <span>{{ $t('admin.settings.duration') }}: {{ testResults[model.name].duration_ms }}ms</span>
+                          <span>{{ $t('admin.settings.tokens') }}: {{ testResults[model.name].result.token_usage.total_tokens }}</span>
                         </div>
                       </div>
                       <div v-else class="test-error">
-                        {{ testResults[model.name].error || 'Test failed' }}
+                        {{ testResults[model.name].error || $t('admin.settings.testFailed') }}
                       </div>
                     </div>
                   </div>
                 </div>
                 <div v-if="llmModels.length === 0" class="empty-state">
-                  No LLM models found
+                  {{ $t('admin.settings.noLlmModels') }}
                 </div>
               </div>
             </div>
@@ -500,7 +499,7 @@
             <!-- Embedding Models Section -->
             <div class="models-subsection">
               <div class="subsection-header" @click="toggleSection('embedding')">
-                <h3>Embedding Models</h3>
+                <h3>{{ $t('admin.settings.embeddingModelsSection') }}</h3>
                 <button class="expand-toggle" type="button">
                   <ChevronDown v-if="expandedSections.embedding" :size="20" />
                   <ChevronUp v-else :size="20" />
@@ -517,7 +516,7 @@
                     <div class="model-info">
                       <h4>
                         {{ model.name }}
-                        <span v-if="model.is_current_embedding" class="current-badge">Current</span>
+                        <span v-if="model.is_current_embedding" class="current-badge">{{ $t('admin.settings.current') }}</span>
                       </h4>
                       <div class="model-meta">
                         <span v-if="model.size > 0">{{ formatSize(model.size) }}</span>
@@ -532,9 +531,9 @@
                       <StatusBadge 
                         :status="model.downloaded ? 'available' : (model.available ? 'pending' : 'not_available')" 
                       />
-                      <span v-if="model.downloaded" class="status-text">Downloaded</span>
-                      <span v-else-if="model.available" class="status-text">Available</span>
-                      <span v-else class="status-text">Unknown</span>
+                      <span v-if="model.downloaded" class="status-text">{{ $t('admin.settings.downloaded') }}</span>
+                      <span v-else-if="model.available" class="status-text">{{ $t('admin.settings.available') }}</span>
+                      <span v-else class="status-text">{{ $t('common.unknown') }}</span>
                       <div class="action-buttons">
                         <button
                           v-if="!model.downloaded && model.available"
@@ -543,7 +542,7 @@
                           :disabled="pullingModel === model.name"
                         >
                           <Download :size="14" />
-                          {{ pullingModel === model.name ? 'Downloading...' : 'Download' }}
+                          {{ pullingModel === model.name ? $t('admin.settings.downloading') : $t('admin.settings.download') }}
                         </button>
                         <div v-if="model.downloaded" class="test-dropdown">
                           <button
@@ -552,14 +551,14 @@
                             :disabled="testingModel === model.name"
                           >
                             <TestTube :size="14" />
-                            Test
+                            {{ $t('admin.settings.test') }}
                           </button>
                           <div v-if="testDropdownOpen === model.name" class="dropdown-menu" @click.stop>
                             <button @click="testModel(model.name, 'embedding', true)" class="dropdown-item">
-                              Quick Test
+                              {{ $t('admin.settings.quickTest') }}
                             </button>
                             <button @click="showCustomTest(model.name, 'embedding')" class="dropdown-item">
-                              Custom Test
+                              {{ $t('admin.settings.customTest') }}
                             </button>
                           </div>
                         </div>
@@ -572,44 +571,44 @@
                     <input
                       v-model="customTestInput"
                       type="text"
-                      placeholder="Enter test text..."
+                      :placeholder="$t('admin.settings.enterTestText')"
                       @keyup.enter="testModel(model.name, 'embedding', false)"
                     />
                     <button @click="testModel(model.name, 'embedding', false)" class="btn-small btn-primary">
-                      Run Test
+                      {{ $t('admin.settings.runTest') }}
                     </button>
                     <button @click="cancelCustomTest" class="btn-small btn-secondary">
-                      Cancel
+                      {{ $t('common.cancel') }}
                     </button>
                   </div>
 
                   <!-- Test Result -->
                   <div v-if="testResults[model.name]" class="test-result">
                     <div class="test-result-header" @click="toggleTestResult(model.name)">
-                      <span>Test Result</span>
+                      <span>{{ $t('admin.settings.testResult') }}</span>
                       <span>{{ testResults[model.name].success ? '✓' : '✗' }}</span>
                     </div>
                     <div v-if="expandedTestResults[model.name]" class="test-result-content">
                       <div v-if="testResults[model.name].success">
                         <div v-if="testResults[model.name].result.embedding_dimension" class="test-response">
-                          <strong>Dimension:</strong> {{ testResults[model.name].result.embedding_dimension }}
+                          <strong>{{ $t('admin.settings.dimension') }}:</strong> {{ testResults[model.name].result.embedding_dimension }}
                         </div>
                         <div v-if="testResults[model.name].result.embedding_sample" class="test-response">
-                          <strong>Sample (first 10 values):</strong>
+                          <strong>{{ $t('admin.settings.sample') }}:</strong>
                           <pre>{{ JSON.stringify(testResults[model.name].result.embedding_sample, null, 2) }}</pre>
                         </div>
                         <div class="test-meta">
-                          <span>Duration: {{ testResults[model.name].duration_ms }}ms</span>
+                          <span>{{ $t('admin.settings.duration') }}: {{ testResults[model.name].duration_ms }}ms</span>
                         </div>
                       </div>
                       <div v-else class="test-error">
-                        {{ testResults[model.name].error || 'Test failed' }}
+                        {{ testResults[model.name].error || $t('admin.settings.testFailed') }}
                       </div>
                     </div>
                   </div>
                 </div>
                 <div v-if="embeddingModels.length === 0" class="empty-state">
-                  No Embedding models found
+                  {{ $t('admin.settings.noEmbeddingModels') }}
                 </div>
               </div>
             </div>
@@ -620,77 +619,77 @@
       <!-- Auto Tag Settings Tab -->
       <div v-if="activeTab === 'tags'" class="tab-content">
         <div class="section-header">
-          <h2>Auto Tag Settings</h2>
+          <h2>{{ $t('admin.settings.autoTagSettingsTitle') }}</h2>
         </div>
         <div class="tag-settings-section">
           <div class="form-section">
             <div class="form-group">
-              <label for="tag_max_tags">Max Tags *</label>
+              <label for="tag_max_tags">{{ $t('admin.settings.maxTags') }} *</label>
               <input
                 id="tag_max_tags"
                 v-model.number="tagForm.max_tags"
                 type="number"
                 min="1"
                 max="20"
-                placeholder="3"
+                :placeholder="$t('admin.settings.maxTagsPlaceholder')"
               />
-              <small>Maximum number of tags to generate per document. Default: 3. Range: 1-20.</small>
+              <small>{{ $t('admin.settings.maxTagsHint') }}</small>
             </div>
             <div class="form-group">
-              <label for="tag_max_length">Max Tag Length (characters) *</label>
+              <label for="tag_max_length">{{ $t('admin.settings.maxTagLength') }} *</label>
               <input
                 id="tag_max_length"
                 v-model.number="tagForm.max_length"
                 type="number"
                 min="5"
                 max="200"
-                placeholder="50"
+                :placeholder="$t('admin.settings.maxTagLengthPlaceholder')"
               />
-              <small>Maximum length of each tag in characters. Default: 50. Range: 5-200.</small>
+              <small>{{ $t('admin.settings.maxTagLengthHint') }}</small>
             </div>
             <div class="form-group">
-              <label for="tag_prefix">Tag Prefix *</label>
+              <label for="tag_prefix">{{ $t('admin.settings.tagPrefix') }} *</label>
               <input
                 id="tag_prefix"
                 v-model="tagForm.prefix"
                 type="text"
-                placeholder="auto_tag:"
+                :placeholder="$t('admin.settings.tagPrefixPlaceholder')"
                 maxlength="50"
               />
-              <small>Prefix to add to auto-generated tags. Default: "auto_tag:". Maximum 50 characters.</small>
+              <small>{{ $t('admin.settings.tagPrefixHint') }}</small>
             </div>
             <div class="form-group">
-              <label for="tag_ocr_text_limit">OCR Text Limit (characters) *</label>
+              <label for="tag_ocr_text_limit">{{ $t('admin.settings.ocrTextLimit') }} *</label>
               <input
                 id="tag_ocr_text_limit"
                 v-model.number="tagForm.ocr_text_limit"
                 type="number"
                 min="100"
                 max="50000"
-                placeholder="5000"
+                :placeholder="$t('admin.settings.ocrTextLimitPlaceholder')"
               />
-              <small>Maximum OCR text length to use for tag generation. Default: 5000. Range: 100-50000.</small>
+              <small>{{ $t('admin.settings.ocrTextLimitHint') }}</small>
             </div>
             <div class="form-group">
-              <label for="tag_prompt">Tag Generation Prompt *</label>
+              <label for="tag_prompt">{{ $t('admin.settings.tagPrompt') }} *</label>
               <textarea
                 id="tag_prompt"
                 v-model="tagForm.prompt"
                 rows="8"
-                placeholder="Based on the following document content, generate {max_tags} relevant tags..."
+                :placeholder="$t('admin.settings.tagPromptPlaceholder')"
                 class="prompt-textarea"
                 maxlength="5000"
               ></textarea>
-              <small>Prompt template for tag generation. Use {content}, {max_tags}, and {max_length} as placeholders. Maximum 5000 characters.</small>
+              <small>{{ $t('admin.settings.tagPromptHint') }}</small>
             </div>
             <div class="form-actions">
               <button @click="saveTagSettings" class="btn-primary" :disabled="savingTags">
                 <Save :size="16" />
-                {{ savingTags ? 'Saving...' : 'Save Tag Settings' }}
+                {{ savingTags ? $t('admin.settings.saving') : $t('admin.settings.saveTagSettings') }}
               </button>
               <button @click="loadTagSettings" class="btn-secondary" :disabled="savingTags">
                 <RefreshCw :size="16" />
-                Reset
+                {{ $t('admin.settings.reset') }}
               </button>
             </div>
           </div>
@@ -701,51 +700,51 @@
       <div v-if="activeTab === 'chatbot'" class="tab-content">
         <!-- Chatbot Prompts Section -->
         <div class="section-header">
-          <h2>Chatbot Prompts</h2>
+          <h2>{{ $t('admin.settings.chatbotPrompts') }}</h2>
         </div>
         <div class="prompts-section">
           <div class="form-section">
             <div class="form-group">
-              <label for="system_prompt">System Prompt</label>
+              <label for="system_prompt">{{ $t('admin.settings.systemPrompt') }}</label>
               <textarea
                 id="system_prompt"
                 v-model="promptsForm.system_prompt"
                 rows="4"
-                placeholder="System prompt for chatbot assistant..."
+                :placeholder="$t('admin.settings.systemPromptPlaceholder')"
                 class="prompt-textarea"
               ></textarea>
-              <small>This prompt defines the chatbot's role and behavior. Use {context} and {question} placeholders in context prompts.</small>
+              <small>{{ $t('admin.settings.systemPromptHint') }}</small>
             </div>
             <div class="form-group">
-              <label for="context_prompt">Context Prompt (with documents)</label>
+              <label for="context_prompt">{{ $t('admin.settings.contextPrompt') }}</label>
               <textarea
                 id="context_prompt"
                 v-model="promptsForm.context_prompt"
                 rows="6"
-                placeholder="Prompt template when documents are provided..."
+                :placeholder="$t('admin.settings.contextPromptPlaceholder')"
                 class="prompt-textarea"
               ></textarea>
-              <small>Template used when answering questions with document context. Use {context} for document content and {question} for user question.</small>
+              <small>{{ $t('admin.settings.contextPromptHint') }}</small>
             </div>
             <div class="form-group">
-              <label for="no_context_prompt">No Context Prompt (without documents)</label>
+              <label for="no_context_prompt">{{ $t('admin.settings.noContextPrompt') }}</label>
               <textarea
                 id="no_context_prompt"
                 v-model="promptsForm.no_context_prompt"
                 rows="4"
-                placeholder="Prompt template when no documents are provided..."
+                :placeholder="$t('admin.settings.noContextPromptPlaceholder')"
                 class="prompt-textarea"
               ></textarea>
-              <small>Template used when answering questions without document context. Use {question} placeholder.</small>
+              <small>{{ $t('admin.settings.noContextPromptHint') }}</small>
             </div>
             <div class="form-actions">
               <button @click="savePrompts" class="btn-primary" :disabled="savingPrompts">
                 <Save :size="16" />
-                {{ savingPrompts ? 'Saving...' : 'Save Prompts' }}
+                {{ savingPrompts ? $t('admin.settings.saving') : $t('admin.settings.savePrompts') }}
               </button>
               <button @click="resetPromptsToDefaults" class="btn-secondary" :disabled="savingPrompts">
                 <RefreshCw :size="16" />
-                Reset to Defaults
+                {{ $t('admin.settings.resetToDefaults') }}
               </button>
             </div>
           </div>
@@ -753,61 +752,61 @@
 
         <!-- RAG Settings Section -->
         <div class="section-header" style="margin-top: 3rem;">
-          <h2>RAG Settings</h2>
+          <h2>{{ $t('admin.settings.ragSettings') }}</h2>
         </div>
         <div class="rag-settings-section">
           <div class="form-section">
             <div class="form-group">
-              <label for="rag_chunk_size">Chunk Size (tokens) *</label>
+              <label for="rag_chunk_size">{{ $t('admin.settings.chunkSize') }} *</label>
               <input
                 id="rag_chunk_size"
                 v-model.number="ragForm.chunk_size"
                 type="number"
                 min="100"
                 max="4096"
-                placeholder="1024"
+                :placeholder="$t('admin.settings.chunkSizePlaceholder')"
               />
-              <small>Number of tokens per chunk when splitting documents for embedding. Default: 1024. Range: 100-4096.</small>
+              <small>{{ $t('admin.settings.chunkSizeHint') }}</small>
             </div>
             <div class="form-group">
-              <label for="rag_chunk_overlap">Chunk Overlap (tokens) *</label>
+              <label for="rag_chunk_overlap">{{ $t('admin.settings.chunkOverlap') }} *</label>
               <input
                 id="rag_chunk_overlap"
                 v-model.number="ragForm.chunk_overlap"
                 type="number"
                 min="0"
                 :max="ragForm.chunk_size / 2"
-                placeholder="100"
+                :placeholder="$t('admin.settings.chunkOverlapPlaceholder')"
               />
-              <small>Number of tokens to overlap between chunks to preserve context. Must be less than chunk size. Default: 100.</small>
+              <small>{{ $t('admin.settings.chunkOverlapHint') }}</small>
             </div>
             <div class="form-group">
-              <label for="rag_top_k">Top K Query *</label>
+              <label for="rag_top_k">{{ $t('admin.settings.topK') }} *</label>
               <input
                 id="rag_top_k"
                 v-model.number="ragForm.top_k"
                 type="number"
                 min="1"
                 max="100"
-                placeholder="20"
+                :placeholder="$t('admin.settings.topKPlaceholder')"
               />
-              <small>Number of top chunks to retrieve for RAG queries. Default: 20. Range: 1-100.</small>
+              <small>{{ $t('admin.settings.topKHint') }}</small>
             </div>
             <div class="form-actions">
               <button @click="saveRAGSettings" class="btn-primary" :disabled="savingRAG">
                 <Save :size="16" />
-                {{ savingRAG ? 'Saving...' : 'Save RAG Settings' }}
+                {{ savingRAG ? $t('admin.settings.saving') : $t('admin.settings.saveRagSettings') }}
               </button>
               <button @click="loadRAGSettings" class="btn-secondary" :disabled="savingRAG">
                 <RefreshCw :size="16" />
-                Reset
+                {{ $t('admin.settings.reset') }}
               </button>
             </div>
           </div>
         </div>
 
         <div class="section-header" style="margin-top: 3rem;">
-          <h2>Chatbot Policies</h2>
+          <h2>{{ $t('admin.settings.chatbotPolicies') }}</h2>
         </div>
         <div class="chatbot-policies">
           <div
@@ -819,26 +818,26 @@
               <h3>{{ getGroupName(policy.group_id) }}</h3>
               <button @click="editChatbotPolicy(policy)" class="btn-small">
                 <Edit :size="16" />
-                Edit
+                {{ $t('common.edit') }}
               </button>
             </div>
             <div class="policy-details">
               <div class="detail-item">
-                <span class="label">Allowed Sources:</span>
-                <span>{{ policy.allowed_sources?.join(', ') || 'All' }}</span>
+                <span class="label">{{ $t('admin.settings.allowedSources') }}:</span>
+                <span>{{ policy.allowed_sources?.join(', ') || $t('admin.settings.all') }}</span>
               </div>
               <div class="detail-item">
-                <span class="label">Allow Preview:</span>
-                <span>{{ policy.allow_preview ? 'Yes' : 'No' }}</span>
+                <span class="label">{{ $t('admin.settings.allowPreview') }}:</span>
+                <span>{{ policy.allow_preview ? $t('common.yes') : $t('common.no') }}</span>
               </div>
               <div class="detail-item">
-                <span class="label">Max Tokens:</span>
-                <span>{{ policy.max_tokens || 'Unlimited' }}</span>
+                <span class="label">{{ $t('admin.settings.maxTokens') }}:</span>
+                <span>{{ policy.max_tokens || $t('admin.settings.unlimited') }}</span>
               </div>
             </div>
           </div>
           <div v-if="chatbotPolicies.length === 0" class="empty-state">
-            No chatbot policies configured
+            {{ $t('admin.settings.noChatbotPolicies') }}
           </div>
         </div>
       </div>
@@ -847,28 +846,28 @@
     <!-- Retention Policy Modal -->
     <Modal
       v-model:show="showRetentionModal"
-      :title="editingRetentionPolicy ? 'Edit Retention Policy' : 'Create Retention Policy'"
+      :title="editingRetentionPolicy ? $t('admin.settings.editPolicy') : $t('admin.settings.createPolicy')"
     >
       <div class="form-group">
-        <label>Name *</label>
+        <label>{{ $t('admin.settings.policyName') }} *</label>
         <input v-model="retentionForm.name" required />
       </div>
       <div class="form-group">
-        <label>Duration (days) *</label>
+        <label>{{ $t('admin.settings.durationDays') }} *</label>
         <input v-model.number="retentionForm.duration_days" type="number" required />
       </div>
       <div class="form-group">
-        <label>Disposition *</label>
+        <label>{{ $t('admin.settings.disposition') }} *</label>
         <select v-model="retentionForm.disposition" required>
-          <option value="delete">Delete</option>
-          <option value="archive">Archive</option>
-          <option value="retain">Retain</option>
+          <option value="delete">{{ $t('admin.settings.delete') }}</option>
+          <option value="archive">{{ $t('admin.settings.archive') }}</option>
+          <option value="retain">{{ $t('admin.settings.archive') }}</option>
         </select>
       </div>
       <div class="form-group">
         <label>
           <input type="checkbox" v-model="retentionForm.legal_hold" />
-          Legal Hold
+          {{ $t('admin.settings.legalHold') }}
         </label>
       </div>
       <template #footer>
@@ -877,9 +876,9 @@
           @click="showRetentionModal = false"
           class="btn-secondary"
         >
-          Cancel
+          {{ $t('common.cancel') }}
         </button>
-        <button type="button" @click="saveRetentionPolicy" class="btn-primary">Save</button>
+        <button type="button" @click="saveRetentionPolicy" class="btn-primary">{{ $t('common.save') }}</button>
       </template>
     </Modal>
 
@@ -895,7 +894,7 @@
         </div>
         
         <div v-if="currentFixGuide.steps && currentFixGuide.steps.length > 0" class="fix-guide-steps">
-          <h4>Steps to Fix:</h4>
+          <h4>{{ $t('admin.settings.stepsToFix') }}</h4>
           <ol class="steps-list">
             <li v-for="step in currentFixGuide.steps" :key="step.step" class="step-item">
               <div class="step-header">
@@ -903,16 +902,16 @@
               </div>
               <div class="step-description">{{ step.description }}</div>
               <div v-if="step.action" class="step-action">
-                <strong>Action:</strong> {{ step.action }}
+                <strong>{{ $t('common.actions') }}:</strong> {{ step.action }}
               </div>
               <div v-if="step.command" class="step-command">
                 <code>{{ step.command }}</code>
                 <button 
                   @click="copyToClipboard(step.command)" 
                   class="btn-copy"
-                  title="Copy to clipboard"
+                  :title="$t('common.copy')"
                 >
-                  Copy
+                  {{ $t('common.copy') }}
                 </button>
               </div>
             </li>
@@ -920,21 +919,21 @@
         </div>
 
         <div v-if="currentFixGuide.download_link" class="fix-guide-download">
-          <h4>Download Link:</h4>
+          <h4>{{ $t('admin.settings.downloadLink') }}:</h4>
           <a :href="currentFixGuide.download_link" target="_blank" rel="noopener noreferrer">
             {{ currentFixGuide.download_link }}
           </a>
         </div>
 
         <div v-if="currentFixGuide.verify_command" class="fix-guide-verify">
-          <h4>Verify Installation:</h4>
+          <h4>{{ $t('admin.settings.verifyInstallation') }}:</h4>
           <code>{{ currentFixGuide.verify_command }}</code>
           <button 
             @click="copyToClipboard(currentFixGuide.verify_command)" 
             class="btn-copy"
-            title="Copy to clipboard"
+            :title="$t('common.copy')"
           >
-            Copy
+            {{ $t('common.copy') }}
           </button>
         </div>
       </div>
@@ -947,10 +946,10 @@
             class="btn-primary"
             :disabled="fixingProvider === currentProvider.name"
           >
-            {{ fixingProvider === currentProvider.name ? 'Fixing...' : 'Auto Fix' }}
+            {{ fixingProvider === currentProvider.name ? $t('admin.settings.fixing') : $t('admin.settings.autoFix') }}
           </button>
           <button @click="showFixGuideModal = false" class="btn-secondary">
-            Close
+            {{ $t('common.close') }}
           </button>
         </div>
       </template>
@@ -960,11 +959,14 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '../../store/settings'
 import { useGroupsStore } from '../../store/groups'
 import { settingsAPI } from '../../services/api'
 import { Modal, StatusBadge } from '../../components'
 import { Plus, Edit, Trash2, Activity, Save, RefreshCw, AlertTriangle, Download, TestTube, ChevronDown, ChevronUp, Search, X } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const settingsStore = useSettingsStore()
 const groupsStore = useGroupsStore()
@@ -1134,23 +1136,26 @@ const showFixGuideModal = ref(false)
 const currentFixGuide = ref(null)
 const currentProvider = ref(null)
 const fixingProvider = ref(null)
-const fixGuideModalTitle = ref('Fix Guide')
+const fixGuideModalTitle = ref('')
 
-const tabs = [
-  { id: 'retention', label: 'Retention Policies' },
-  { id: 'providers', label: 'OCR/AI Providers' },
-  { id: 'llm', label: 'LLM Settings' },
-  { id: 'chatbot', label: 'Chatbot Policies' },
-  { id: 'tags', label: 'Auto Tag Settings' }
-]
+const tabs = computed(() => {
+  const { t } = useI18n()
+  return [
+    { id: 'retention', label: t('admin.settings.retentionPolicies') },
+    { id: 'providers', label: t('admin.settings.ocrProviders') },
+    { id: 'llm', label: t('admin.settings.llmSettings') },
+    { id: 'chatbot', label: t('admin.settings.chatbotPolicies') },
+    { id: 'tags', label: t('admin.settings.autoTagSettings') }
+  ]
+})
 
-const availableLanguages = [
-  { code: 'en', name: 'English' },
-  { code: 'vi', name: 'Vietnamese' },
-  { code: 'ja', name: 'Japanese' },
-  { code: 'ko', name: 'Korean' },
-  { code: 'zh', name: 'Chinese' }
-]
+const availableLanguages = computed(() => [
+  { code: 'en', name: t('admin.settings.languageEnglish') },
+  { code: 'vi', name: t('admin.settings.languageVietnamese') },
+  { code: 'ja', name: t('admin.settings.languageJapanese') },
+  { code: 'ko', name: t('admin.settings.languageKorean') },
+  { code: 'zh', name: t('admin.settings.languageChinese') }
+])
 
 const retentionForm = ref({
   name: '',
@@ -1271,30 +1276,30 @@ const saveRetentionPolicy = async () => {
     }
     if (window.$toast) {
       window.$toast.show(
-        editingRetentionPolicy.value ? 'Policy updated' : 'Policy created',
+        editingRetentionPolicy.value ? t('admin.settings.policyUpdated') : t('admin.settings.policyCreated'),
         'success'
       )
     }
   } catch (e) {
     console.error('Failed to save retention policy', e)
     if (window.$toast) {
-      window.$toast.show('Failed to save retention policy', 'error')
+      window.$toast.show(t('admin.settings.failedToSaveRetentionPolicy'), 'error')
     }
   }
 }
 
 const deleteRetentionPolicy = async (policy) => {
-  if (confirm(`Delete retention policy "${policy.name}"?`)) {
+  if (confirm(t('admin.settings.deletePolicyConfirm', { name: policy.name }))) {
     try {
       await settingsStore.deleteRetentionPolicy(policy.id)
       await loadRetentionPolicies()
       if (window.$toast) {
-        window.$toast.show('Policy deleted', 'success')
+        window.$toast.show(t('admin.settings.policyDeleted'), 'success')
       }
     } catch (e) {
       console.error('Failed to delete retention policy', e)
       if (window.$toast) {
-        window.$toast.show('Failed to delete retention policy', 'error')
+        window.$toast.show(t('admin.settings.failedToDeleteRetentionPolicy'), 'error')
       }
     }
   }
@@ -1305,12 +1310,12 @@ const checkProviderHealth = async () => {
     // This would trigger health checks on backend
     await loadProviders()
     if (window.$toast) {
-      window.$toast.show('Health check completed', 'success')
+      window.$toast.show(t('admin.settings.healthCheckCompleted'), 'success')
     }
   } catch (e) {
     console.error('Failed to check provider health', e)
     if (window.$toast) {
-      window.$toast.show('Failed to check provider health', 'error')
+      window.$toast.show(t('admin.settings.failedToCheckProviderHealth'), 'error')
     }
   }
 }
@@ -1319,12 +1324,12 @@ const saveProviders = async () => {
   try {
     await settingsStore.updateProviders(providers.value)
     if (window.$toast) {
-      window.$toast.show('Providers saved', 'success')
+      window.$toast.show(t('admin.settings.providersSaved'), 'success')
     }
   } catch (e) {
     console.error('Failed to save providers', e)
     if (window.$toast) {
-      window.$toast.show('Failed to save providers', 'error')
+      window.$toast.show(t('admin.settings.failedToSaveProviders'), 'error')
     }
   }
 }
@@ -1342,13 +1347,13 @@ const loadPrompts = async () => {
   } catch (e) {
     console.error('Failed to load prompts', e)
     if (window.$toast) {
-      window.$toast.show('Failed to load prompts', 'error')
+      window.$toast.show(t('admin.settings.failedToLoadPrompts'), 'error')
     }
   }
 }
 
 const resetPromptsToDefaults = async () => {
-  if (!confirm('Reset prompts to defaults? This will reload the default prompts from the system.')) {
+  if (!confirm(t('admin.settings.resetPromptsConfirm'))) {
     return
   }
   
@@ -1364,12 +1369,12 @@ const resetPromptsToDefaults = async () => {
     await loadPrompts()
     
     if (window.$toast) {
-      window.$toast.show('Prompts reset to defaults', 'success')
+      window.$toast.show(t('admin.settings.promptsResetToDefaults'), 'success')
     }
   } catch (e) {
     console.error('Failed to reset prompts', e)
     if (window.$toast) {
-      window.$toast.show('Failed to reset prompts', 'error')
+      window.$toast.show(t('admin.settings.failedToResetPrompts'), 'error')
     }
   }
 }
@@ -1380,13 +1385,13 @@ const savePrompts = async () => {
     const res = await settingsAPI.chatbot.updatePrompts(promptsForm.value)
     if (res.is_success) {
       if (window.$toast) {
-        window.$toast.show('Prompts saved successfully', 'success')
+        window.$toast.show(t('admin.settings.promptsSaved'), 'success')
       }
     }
   } catch (e) {
     console.error('Failed to save prompts', e)
     if (window.$toast) {
-      window.$toast.show('Failed to save prompts', 'error')
+      window.$toast.show(t('admin.settings.failedToSavePrompts'), 'error')
     }
   } finally {
     savingPrompts.value = false
@@ -1406,7 +1411,7 @@ const loadRAGSettings = async () => {
   } catch (e) {
     console.error('Failed to load RAG settings', e)
     if (window.$toast) {
-      window.$toast.show('Failed to load RAG settings', 'error')
+      window.$toast.show(t('admin.settings.failedToLoadRagSettings'), 'error')
     }
   }
 }
@@ -1415,28 +1420,28 @@ const saveRAGSettings = async () => {
   // Validation
   if (ragForm.value.chunk_size < 100 || ragForm.value.chunk_size > 4096) {
     if (window.$toast) {
-      window.$toast.show('Chunk size must be between 100 and 4096', 'error')
+      window.$toast.show(t('admin.settings.chunkSizeMustBeBetween'), 'error')
     }
     return
   }
   
   if (ragForm.value.chunk_overlap < 0) {
     if (window.$toast) {
-      window.$toast.show('Chunk overlap must be non-negative', 'error')
+      window.$toast.show(t('admin.settings.chunkOverlapMustBeNonNegative'), 'error')
     }
     return
   }
   
   if (ragForm.value.chunk_overlap >= ragForm.value.chunk_size) {
     if (window.$toast) {
-      window.$toast.show('Chunk overlap must be less than chunk size', 'error')
+      window.$toast.show(t('admin.settings.chunkOverlapMustBeLessThanChunkSize'), 'error')
     }
     return
   }
   
   if (ragForm.value.top_k < 1 || ragForm.value.top_k > 100) {
     if (window.$toast) {
-      window.$toast.show('Top K must be between 1 and 100', 'error')
+      window.$toast.show(t('admin.settings.topKMustBeBetween'), 'error')
     }
     return
   }
@@ -1446,13 +1451,13 @@ const saveRAGSettings = async () => {
     const res = await settingsAPI.chatbot.rag.update(ragForm.value)
     if (res.is_success) {
       if (window.$toast) {
-        window.$toast.show('RAG settings saved successfully', 'success')
+        window.$toast.show(t('admin.settings.ragSettingsSaved'), 'success')
       }
     }
   } catch (e) {
     console.error('Failed to save RAG settings', e)
     if (window.$toast) {
-      window.$toast.show('Failed to save RAG settings', 'error')
+      window.$toast.show(t('admin.settings.failedToSaveRagSettings'), 'error')
     }
   } finally {
     savingRAG.value = false
@@ -1461,13 +1466,13 @@ const saveRAGSettings = async () => {
 
 const editChatbotPolicy = (policy) => {
   if (window.$toast) {
-    window.$toast.show('Chatbot policy editing not yet implemented', 'info')
+    window.$toast.show(t('admin.settings.chatbotPolicyEditingNotImplemented'), 'info')
   }
 }
 
 const getGroupName = (groupId) => {
   const group = groupsStore.groups.find(g => g.id === groupId)
-  return group ? group.name : `Group ${groupId}`
+  return group ? group.name : t('admin.settings.groupFallback', { id: groupId })
 }
 
 const loadLLMSettings = async () => {
@@ -1487,7 +1492,7 @@ const loadLLMSettings = async () => {
   } catch (e) {
     console.error('Failed to load LLM settings', e)
     if (window.$toast) {
-      window.$toast.show('Failed to load LLM settings', 'error')
+      window.$toast.show(t('admin.settings.failedToLoadLlmSettings'), 'error')
     }
   }
 }
@@ -1505,14 +1510,14 @@ const saveLLMSettings = async () => {
     const res = await settingsAPI.llm.update(payload)
     if (res.is_success) {
       if (window.$toast) {
-        window.$toast.show('LLM settings saved. Server restart required.', 'success')
+        window.$toast.show(t('admin.settings.llmSettingsSaved'), 'success')
       }
       await loadLLMSettings()
     }
   } catch (e) {
     console.error('Failed to save LLM settings', e)
     if (window.$toast) {
-      window.$toast.show('Failed to save LLM settings', 'error')
+      window.$toast.show(t('admin.settings.failedToSaveLlmSettings'), 'error')
     }
   } finally {
     savingLLM.value = false
@@ -1543,7 +1548,7 @@ const loadOCRSettings = async () => {
       languages: ['en', 'vi']
     }
     if (window.$toast) {
-      window.$toast.show('Failed to load OCR settings', 'error')
+      window.$toast.show(t('admin.settings.failedToLoadOcrSettings'), 'error')
     }
   }
 }
@@ -1558,13 +1563,13 @@ const saveOCRSettings = async () => {
     
     await settingsStore.updateOCRSettings(payload)
     if (window.$toast) {
-      window.$toast.show('OCR settings saved', 'success')
+      window.$toast.show(t('admin.settings.ocrSettingsSaved'), 'success')
     }
     await loadOCRSettings()
   } catch (e) {
     console.error('Failed to save OCR settings', e)
     if (window.$toast) {
-      window.$toast.show('Failed to save OCR settings', 'error')
+      window.$toast.show(t('admin.settings.failedToSaveOcrSettings'), 'error')
     }
   } finally {
     savingOCR.value = false
@@ -1575,15 +1580,15 @@ const showFixGuide = (provider) => {
   currentProvider.value = provider
   if (provider.fix_guide) {
     currentFixGuide.value = provider.fix_guide
-    fixGuideModalTitle.value = `Fix Guide: ${provider.name}`
+    fixGuideModalTitle.value = t('admin.settings.fixGuideTitle', { name: provider.name })
   } else {
     // Fallback: create a basic guide from description
     currentFixGuide.value = {
-      title: `Fix ${provider.name}`,
-      description: provider.description || 'No fix guide available',
+      title: t('admin.settings.fixGuideTitle', { name: provider.name }),
+      description: provider.description || t('admin.settings.noFixGuideAvailable'),
       steps: []
     }
-    fixGuideModalTitle.value = `Fix Guide: ${provider.name}`
+    fixGuideModalTitle.value = t('admin.settings.fixGuideTitle', { name: provider.name })
   }
   showFixGuideModal.value = true
 }
@@ -1593,7 +1598,7 @@ const fixProvider = async (providerName) => {
   try {
     await settingsStore.fixProvider(providerName)
     if (window.$toast) {
-      window.$toast.show(`${providerName} fix completed successfully`, 'success')
+      window.$toast.show(t('admin.settings.fixCompleted', { name: providerName }), 'success')
     }
     // Refresh providers to see updated health
     await loadProviders()
@@ -1603,7 +1608,7 @@ const fixProvider = async (providerName) => {
     }
   } catch (e) {
     console.error(`Failed to fix ${providerName}`, e)
-    const errorMsg = e.response?.data?.message || e.message || `Failed to fix ${providerName}`
+    const errorMsg = e.response?.data?.message || e.message || t('admin.settings.failedToPullModel', { name: providerName })
     if (window.$toast) {
       window.$toast.show(errorMsg, 'error')
     }
@@ -1616,12 +1621,12 @@ const copyToClipboard = async (text) => {
   try {
     await navigator.clipboard.writeText(text)
     if (window.$toast) {
-      window.$toast.show('Copied to clipboard', 'success')
+      window.$toast.show(t('admin.settings.copiedToClipboard'), 'success')
     }
   } catch (e) {
     console.error('Failed to copy to clipboard', e)
     if (window.$toast) {
-      window.$toast.show('Failed to copy to clipboard', 'error')
+      window.$toast.show(t('admin.settings.failedToCopyToClipboard'), 'error')
     }
   }
 }
@@ -1637,7 +1642,7 @@ const loadPurgeGracePeriod = async () => {
   } catch (e) {
     console.error('Failed to load purge grace period', e)
     if (window.$toast) {
-      window.$toast.show('Failed to load purge grace period settings', 'error')
+      window.$toast.show(t('admin.settings.failedToLoadPurgeGracePeriod'), 'error')
     }
   }
 }
@@ -1647,7 +1652,7 @@ const savePurgeGracePeriod = async () => {
   try {
     if (purgeGracePeriodForm.value.days < 0 || purgeGracePeriodForm.value.days > 365) {
       if (window.$toast) {
-        window.$toast.show('Purge grace period must be between 0 and 365 days', 'error')
+        window.$toast.show(t('admin.settings.purgeGracePeriodMustBeBetween'), 'error')
       }
       return
     }
@@ -1655,18 +1660,18 @@ const savePurgeGracePeriod = async () => {
     const res = await settingsAPI.purgeGracePeriod.update(purgeGracePeriodForm.value.days)
     if (res.is_success) {
       if (window.$toast) {
-        window.$toast.show('Purge grace period saved successfully', 'success')
+        window.$toast.show(t('admin.settings.purgeGracePeriodSaved'), 'success')
       }
       await loadPurgeGracePeriod()
     } else {
       if (window.$toast) {
-        window.$toast.show(res.message || 'Failed to save purge grace period', 'error')
+        window.$toast.show(res.message || t('admin.settings.failedToSavePurgeGracePeriod'), 'error')
       }
     }
   } catch (e) {
     console.error('Failed to save purge grace period', e)
     if (window.$toast) {
-      window.$toast.show('Failed to save purge grace period', 'error')
+      window.$toast.show(t('admin.settings.failedToSavePurgeGracePeriod'), 'error')
     }
   } finally {
     savingPurgeGracePeriod.value = false
@@ -1684,14 +1689,14 @@ const loadOllamaModels = async () => {
     } else {
       ollamaConnected.value = false
       if (window.$toast) {
-        window.$toast.show('Failed to load Ollama models', 'error')
+        window.$toast.show(t('admin.settings.failedToLoadOllamaModels'), 'error')
       }
     }
   } catch (e) {
     console.error('Failed to load Ollama models', e)
     ollamaConnected.value = false
     if (window.$toast) {
-      window.$toast.show('Failed to load Ollama models', 'error')
+      window.$toast.show(t('admin.settings.failedToLoadOllamaModels'), 'error')
     }
   } finally {
     loadingModels.value = false
@@ -1704,7 +1709,7 @@ const pullModel = async (modelName) => {
     const res = await settingsAPI.ollama.models.pull(modelName)
     if (res.is_success) {
       if (window.$toast) {
-        window.$toast.show(`Started pulling ${modelName}. This may take several minutes.`, 'success')
+        window.$toast.show(t('admin.settings.startedPulling', { name: modelName }), 'success')
       }
       // Refresh models list after a delay
       setTimeout(async () => {
@@ -1712,12 +1717,12 @@ const pullModel = async (modelName) => {
       }, 2000)
     } else {
       if (window.$toast) {
-        window.$toast.show(res.message || `Failed to pull ${modelName}`, 'error')
+        window.$toast.show(res.message || t('admin.settings.failedToPullModel', { name: modelName }), 'error')
       }
     }
   } catch (e) {
     console.error(`Failed to pull model ${modelName}`, e)
-    const errorMsg = e.response?.data?.message || e.message || `Failed to pull ${modelName}`
+    const errorMsg = e.response?.data?.message || e.message || t('admin.settings.failedToPullModel', { name: modelName })
     if (window.$toast) {
       window.$toast.show(errorMsg, 'error')
     }
@@ -1762,13 +1767,13 @@ const testModel = async (modelName, modelType, isQuickTest) => {
     } else {
       testResults.value[modelName] = {
         success: false,
-        error: res.message || 'Test failed'
+        error: res.message || t('admin.settings.testFailed')
       }
       expandedTestResults.value[modelName] = true
     }
   } catch (e) {
     console.error(`Failed to test model ${modelName}`, e)
-    const errorMsg = e.response?.data?.message || e.message || `Failed to test ${modelName}`
+    const errorMsg = e.response?.data?.message || e.message || t('admin.settings.failedToTestModel', { name: modelName })
     testResults.value[modelName] = {
       success: false,
       error: errorMsg
@@ -1815,7 +1820,7 @@ const loadTagSettings = async () => {
   } catch (e) {
     console.error('Failed to load tag settings', e)
     if (window.$toast) {
-      window.$toast.show('Failed to load tag settings', 'error')
+      window.$toast.show(t('admin.settings.failedToLoadTagSettings'), 'error')
     }
   }
 }
@@ -1824,35 +1829,35 @@ const saveTagSettings = async () => {
   // Validation
   if (tagForm.value.max_tags < 1 || tagForm.value.max_tags > 20) {
     if (window.$toast) {
-      window.$toast.show('Max tags must be between 1 and 20', 'error')
+      window.$toast.show(t('admin.settings.maxTagsMustBeBetween'), 'error')
     }
     return
   }
   
   if (tagForm.value.max_length < 5 || tagForm.value.max_length > 200) {
     if (window.$toast) {
-      window.$toast.show('Max tag length must be between 5 and 200', 'error')
+      window.$toast.show(t('admin.settings.maxTagLengthMustBeBetween'), 'error')
     }
     return
   }
   
   if (tagForm.value.prefix && tagForm.value.prefix.length > 50) {
     if (window.$toast) {
-      window.$toast.show('Tag prefix must be maximum 50 characters', 'error')
+      window.$toast.show(t('admin.settings.tagPrefixMustBeMaximum'), 'error')
     }
     return
   }
   
   if (tagForm.value.ocr_text_limit < 100 || tagForm.value.ocr_text_limit > 50000) {
     if (window.$toast) {
-      window.$toast.show('OCR text limit must be between 100 and 50000', 'error')
+      window.$toast.show(t('admin.settings.ocrTextLimitMustBeBetween'), 'error')
     }
     return
   }
   
   if (tagForm.value.prompt && tagForm.value.prompt.length > 5000) {
     if (window.$toast) {
-      window.$toast.show('Prompt must be maximum 5000 characters', 'error')
+      window.$toast.show(t('admin.settings.promptMustBeMaximum'), 'error')
     }
     return
   }
@@ -1862,14 +1867,14 @@ const saveTagSettings = async () => {
     const res = await settingsAPI.tags.update(tagForm.value)
     if (res.is_success) {
       if (window.$toast) {
-        window.$toast.show('Tag settings saved successfully', 'success')
+        window.$toast.show(t('admin.settings.tagSettingsSaved'), 'success')
       }
       await loadTagSettings()
     }
   } catch (e) {
     console.error('Failed to save tag settings', e)
     if (window.$toast) {
-      window.$toast.show('Failed to save tag settings', 'error')
+      window.$toast.show(t('admin.settings.failedToSaveTagSettings'), 'error')
     }
   } finally {
     savingTags.value = false

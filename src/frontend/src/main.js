@@ -3,11 +3,14 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import Toast from './components/Toast.vue'
+import i18n from './i18n'
 import './theme.css'
 
 const app = createApp(App)
-app.use(createPinia())
+const pinia = createPinia()
+app.use(pinia)
 app.use(router)
+app.use(i18n)
 app.component('Toast', Toast)
 app.mount('#app')
 

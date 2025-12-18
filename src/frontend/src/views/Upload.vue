@@ -1,6 +1,6 @@
 <template>
   <div class="upload-page">
-    <h1 class="page-header">Upload Documents</h1>
+    <h1 class="page-header">{{ $t('upload.title') }}</h1>
     
     <!-- Upload Zone -->
     <div class="upload-zone" @drop.prevent="handleDrop" @dragover.prevent @click="openFileDialog">
@@ -8,12 +8,12 @@
       <input ref="folderInput" type="file" webkitdirectory directory multiple @change="handleFileSelect" style="display: none" />
       <div class="upload-content">
         <Upload class="upload-icon" />
-        <p>Drag & drop files here or 
-          <button @click.stop="openFileDialog" class="btn-link">browse files</button>
+        <p>{{ $t('upload.dragDrop') }} 
+          <button @click.stop="openFileDialog" class="btn-link">{{ $t('upload.browseFiles') }}</button>
           <span class="separator">|</span>
-          <button @click.stop="openFolderDialog" class="btn-link">browse folder</button>
+          <button @click.stop="openFolderDialog" class="btn-link">{{ $t('upload.browseFolder') }}</button>
         </p>
-        <p class="hint">Supports: PDF, DOCX, XLSX, CSV, TXT, Images</p>
+        <p class="hint">{{ $t('upload.supports') }}</p>
       </div>
     </div>
 
@@ -33,15 +33,15 @@
         
         <div v-if="file.status === 'pending'" class="file-metadata">
           <div class="form-group">
-            <label>Title</label>
+            <label>{{ $t('upload.titleLabel') }}</label>
             <input v-model="file.metadata.title" type="text" :placeholder="file.name" />
           </div>
           <div class="form-group">
-            <label>Tags (comma-separated)</label>
-            <input v-model="file.metadata.tags" type="text" placeholder="e.g., invoice, 2024, important" />
+            <label>{{ $t('upload.tagsLabel') }}</label>
+            <input v-model="file.metadata.tags" type="text" :placeholder="$t('upload.tagsPlaceholder')" />
           </div>
           <div class="form-group">
-            <label>Auto AI Tag</label>
+            <label>{{ $t('upload.autoAITag') }}</label>
             <div class="permissions-checkbox-group">
               <label class="checkbox-label">
                 <input
@@ -49,19 +49,19 @@
                   v-model="file.metadata.auto_ai_tag"
                   :checked="file.metadata.auto_ai_tag !== false"
                 />
-                <span>Enable automatic tag generation using AI</span>
+                <span>{{ $t('upload.enableAutoTag') }}</span>
               </label>
             </div>
-            <p class="hint-text">Automatically generate tags using AI based on document content after OCR</p>
+            <p class="hint-text">{{ $t('upload.autoTagHint') }}</p>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Folder</label>
+              <label>{{ $t('upload.folder') }}</label>
               <div class="picker-input">
                 <input
                   :value="getFolderName(file.metadata.folder_id)"
                   readonly
-                  placeholder="Select folder"
+                  :placeholder="$t('upload.selectFolder')"
                   @click="openFolderPicker(idx)"
                 />
                 <button
@@ -82,21 +82,21 @@
               </div>
             </div>
             <div class="form-group">
-              <label>Retention Policy</label>
+              <label>{{ $t('upload.retentionPolicy') }}</label>
               <select v-model.number="file.metadata.retention_policy_id">
-                <option :value="null">Default</option>
+                <option :value="null">{{ $t('upload.default') }}</option>
                 <option
                   v-for="p in retentionPolicies"
                   :key="p.id"
                   :value="p.id"
                 >
-                  {{ p.name }} ({{ p.duration_days }} days)
+                  {{ p.name }} ({{ p.duration_days }} {{ $t('upload.days') }})
                 </option>
               </select>
             </div>
           </div>
           <div class="form-group">
-            <label>Share Permissions</label>
+            <label>{{ $t('upload.sharePermissions') }}</label>
             <div class="permissions-checkbox-group">
               <label class="checkbox-label">
                 <input
@@ -105,7 +105,7 @@
                   :value="'view'"
                   checked
                 />
-                <span>View</span>
+                <span>{{ $t('upload.viewPermission') }}</span>
               </label>
               <label class="checkbox-label">
                 <input
@@ -113,7 +113,7 @@
                   v-model="file.metadata.share_permissions"
                   value="search"
                 />
-                <span>Search</span>
+                <span>{{ $t('upload.searchPermission') }}</span>
               </label>
               <label class="checkbox-label">
                 <input
@@ -121,13 +121,13 @@
                   v-model="file.metadata.share_permissions"
                   value="chat"
                 />
-                <span>Chat</span>
+                <span>{{ $t('upload.chatPermission') }}</span>
               </label>
             </div>
-            <p class="hint-text">Select permissions for shared users/roles. View is required.</p>
+            <p class="hint-text">{{ $t('upload.selectPermissionsHint') }}</p>
           </div>
           <div class="form-group">
-            <label>ACL - Allowed Users</label>
+            <label>{{ $t('upload.aclAllowedUsers') }}</label>
             <div class="acl-selector">
               <div class="selected-items">
                 <span
@@ -144,12 +144,12 @@
                 class="btn-add-acl"
                 type="button"
               >
-                + Add Users
+                + {{ $t('upload.addUsers') }}
               </button>
             </div>
           </div>
           <div class="form-group">
-            <label>ACL - Allowed Roles</label>
+            <label>{{ $t('upload.aclAllowedRoles') }}</label>
             <div class="acl-selector">
               <div class="selected-items">
                 <span
@@ -166,23 +166,23 @@
                 class="btn-add-acl"
                 type="button"
               >
-                + Add Roles
+                + {{ $t('upload.addRoles') }}
               </button>
             </div>
           </div>
           <div class="form-group">
-            <label>Sensitivity</label>
+            <label>{{ $t('upload.sensitivity') }}</label>
             <select v-model="file.metadata.sensitivity">
-              <option value="">None</option>
-              <option value="public">Public</option>
-              <option value="internal">Internal</option>
-              <option value="confidential">Confidential</option>
-              <option value="restricted">Restricted</option>
+              <option value="">{{ $t('upload.sensitivityNone') }}</option>
+              <option value="public">{{ $t('upload.sensitivityPublic') }}</option>
+              <option value="internal">{{ $t('upload.sensitivityInternal') }}</option>
+              <option value="confidential">{{ $t('upload.sensitivityConfidential') }}</option>
+              <option value="restricted">{{ $t('upload.sensitivityRestricted') }}</option>
             </select>
           </div>
           <div class="form-group">
-            <label>Workflow Template</label>
-            <input v-model="file.metadata.workflow_template" type="text" placeholder="Optional workflow template name" />
+            <label>{{ $t('upload.workflowTemplate') }}</label>
+            <input v-model="file.metadata.workflow_template" type="text" :placeholder="$t('upload.workflowTemplatePlaceholder')" />
           </div>
         </div>
 
@@ -193,22 +193,22 @@
         
         <div class="file-status">
           <div v-if="file.status === 'calculating'" class="status-item">
-            <Loader2 class="status-icon" /> Calculating checksum...
+            <Loader2 class="status-icon" /> {{ $t('upload.calculatingChecksum') }}
           </div>
           <div v-else-if="file.status === 'uploading'" class="status-item">
-            <Loader2 class="status-icon" /> Uploading...
+            <Loader2 class="status-icon" /> {{ $t('upload.uploading') }}
           </div>
           <div v-else-if="file.status === 'processing'" class="status-item">
-            <Loader2 class="status-icon" /> Processing...
+            <Loader2 class="status-icon" /> {{ $t('common.loading') }}
           </div>
           <div v-else-if="file.status === 'done'" class="status-item success">
-            <CheckCircle class="status-icon" /> Done
+            <CheckCircle class="status-icon" /> {{ $t('status.completed') }}
             <a v-if="file.document_id" :href="`/documents/${file.document_id}`" class="doc-link">
-              View Document
+              {{ $t('common.view') }}
             </a>
           </div>
           <div v-else-if="file.status === 'error'" class="status-item error">
-            <XCircle class="status-icon" /> {{ file.error || 'Error' }}
+            <XCircle class="status-icon" /> {{ file.error || $t('common.error') }}
           </div>
         </div>
       </div>
@@ -217,29 +217,29 @@
     <!-- Upload Actions -->
     <div v-if="files.length > 0" class="upload-actions">
       <button @click="startUpload" :disabled="uploading || files.every(f => f.status === 'done')" class="btn-primary">
-        {{ uploading ? 'Uploading...' : 'Upload All' }}
+        {{ uploading ? $t('upload.uploading') : $t('upload.upload') }}
       </button>
-      <button @click="clearFiles" class="btn-secondary">Clear All</button>
+      <button @click="clearFiles" class="btn-secondary">{{ $t('common.clear') }}</button>
     </div>
 
     <!-- Folder Picker Modal -->
-    <Modal v-model:show="showFolderPicker" title="Select Folder">
+    <Modal v-model:show="showFolderPicker" :title="$t('upload.selectFolder')">
       <FolderTree
         :folders="foldersStore.folderTree"
         @select="selectFolder"
       />
       <template #footer>
-        <button @click="showFolderPicker = false" class="btn-secondary">Cancel</button>
+        <button @click="showFolderPicker = false" class="btn-secondary">{{ $t('common.cancel') }}</button>
       </template>
     </Modal>
 
     <!-- User Picker Modal -->
-    <Modal v-model:show="showUserPicker" title="Select Users" size="medium">
+    <Modal v-model:show="showUserPicker" :title="$t('common.select') + ' ' + $t('nav.users')" size="medium">
       <div class="picker-search">
         <input
           v-model="userSearchQuery"
           type="text"
-          placeholder="Search users by name or email..."
+          :placeholder="$t('upload.searchUsersPlaceholder')"
           class="search-input"
         />
       </div>
@@ -262,22 +262,22 @@
           </label>
         </div>
         <div v-if="filteredUsers.length === 0" class="picker-empty">
-          {{ userSearchQuery ? 'No users found' : 'No users available' }}
+          {{ userSearchQuery ? $t('upload.noUsersFound') : $t('upload.noUsersAvailable') }}
         </div>
       </div>
       <template #footer>
-        <button @click="showUserPicker = false" class="btn-secondary">Cancel</button>
-        <button @click="confirmUsers" class="btn-primary">Confirm ({{ tempSelectedUsers.length }})</button>
+        <button @click="showUserPicker = false" class="btn-secondary">{{ $t('common.cancel') }}</button>
+        <button @click="confirmUsers" class="btn-primary">{{ $t('upload.confirmUsers', { count: tempSelectedUsers.length }) }}</button>
       </template>
     </Modal>
 
     <!-- Role Picker Modal -->
-    <Modal v-model:show="showRolePicker" title="Select Roles" size="medium">
+    <Modal v-model:show="showRolePicker" :title="$t('upload.selectRoles')" size="medium">
       <div class="picker-search">
         <input
           v-model="roleSearchQuery"
           type="text"
-          placeholder="Search roles by name..."
+          :placeholder="$t('upload.searchRolesPlaceholder')"
           class="search-input"
         />
       </div>
@@ -299,12 +299,12 @@
           </label>
         </div>
         <div v-if="filteredRoles.length === 0" class="picker-empty">
-          {{ roleSearchQuery ? 'No roles found' : 'No roles available' }}
+          {{ roleSearchQuery ? $t('upload.noRolesFound') : $t('upload.noRolesAvailable') }}
         </div>
       </div>
       <template #footer>
-        <button @click="showRolePicker = false" class="btn-secondary">Cancel</button>
-        <button @click="confirmRoles" class="btn-primary">Confirm ({{ tempSelectedRoles.length }})</button>
+        <button @click="showRolePicker = false" class="btn-secondary">{{ $t('common.cancel') }}</button>
+        <button @click="confirmRoles" class="btn-primary">{{ $t('upload.confirmRoles', { count: tempSelectedRoles.length }) }}</button>
       </template>
     </Modal>
   </div>
@@ -312,12 +312,15 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useFoldersStore } from '../store/folders'
 import { useSettingsStore } from '../store/settings'
 import { useRolesStore } from '../store/roles'
 import { usersAPI, uploadsAPI } from '../services/api'
 import { FolderTree, Modal } from '../components'
 import { Upload, Loader2, CheckCircle, XCircle, Folder, Shield } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const fileInput = ref(null)
 const folderInput = ref(null)
@@ -705,9 +708,9 @@ const confirmRoles = () => {
 }
 
 const getFolderName = (folderId) => {
-  if (!folderId) return 'None'
+  if (!folderId) return t('upload.none')
   const folder = folders.value.find(f => f.id === folderId)
-  return folder ? folder.name : 'Unknown'
+  return folder ? folder.name : t('upload.unknown')
 }
 
 const addUser = (fileIndex, userId) => {
@@ -731,7 +734,7 @@ const removeUser = (fileIndex, userId) => {
 
 const getUserName = (userId) => {
   const user = users.value.find(u => u.id === userId)
-  return user ? `${user.name} (${user.email})` : `User ${userId}`
+  return user ? `${user.name} (${user.email})` : t('upload.userFallback', { id: userId })
 }
 
 const addRole = (fileIndex, roleId) => {
@@ -756,10 +759,10 @@ const removeRole = (fileIndex, roleId) => {
 const getRoleName = (roleId) => {
   const rolesList = roles.value || []
   if (!Array.isArray(rolesList)) {
-    return `Role ${roleId}`
+    return t('upload.roleFallback', { id: roleId })
   }
   const role = rolesList.find(r => r && r.id === roleId)
-  return role ? role.name : `Role ${roleId}`
+  return role ? role.name : t('upload.roleFallback', { id: roleId })
 }
 </script>
 

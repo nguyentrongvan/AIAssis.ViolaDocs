@@ -3,9 +3,10 @@
     <button
       @click="goToPage(currentPage - 1)"
       :disabled="currentPage === 1"
-      class="pagination-btn"
+      class="pagination-btn pagination-btn-prev"
     >
       <ChevronLeft :size="16" />
+      <span>{{ $t('common.previous') }}</span>
     </button>
     <div class="pagination-pages">
       <button
@@ -20,8 +21,9 @@
     <button
       @click="goToPage(currentPage + 1)"
       :disabled="currentPage === totalPagesComputed"
-      class="pagination-btn"
+      class="pagination-btn pagination-btn-next"
     >
+      <span>{{ $t('common.next') }}</span>
       <ChevronRight :size="16" />
     </button>
   </div>
@@ -29,7 +31,10 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const props = defineProps({
   page: {
@@ -111,7 +116,7 @@ const goToPage = (newPage) => {
 }
 
 .pagination-btn {
-  padding: 0.5rem;
+  padding: 0.5rem 1rem;
   border: 1px solid #ddd;
   background: white;
   border-radius: var(--radius-md);
@@ -119,7 +124,14 @@ const goToPage = (newPage) => {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 0.5rem;
   transition: all 0.2s;
+  font-weight: 500;
+  color: var(--text-dark);
+}
+
+.pagination-btn span {
+  white-space: nowrap;
 }
 
 .pagination-btn:hover:not(:disabled) {

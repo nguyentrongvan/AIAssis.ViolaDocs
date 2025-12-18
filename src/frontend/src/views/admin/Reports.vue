@@ -1,6 +1,6 @@
 <template>
   <div class="admin-page">
-    <h1 class="page-header">Reports</h1>
+    <h1 class="page-header">{{ $t('admin.reports.title') }}</h1>
 
     <div class="reports-tabs">
       <button
@@ -16,40 +16,40 @@
     <div class="report-filters">
       <div class="filter-row">
         <div class="filter-group">
-          <label>Date From</label>
+          <label>{{ $t('admin.reports.filters.dateFrom') }}</label>
           <input v-model="filters.date_from" type="date" />
         </div>
         <div class="filter-group">
-          <label>Date To</label>
+          <label>{{ $t('admin.reports.filters.dateTo') }}</label>
           <input v-model="filters.date_to" type="date" />
         </div>
         
         <!-- Audit-specific filters -->
         <template v-if="activeTab === 'audit'">
           <div class="filter-group">
-            <label>Actor</label>
+            <label>{{ $t('admin.reports.filters.actor') }}</label>
             <select v-model.number="filters.actor_id">
-              <option :value="null">All Users</option>
+              <option :value="null">{{ $t('admin.reports.filterOptions.allUsers') }}</option>
               <option v-for="user in users" :key="user.id" :value="user.id">
                 {{ user.name }}
               </option>
             </select>
           </div>
           <div class="filter-group">
-            <label>Action</label>
+            <label>{{ $t('admin.reports.filters.action') }}</label>
             <select v-model="filters.action">
-              <option value="">All Actions</option>
-              <option value="create">Create</option>
-              <option value="update">Update</option>
-              <option value="delete">Delete</option>
-              <option value="share">Share</option>
-              <option value="view">View</option>
-              <option value="search">Search</option>
-              <option value="vector_search">Vector Search</option>
+              <option value="">{{ $t('admin.reports.filterOptions.allActions') }}</option>
+              <option value="create">{{ $t('admin.reports.filterOptions.create') }}</option>
+              <option value="update">{{ $t('admin.reports.filterOptions.update') }}</option>
+              <option value="delete">{{ $t('admin.reports.filterOptions.delete') }}</option>
+              <option value="share">{{ $t('admin.reports.filterOptions.share') }}</option>
+              <option value="view">{{ $t('admin.reports.filterOptions.view') }}</option>
+              <option value="search">{{ $t('admin.reports.filterOptions.search') }}</option>
+              <option value="vector_search">{{ $t('admin.reports.filterOptions.vectorSearch') }}</option>
             </select>
           </div>
           <div class="filter-group">
-            <label>Page Size</label>
+            <label>{{ $t('admin.reports.filters.pageSize') }}</label>
             <select v-model.number="filters.page_size">
               <option :value="25">25</option>
               <option :value="50">50</option>
@@ -61,19 +61,19 @@
         <!-- Usage-specific filters -->
         <template v-if="activeTab === 'usage'">
           <div class="filter-group">
-            <label>Rollup</label>
+            <label>{{ $t('admin.reports.filters.rollup') }}</label>
             <select v-model="filters.rollup">
-              <option value="hour">Hour</option>
-              <option value="day">Day</option>
-              <option value="week">Week</option>
+              <option value="hour">{{ $t('admin.reports.filterOptions.hour') }}</option>
+              <option value="day">{{ $t('admin.reports.filterOptions.day') }}</option>
+              <option value="week">{{ $t('admin.reports.filterOptions.week') }}</option>
             </select>
           </div>
           <div class="filter-group">
-            <label>Top N</label>
+            <label>{{ $t('admin.reports.filters.topN') }}</label>
             <select v-model.number="filters.top_n">
-              <option :value="5">Top 5</option>
-              <option :value="10">Top 10</option>
-              <option :value="20">Top 20</option>
+              <option :value="5">{{ $t('admin.reports.filterOptions.top5') }}</option>
+              <option :value="10">{{ $t('admin.reports.filterOptions.top10') }}</option>
+              <option :value="20">{{ $t('admin.reports.filterOptions.top20') }}</option>
             </select>
           </div>
         </template>
@@ -81,13 +81,13 @@
         <!-- Workflow-specific filters -->
         <template v-if="activeTab === 'workflow'">
           <div class="filter-group">
-            <label>Template</label>
-            <input v-model="filters.template" type="text" placeholder="Filter by template" />
+            <label>{{ $t('admin.reports.filters.template') }}</label>
+            <input v-model="filters.template" type="text" :placeholder="$t('admin.reports.filterByTemplate')" />
           </div>
           <div class="filter-group">
-            <label>Assignee</label>
+            <label>{{ $t('admin.reports.filters.assignee') }}</label>
             <select v-model.number="filters.assignee_id">
-              <option :value="null">All Assignees</option>
+              <option :value="null">{{ $t('admin.reports.filterOptions.allAssignees') }}</option>
               <option v-for="user in users" :key="user.id" :value="user.id">
                 {{ user.name }}
               </option>
@@ -96,12 +96,12 @@
         </template>
 
         <div class="filter-actions">
-          <button @click="applyDatePreset('today')" class="btn-secondary btn-sm">Today</button>
-          <button @click="applyDatePreset('7d')" class="btn-secondary btn-sm">Last 7 Days</button>
-          <button @click="applyDatePreset('30d')" class="btn-secondary btn-sm">Last 30 Days</button>
+          <button @click="applyDatePreset('today')" class="btn-secondary btn-sm">{{ $t('admin.reports.buttons.today') }}</button>
+          <button @click="applyDatePreset('7d')" class="btn-secondary btn-sm">{{ $t('admin.reports.buttons.last7Days') }}</button>
+          <button @click="applyDatePreset('30d')" class="btn-secondary btn-sm">{{ $t('admin.reports.buttons.last30Days') }}</button>
           <button @click="generateReport" class="btn-primary" :disabled="loading">
             <RefreshCw v-if="loading" :size="16" class="spinning" />
-            Generate
+            {{ $t('admin.reports.buttons.generate') }}
           </button>
           <button 
             v-if="activeTab === 'audit' && reportData" 
@@ -110,31 +110,31 @@
             :disabled="!reportData"
           >
             <Download :size="16" />
-            Export
+            {{ $t('admin.reports.buttons.export') }}
           </button>
         </div>
       </div>
     </div>
 
-    <div v-if="loading" class="loading">Generating report...</div>
+    <div v-if="loading" class="loading">{{ $t('admin.reports.messages.generatingReport') }}</div>
     <div v-else-if="reportData" class="report-content">
       <!-- Audit Report -->
       <div v-if="activeTab === 'audit'" class="report-section">
         <div class="report-summary">
           <div class="summary-card">
-            <div class="summary-label">Total Events</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.totalEvents') }}</div>
             <div class="summary-value">{{ reportData.total || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Unique Users</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.uniqueUsers') }}</div>
             <div class="summary-value">{{ reportData.unique_users || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Unique Documents</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.uniqueDocuments') }}</div>
             <div class="summary-value">{{ reportData.unique_documents || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Action Types</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.actionTypes') }}</div>
             <div class="summary-value">{{ Object.keys(reportData.action_counts || {}).length }}</div>
           </div>
         </div>
@@ -142,7 +142,7 @@
         <!-- Charts -->
         <div class="charts-grid">
           <div class="chart-card">
-            <h3>Events Timeline</h3>
+            <h3>{{ $t('admin.reports.charts.eventsTimeline') }}</h3>
             <LineChart 
               v-if="auditTimelineData" 
               :data="auditTimelineData" 
@@ -150,7 +150,7 @@
             />
           </div>
           <div class="chart-card">
-            <h3>Action Distribution</h3>
+            <h3>{{ $t('admin.reports.charts.actionDistribution') }}</h3>
             <PieChart 
               v-if="auditActionData" 
               :data="auditActionData" 
@@ -158,7 +158,7 @@
             />
           </div>
           <div class="chart-card">
-            <h3>Top Actors</h3>
+            <h3>{{ $t('admin.reports.charts.topActors') }}</h3>
             <BarChart 
               v-if="auditTopActorsData" 
               :data="auditTopActorsData" 
@@ -172,22 +172,22 @@
           <table class="report-table">
             <thead>
               <tr>
-                <th>Timestamp</th>
-                <th>Actor</th>
-                <th>Action</th>
-                <th>Resource Type</th>
-                <th>Resource ID</th>
-                <th>Document</th>
+                <th>{{ $t('admin.reports.tableHeaders.timestamp') }}</th>
+                <th>{{ $t('admin.reports.tableHeaders.actor') }}</th>
+                <th>{{ $t('admin.reports.tableHeaders.action') }}</th>
+                <th>{{ $t('admin.reports.tableHeaders.resourceType') }}</th>
+                <th>{{ $t('admin.reports.tableHeaders.resourceId') }}</th>
+                <th>{{ $t('admin.reports.tableHeaders.document') }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="item in reportData.items" :key="item.id">
                 <td>{{ formatDate(item.timestamp) }}</td>
-                <td>{{ item.actor_name || 'Unknown' }}</td>
+                <td>{{ item.actor_name || $t('common.unknown') }}</td>
                 <td><StatusBadge :status="item.action" /></td>
                 <td>{{ item.subject_type }}</td>
-                <td>{{ item.subject_id || '-' }}</td>
-                <td>{{ item.document_title || '-' }}</td>
+                <td>{{ item.subject_id || $t('common.na') }}</td>
+                <td>{{ item.document_title || $t('common.na') }}</td>
               </tr>
             </tbody>
           </table>
@@ -197,18 +197,18 @@
               :disabled="reportData.pagination.page <= 1"
               class="btn-secondary"
             >
-              Previous
+              {{ $t('admin.reports.buttons.previous') }}
             </button>
             <span class="page-info">
-              Page {{ reportData.pagination.page }} of {{ reportData.pagination.total_pages }}
-              ({{ reportData.pagination.total }} total)
+              {{ $t('admin.reports.pagination.pageOf', { page: reportData.pagination.page, totalPages: reportData.pagination.total_pages }) }}
+              {{ $t('admin.reports.pagination.total', { total: reportData.pagination.total }) }}
             </span>
             <button 
               @click="changePage(reportData.pagination.page + 1)"
               :disabled="reportData.pagination.page >= reportData.pagination.total_pages"
               class="btn-secondary"
             >
-              Next
+              {{ $t('admin.reports.buttons.next') }}
             </button>
           </div>
         </div>
@@ -218,31 +218,31 @@
       <div v-if="activeTab === 'usage'" class="report-section">
         <div class="report-summary">
           <div class="summary-card">
-            <div class="summary-label">Total Documents</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.totalDocuments') }}</div>
             <div class="summary-value">{{ reportData.total_documents || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Total Storage</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.totalStorage') }}</div>
             <div class="summary-value">{{ formatSize(reportData.total_storage || 0) }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Uploads</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.uploads') }}</div>
             <div class="summary-value">{{ reportData.uploads_count || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Search Queries</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.searchQueries') }}</div>
             <div class="summary-value">{{ reportData.search_queries || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Vector Queries</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.vectorQueries') }}</div>
             <div class="summary-value">{{ reportData.vector_queries || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Chatbot Sessions</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.chatbotSessions') }}</div>
             <div class="summary-value">{{ reportData.chatbot_sessions || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Queue Depth</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.queueDepth') }}</div>
             <div class="summary-value">{{ reportData.queue_depth || 0 }}</div>
           </div>
         </div>
@@ -250,7 +250,7 @@
         <!-- Charts -->
         <div class="charts-grid">
           <div class="chart-card">
-            <h3>Uploads Over Time</h3>
+            <h3>{{ $t('admin.reports.charts.uploadsOverTime') }}</h3>
             <LineChart 
               v-if="usageUploadsData" 
               :data="usageUploadsData" 
@@ -258,7 +258,7 @@
             />
           </div>
           <div class="chart-card">
-            <h3>Storage by Folder</h3>
+            <h3>{{ $t('admin.reports.charts.storageByFolder') }}</h3>
             <BarChart 
               v-if="usageFoldersData" 
               :data="usageFoldersData" 
@@ -266,7 +266,7 @@
             />
           </div>
           <div class="chart-card">
-            <h3>Storage by Tag</h3>
+            <h3>{{ $t('admin.reports.charts.storageByTag') }}</h3>
             <PieChart 
               v-if="usageTagsData" 
               :data="usageTagsData" 
@@ -274,7 +274,7 @@
             />
           </div>
           <div class="chart-card">
-            <h3>Search vs Vector Queries</h3>
+            <h3>{{ $t('admin.reports.charts.searchVsVectorQueries') }}</h3>
             <DualLineChart 
               v-if="usageSearchData" 
               :data="usageSearchData" 
@@ -286,18 +286,18 @@
         <!-- Breakdown Tables -->
         <div class="breakdown-grid">
           <div class="breakdown-section">
-            <h3>Top Folders</h3>
+            <h3>{{ $t('admin.reports.charts.storageByFolder') }}</h3>
             <table class="breakdown-table">
               <thead>
                 <tr>
-                  <th>Folder</th>
-                  <th>Documents</th>
-                  <th>Size</th>
+                  <th>{{ $t('admin.reports.tableHeaders.folder') }}</th>
+                  <th>{{ $t('admin.reports.tableHeaders.documents') }}</th>
+                  <th>{{ $t('admin.reports.tableHeaders.size') }}</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="item in reportData.breakdown?.folders || []" :key="item.folder_id">
-                  <td>{{ item.name || 'Root' }}</td>
+                  <td>{{ item.name || $t('admin.reports.messages.root') }}</td>
                   <td>{{ item.count }}</td>
                   <td>{{ formatSize(item.size) }}</td>
                 </tr>
@@ -305,13 +305,13 @@
             </table>
           </div>
           <div class="breakdown-section">
-            <h3>Top Tags</h3>
+            <h3>{{ $t('admin.reports.charts.storageByTag') }}</h3>
             <table class="breakdown-table">
               <thead>
                 <tr>
-                  <th>Tag</th>
-                  <th>Documents</th>
-                  <th>Size</th>
+                  <th>{{ $t('admin.reports.tableHeaders.tag') }}</th>
+                  <th>{{ $t('admin.reports.tableHeaders.documents') }}</th>
+                  <th>{{ $t('admin.reports.tableHeaders.size') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -324,13 +324,13 @@
             </table>
           </div>
           <div class="breakdown-section">
-            <h3>Top Groups</h3>
+            <h3>{{ $t('admin.reports.tableHeaders.group') }}</h3>
             <table class="breakdown-table">
               <thead>
                 <tr>
-                  <th>Group</th>
-                  <th>Documents</th>
-                  <th>Size</th>
+                  <th>{{ $t('admin.reports.tableHeaders.group') }}</th>
+                  <th>{{ $t('admin.reports.tableHeaders.documents') }}</th>
+                  <th>{{ $t('admin.reports.tableHeaders.size') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -343,13 +343,13 @@
             </table>
           </div>
           <div class="breakdown-section">
-            <h3>Top Users</h3>
+            <h3>{{ $t('admin.reports.tableHeaders.user') }}</h3>
             <table class="breakdown-table">
               <thead>
                 <tr>
-                  <th>User</th>
-                  <th>Uploads</th>
-                  <th>Size</th>
+                  <th>{{ $t('admin.reports.tableHeaders.user') }}</th>
+                  <th>{{ $t('admin.reports.tableHeaders.uploads') }}</th>
+                  <th>{{ $t('admin.reports.tableHeaders.size') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -368,23 +368,23 @@
       <div v-if="activeTab === 'workflow'" class="report-section">
         <div class="report-summary">
           <div class="summary-card">
-            <div class="summary-label">Total Workflows</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.totalWorkflows') }}</div>
             <div class="summary-value">{{ reportData.total_workflows || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Completed</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.completed') }}</div>
             <div class="summary-value">{{ reportData.completed || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Pending</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.pending') }}</div>
             <div class="summary-value">{{ reportData.pending || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Overdue</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.overdue') }}</div>
             <div class="summary-value">{{ reportData.overdue || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Avg Duration</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.avgDuration') }}</div>
             <div class="summary-value">{{ reportData.avg_duration_hours?.toFixed(1) || '0' }}h</div>
           </div>
         </div>
@@ -392,7 +392,7 @@
         <!-- Charts -->
         <div class="charts-grid">
           <div class="chart-card">
-            <h3>Approval Rates by Template</h3>
+            <h3>{{ $t('admin.reports.charts.approvalRatesByTemplate') }}</h3>
             <BarChart 
               v-if="workflowTemplateData" 
               :data="workflowTemplateData" 
@@ -400,7 +400,7 @@
             />
           </div>
           <div class="chart-card">
-            <h3>Approval Rates by Assignee</h3>
+            <h3>{{ $t('admin.reports.charts.approvalRatesByAssignee') }}</h3>
             <BarChart 
               v-if="workflowAssigneeData" 
               :data="workflowAssigneeData" 
@@ -408,7 +408,7 @@
             />
           </div>
           <div class="chart-card">
-            <h3>Workflow State Distribution</h3>
+            <h3>{{ $t('admin.reports.charts.workflowStateDistribution') }}</h3>
             <PieChart 
               v-if="workflowStateData" 
               :data="workflowStateData" 
@@ -416,7 +416,7 @@
             />
           </div>
           <div class="chart-card">
-            <h3>Duration Distribution</h3>
+            <h3>{{ $t('admin.reports.charts.durationDistribution') }}</h3>
             <BarChart 
               v-if="workflowDurationData" 
               :data="workflowDurationData" 
@@ -428,25 +428,25 @@
         <!-- Tables -->
         <div class="breakdown-grid">
           <div class="breakdown-section">
-            <h3>Overdue Tasks</h3>
+            <h3>{{ $t('admin.reports.summary.overdue') }}</h3>
             <table class="breakdown-table">
               <thead>
                 <tr>
-                  <th>Assignee</th>
-                  <th>Template</th>
-                  <th>Due Date</th>
-                  <th>Days Overdue</th>
+                  <th>{{ $t('admin.reports.tableHeaders.assignee') }}</th>
+                  <th>{{ $t('admin.reports.filters.template') }}</th>
+                  <th>{{ $t('admin.reports.tableHeaders.dueDate') }}</th>
+                  <th>{{ $t('admin.reports.tableHeaders.daysOverdue') }}</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="task in reportData.overdue_tasks || []" :key="task.task_id">
                   <td>{{ task.assignee_name }}</td>
-                  <td>{{ task.template || 'N/A' }}</td>
+                  <td>{{ task.template || $t('common.na') }}</td>
                   <td>{{ formatDate(task.due_at) }}</td>
                   <td>{{ task.days_overdue }}</td>
                 </tr>
                 <tr v-if="!reportData.overdue_tasks || reportData.overdue_tasks.length === 0">
-                  <td colspan="4" class="text-center">No overdue tasks</td>
+                  <td colspan="4" class="text-center">{{ $t('admin.reports.messages.noOverdueTasks') }}</td>
                 </tr>
               </tbody>
             </table>
@@ -458,27 +458,27 @@
       <div v-if="activeTab === 'quality'" class="report-section">
         <div class="report-summary">
           <div class="summary-card">
-            <div class="summary-label">Index Failures</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.indexFailures') }}</div>
             <div class="summary-value">{{ reportData.index_failures || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Embedding Failures</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.embeddingFailures') }}</div>
             <div class="summary-value">{{ reportData.embedding_failures || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">OCR Failures</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.ocrFailures') }}</div>
             <div class="summary-value">{{ reportData.ocr_failures || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Stale Documents</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.staleDocuments') }}</div>
             <div class="summary-value">{{ reportData.stale_documents || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Purge Backlog</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.purgeBacklog') }}</div>
             <div class="summary-value">{{ reportData.purge_backlog || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Virus Scan Failures</div>
+            <div class="summary-label">{{ $t('admin.reports.summary.virusScanFailures') }}</div>
             <div class="summary-value">{{ reportData.virus_scan_failures || 0 }}</div>
           </div>
         </div>
@@ -486,7 +486,7 @@
         <!-- Charts -->
         <div class="charts-grid">
           <div class="chart-card">
-            <h3>Failure Types Distribution</h3>
+            <h3>{{ $t('admin.reports.charts.failureTypesDistribution') }}</h3>
             <PieChart 
               v-if="qualityFailureTypesData" 
               :data="qualityFailureTypesData" 
@@ -494,7 +494,7 @@
             />
           </div>
           <div class="chart-card">
-            <h3>Failures Over Time</h3>
+            <h3>{{ $t('admin.reports.charts.failuresOverTime') }}</h3>
             <LineChart 
               v-if="qualityFailureTimelineData" 
               :data="qualityFailureTimelineData" 
@@ -502,7 +502,7 @@
             />
           </div>
           <div class="chart-card">
-            <h3>Job Status Breakdown</h3>
+            <h3>{{ $t('admin.reports.charts.jobStatusBreakdown') }}</h3>
             <PieChart 
               v-if="qualityJobStatusData" 
               :data="qualityJobStatusData" 
@@ -513,25 +513,25 @@
 
         <!-- Recent Failures Table -->
         <div class="failures-section">
-          <h3>Recent Failures</h3>
+          <h3>{{ $t('admin.reports.messages.recentFailures') }}</h3>
           <table class="report-table">
             <thead>
               <tr>
-                <th>Job Type</th>
-                <th>Document ID</th>
-                <th>Error</th>
-                <th>Timestamp</th>
+                <th>{{ $t('admin.reports.tableHeaders.jobType') }}</th>
+                <th>{{ $t('admin.reports.tableHeaders.documentId') }}</th>
+                <th>{{ $t('admin.reports.tableHeaders.error') }}</th>
+                <th>{{ $t('admin.reports.tableHeaders.timestamp') }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="failure in reportData.recent_failures || []" :key="failure.id">
                 <td>{{ failure.job_type }}</td>
-                <td>{{ failure.document_id || '-' }}</td>
+                <td>{{ failure.document_id || $t('common.na') }}</td>
                 <td class="error-text">{{ failure.error }}</td>
                 <td>{{ formatDate(failure.created_at) }}</td>
               </tr>
               <tr v-if="!reportData.recent_failures || reportData.recent_failures.length === 0">
-                <td colspan="4" class="text-center">No recent failures</td>
+                <td colspan="4" class="text-center">{{ $t('admin.reports.messages.noRecentFailures') }}</td>
               </tr>
             </tbody>
           </table>
@@ -539,16 +539,19 @@
       </div>
     </div>
     <div v-else-if="!loading" class="empty-state">
-      Select filters and click Generate to view report
+      {{ $t('admin.reports.messages.selectFiltersAndGenerate') }}
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { reportsAPI, usersAPI } from '../../services/api'
 import { StatusBadge, LineChart, BarChart, PieChart, DualLineChart } from '../../components'
 import { RefreshCw, Download } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const activeTab = ref('audit')
 const loading = ref(false)
@@ -556,12 +559,12 @@ const reportData = ref(null)
 const users = ref([])
 const currentPage = ref(1)
 
-const tabs = [
-  { id: 'audit', label: 'Audit Log' },
-  { id: 'usage', label: 'Usage Statistics' },
-  { id: 'workflow', label: 'Workflow SLA' },
-  { id: 'quality', label: 'Data Quality' }
-]
+const tabs = computed(() => [
+  { id: 'audit', label: t('admin.reports.tabs.auditLog') },
+  { id: 'usage', label: t('admin.reports.tabs.usageStatistics') },
+  { id: 'workflow', label: t('admin.reports.tabs.workflowSla') },
+  { id: 'quality', label: t('admin.reports.tabs.dataQuality') }
+])
 
 const filters = ref({
   date_from: null,
@@ -581,7 +584,7 @@ const auditTimelineData = computed(() => {
   return {
     labels: reportData.value.timeline_data.map(d => d.date),
     datasets: [{
-      label: 'Events',
+      label: t('admin.reports.chartLabels.events'),
       data: reportData.value.timeline_data.map(d => d.count),
       borderColor: 'rgb(75, 192, 192)',
       backgroundColor: 'rgba(75, 192, 192, 0.2)',
@@ -614,7 +617,7 @@ const auditTopActorsData = computed(() => {
   return {
     labels: reportData.value.top_actors.map(a => a.name),
     datasets: [{
-      label: 'Events',
+      label: t('admin.reports.chartLabels.events'),
       data: reportData.value.top_actors.map(a => a.count),
       backgroundColor: 'rgba(54, 162, 235, 0.6)'
     }]
@@ -626,7 +629,7 @@ const usageUploadsData = computed(() => {
   return {
     labels: reportData.value.time_series.map(d => d.date),
     datasets: [{
-      label: 'Uploads',
+      label: t('admin.reports.chartLabels.uploads'),
       data: reportData.value.time_series.map(d => d.uploads),
       borderColor: 'rgb(75, 192, 192)',
       backgroundColor: 'rgba(75, 192, 192, 0.2)',
@@ -639,9 +642,9 @@ const usageFoldersData = computed(() => {
   if (!reportData.value?.breakdown?.folders) return null
   const folders = reportData.value.breakdown.folders.slice(0, 10)
   return {
-    labels: folders.map(f => f.name || 'Root'),
+    labels: folders.map(f => f.name || t('admin.reports.messages.root')),
     datasets: [{
-      label: 'Size (bytes)',
+      label: t('admin.reports.chartLabels.sizeBytes'),
       data: folders.map(f => f.size),
       backgroundColor: 'rgba(54, 162, 235, 0.6)'
     }]
@@ -676,7 +679,7 @@ const workflowTemplateData = computed(() => {
   return {
     labels: reportData.value.approval_rates.by_template.map(t => t.template),
     datasets: [{
-      label: 'Approval Rate',
+      label: t('admin.reports.chartLabels.approvalRate'),
       data: reportData.value.approval_rates.by_template.map(t => (t.rate * 100).toFixed(1)),
       backgroundColor: 'rgba(75, 192, 192, 0.6)'
     }]
@@ -688,7 +691,7 @@ const workflowAssigneeData = computed(() => {
   return {
     labels: reportData.value.approval_rates.by_assignee.map(a => a.name),
     datasets: [{
-      label: 'Approval Rate',
+      label: t('admin.reports.chartLabels.approvalRate'),
       data: reportData.value.approval_rates.by_assignee.map(a => (a.rate * 100).toFixed(1)),
       backgroundColor: 'rgba(54, 162, 235, 0.6)'
     }]
@@ -698,7 +701,11 @@ const workflowAssigneeData = computed(() => {
 const workflowStateData = computed(() => {
   if (!reportData.value) return null
   return {
-    labels: ['Completed', 'Pending', 'Rejected'],
+    labels: [
+      t('admin.reports.workflowStates.completed'),
+      t('admin.reports.workflowStates.pending'),
+      t('admin.reports.workflowStates.rejected')
+    ],
     datasets: [{
       data: [
         reportData.value.completed || 0,
@@ -719,7 +726,7 @@ const workflowDurationData = computed(() => {
   return {
     labels: reportData.value.duration_distribution.map(d => d.range),
     datasets: [{
-      label: 'Count',
+      label: t('admin.reports.chartLabels.count'),
       data: reportData.value.duration_distribution.map(d => d.count),
       backgroundColor: 'rgba(153, 102, 255, 0.6)'
     }]
@@ -729,7 +736,11 @@ const workflowDurationData = computed(() => {
 const qualityFailureTypesData = computed(() => {
   if (!reportData.value) return null
   return {
-    labels: ['Embedding', 'OCR', 'Virus Scan'],
+    labels: [
+      t('admin.reports.failureTypes.embedding'),
+      t('admin.reports.failureTypes.ocr'),
+      t('admin.reports.failureTypes.virusScan')
+    ],
     datasets: [{
       data: [
         reportData.value.embedding_failures || 0,
@@ -758,7 +769,7 @@ const qualityFailureTimelineData = computed(() => {
   return {
     labels: Object.keys(grouped),
     datasets: [{
-      label: 'Failures',
+      label: t('admin.reports.chartLabels.failures'),
       data: Object.values(grouped),
       borderColor: 'rgb(255, 99, 132)',
       backgroundColor: 'rgba(255, 99, 132, 0.2)',
@@ -921,7 +932,7 @@ const generateReport = async () => {
   } catch (e) {
     console.error('Failed to generate report', e)
     if (window.$toast) {
-      window.$toast.show('Failed to generate report', 'error')
+      window.$toast.show(t('admin.reports.failedToGenerateReport'), 'error')
     }
   } finally {
     loading.value = false
@@ -951,12 +962,12 @@ const exportReport = async () => {
     window.URL.revokeObjectURL(url)
     
     if (window.$toast) {
-      window.$toast.show('Report exported', 'success')
+      window.$toast.show(t('admin.reports.reportExported'), 'success')
     }
   } catch (e) {
     console.error('Failed to export report', e)
     if (window.$toast) {
-      window.$toast.show('Failed to export report', 'error')
+      window.$toast.show(t('admin.reports.failedToExportReport'), 'error')
     }
   }
 }

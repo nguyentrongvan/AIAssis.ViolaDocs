@@ -2,16 +2,16 @@
   <div class="chatbot-page">
     <div class="particles-background"></div>
     <h1 class="page-header">
-      <span class="gradient-text">Chatbot Assistant</span>
+      <span class="gradient-text">{{ $t('chatbot.title') }}</span>
     </h1>
 
     <div class="chat-container">
       <div class="chat-sidebar glass">
         <div class="sidebar-section">
-          <h3>Document Groups</h3>
+          <h3>{{ $t('chatbot.documentGroups') }}</h3>
           <div class="group-selector">
             <select v-model="selectedGroup" @change="onGroupChange">
-              <option value="">All Documents</option>
+              <option value="">{{ $t('chatbot.allDocuments') }}</option>
               <option
                 v-for="group in accessibleGroups"
                 :key="group.id"
@@ -24,13 +24,13 @@
         </div>
 
         <div class="sidebar-section">
-          <h3>Filters</h3>
+          <h3>{{ $t('chatbot.filters') }}</h3>
           <div class="filter-group">
-            <label>Tags</label>
+            <label>{{ $t('chatbot.tags') }}</label>
             <input
               v-model="tagFilter"
               @keyup.enter="addTagFilter"
-              placeholder="Press Enter to add"
+              :placeholder="$t('chatbot.pressEnterToAdd')"
             />
             <div class="selected-tags">
               <span
@@ -44,26 +44,26 @@
             </div>
           </div>
           <div class="filter-group">
-            <label>Type</label>
+            <label>{{ $t('common.type') }}</label>
             <select v-model="filters.type">
-              <option value="">All Types</option>
-              <option value="application/pdf">PDF</option>
-              <option value="application/vnd.openxmlformats-officedocument.wordprocessingml.document">DOCX</option>
-              <option value="image/">Images</option>
+              <option value="">{{ $t('chatbot.allTypes') }}</option>
+              <option value="application/pdf">{{ $t('chatbot.fileTypePdf') }}</option>
+              <option value="application/vnd.openxmlformats-officedocument.wordprocessingml.document">{{ $t('chatbot.fileTypeDocx') }}</option>
+              <option value="image/">{{ $t('chatbot.images') }}</option>
             </select>
           </div>
           <div class="filter-group">
-            <label>Date From</label>
+            <label>{{ $t('chatbot.dateFrom') }}</label>
             <input v-model="filters.date_from" type="date" />
           </div>
           <div class="filter-group">
-            <label>Date To</label>
+            <label>{{ $t('chatbot.dateTo') }}</label>
             <input v-model="filters.date_to" type="date" />
           </div>
         </div>
 
         <div class="sidebar-section">
-          <h3>Source Documents</h3>
+          <h3>{{ $t('chatbot.availableDocuments') }}</h3>
           <div class="source-documents">
             <div class="document-search-wrapper">
               <div class="document-search-input">
@@ -71,20 +71,20 @@
                 <input
                   type="text"
                   v-model="documentSearchTerm"
-                  placeholder="Search documents..."
+                  :placeholder="$t('search.searchPlaceholder')"
                   class="document-search"
                 />
                 <button
                   v-if="documentSearchTerm"
                   @click="documentSearchTerm = ''"
                   class="search-clear-btn"
-                  title="Clear search"
+                  :title="$t('common.clear')"
                 >
                   <X :size="14" />
                 </button>
               </div>
               <div v-if="documentSearchTerm" class="search-results-info">
-                {{ filteredDocuments.length }} of {{ availableDocuments.length }} documents
+                {{ filteredDocuments.length }} {{ $t('common.of') }} {{ availableDocuments.length }} {{ $t('nav.documents') }}
               </div>
             </div>
             <div class="select-all-control">
@@ -94,7 +94,7 @@
                   v-model="selectAllDocuments"
                   @change="onSelectAllChange"
                 />
-                <span>Select All</span>
+                <span>{{ $t('chatbot.selectAll') }}</span>
               </label>
             </div>
             <div class="source-documents-list" v-if="filteredDocuments.length > 0">
@@ -118,10 +118,10 @@
                         <span 
                           v-if="!doc.has_embedding" 
                           class="no-embedding-badge"
-                          title="Document is not indexed. Vector search will not be used but the document can still be used."
+                          :title="$t('chatbot.notIndexedTooltip')"
                         >
                           <AlertTriangle :size="12" />
-                          Not indexed
+                          {{ $t('chatbot.notIndexed') }}
                         </span>
                       </div>
                     </div>
@@ -130,25 +130,25 @@
               </div>
             </div>
             <div v-else-if="loadingDocuments" class="loading-documents">
-              Loading documents...
+              {{ $t('common.loading') }}
             </div>
             <div v-else-if="documentSearchTerm && filteredDocuments.length === 0" class="empty-documents">
-              <div>No documents found matching "{{ documentSearchTerm }}"</div>
+              <div>{{ $t('search.noResults') }} "{{ documentSearchTerm }}"</div>
               <div style="font-size: 0.8rem; margin-top: 0.5rem; color: #999;">
-                Try a different search term
+                {{ $t('search.tryDifferent') }}
               </div>
             </div>
             <div v-else class="empty-documents">
-              <div>No documents available</div>
+              <div>{{ $t('chatbot.noDocumentsAvailable') }}</div>
               <div style="font-size: 0.8rem; margin-top: 0.5rem; color: #999;">
-                Total: {{ availableDocuments.length }} documents
+                {{ $t('common.total') }}: {{ availableDocuments.length }} {{ $t('nav.documents') }}
               </div>
             </div>
           </div>
         </div>
 
         <div class="sidebar-section">
-          <h3>Chat History</h3>
+          <h3>{{ $t('chatbot.chatHistory') }}</h3>
           <div class="chat-history">
             <div
               v-for="session in sessions"
@@ -158,14 +158,14 @@
               @click="loadSession(session.session_id || session.id)"
             >
               <div class="session-title">
-                {{ session.title || `Chat ${(session.session_id || session.id || '').slice(0, 8)}` }}
+                {{ session.title || $t('chatbot.newChat') + ' ' + (session.session_id || session.id || '').slice(0, 8) }}
               </div>
               <div class="session-date">
                 {{ formatDate(session.created_at) }}
               </div>
             </div>
             <div v-if="sessions.length === 0" class="empty-sessions">
-              No previous chats
+              {{ $t('chatbot.noPreviousChats') }}
             </div>
           </div>
         </div>
@@ -176,21 +176,21 @@
           <div class="session-info">
             <span v-if="currentSessionId" class="session-indicator">
               <Circle :size="8" />
-              Active Session
+              {{ $t('chatbot.activeSession') }}
             </span>
             <span v-else class="session-indicator new">
               <Circle :size="8" />
-              New Session
+              {{ $t('chatbot.newSession') }}
             </span>
           </div>
           <div class="chat-actions">
             <button @click="clearChat" class="btn-small">
               <Trash2 :size="16" />
-              Clear
+              {{ $t('common.clear') }}
             </button>
             <button @click="showHandoffModal = true" class="btn-small">
               <User :size="16" />
-              Handoff
+              {{ $t('chatbot.handoff') }}
             </button>
           </div>
         </div>
@@ -198,11 +198,11 @@
         <div class="messages" ref="messagesContainer">
           <div v-if="messages.length === 0" class="welcome-message">
             <div class="welcome-icon-wrapper">
-              <img src="/chatbot.png" alt="Chatbot" class="welcome-icon" />
+              <img src="/chatbot.png" :alt="$t('chatbot.altChatbot')" class="welcome-icon" />
               <div class="welcome-glow"></div>
             </div>
-            <h3 class="gradient-text">Ask me anything about your documents</h3>
-            <p>Select a document group and start asking questions</p>
+            <h3 class="gradient-text">{{ $t('chatbot.welcomeMessage') }}</h3>
+            <p>{{ $t('chatbot.welcomeSubmessage') }}</p>
           </div>
           <transition-group name="message" tag="div">
             <div
@@ -215,7 +215,7 @@
                   <User :size="20" />
                 </div>
                 <div v-else class="avatar-circle ai-avatar">
-                  <img src="/chatbot.png" alt="Chatbot" class="avatar-image" />
+                  <img src="/chatbot.png" :alt="$t('chatbot.altChatbot')" class="avatar-image" />
                   <div class="avatar-pulse"></div>
                 </div>
               </div>
@@ -226,7 +226,7 @@
                 <span>{{ formatResponseTime(msg.response_time) }}</span>
               </div>
               <div v-if="msg.citations && msg.citations.length > 0" class="citations">
-                <div class="citations-header">Sources:</div>
+                <div class="citations-header">{{ $t('chatbot.sources') }}:</div>
                 <div
                   v-for="(cite, citeIdx) in msg.citations"
                   :key="citeIdx"
@@ -237,10 +237,10 @@
                     class="citation-link"
                   >
                     <FileText :size="14" />
-                    {{ cite.title || cite.doc_title || `Document ${cite.document_id || cite.doc_id}` }}
+                    {{ cite.title || cite.doc_title || $t('nav.documents') + ' ' + (cite.document_id || cite.doc_id) }}
                   </a>
                   <span v-if="cite.score" class="citation-score">
-                    ({{ (cite.score * 100).toFixed(0) }}% match)
+                    ({{ (cite.score * 100).toFixed(0) }}% {{ $t('chatbot.match') }})
                   </span>
                   <div v-if="cite.snippet" class="citation-snippet">
                     {{ cite.snippet }}
@@ -251,14 +251,14 @@
                 <button
                   @click="submitFeedback(msg.id, 'positive')"
                   :class="['feedback-btn', { active: msg.feedback === 'positive' }]"
-                  title="Helpful"
+                  :title="$t('chatbot.helpful')"
                 >
                   <ThumbsUp :size="16" />
                 </button>
                 <button
                   @click="submitFeedback(msg.id, 'negative')"
                   :class="['feedback-btn', { active: msg.feedback === 'negative' }]"
-                  title="Not helpful"
+                  :title="$t('chatbot.notHelpful')"
                 >
                   <ThumbsDown :size="16" />
                 </button>
@@ -274,7 +274,7 @@
             <div v-if="sending" class="message assistant">
               <div class="message-avatar">
                 <div class="avatar-circle ai-avatar">
-                  <img src="/chatbot.png" alt="Chatbot" class="avatar-image" />
+                  <img src="/chatbot.png" :alt="$t('chatbot.altChatbot')" class="avatar-image" />
                   <div class="avatar-pulse animate-pulse"></div>
                 </div>
               </div>
@@ -294,10 +294,10 @@
             <button
               @click="requestSourceAccess"
               class="btn-link-small"
-              title="Request source document access"
+              :title="$t('chatbot.requestSourceAccess')"
             >
               <FileText :size="16" />
-              Request Sources
+              {{ $t('chatbot.requestSources') }}
             </button>
           </div>
           <div class="input-group">
@@ -305,7 +305,7 @@
               v-model="inputMessage"
               @keydown.enter.exact.prevent="sendMessage"
               @keydown.shift.enter.exact="inputMessage += '\n'"
-              placeholder="Ask about your documents..."
+              :placeholder="$t('chatbot.typeMessage')"
               class="chat-input"
               rows="2"
             ></textarea>
@@ -323,34 +323,34 @@
     </div>
 
     <!-- Handoff Modal -->
-    <Modal v-model:show="showHandoffModal" title="Handoff to Human Agent">
+    <Modal v-model:show="showHandoffModal" :title="$t('chatbot.handoffToHuman')">
       <div class="handoff-form">
         <div class="form-group">
-          <label>Reason</label>
+          <label>{{ $t('chatbot.reason') }}</label>
           <textarea
             v-model="handoffForm.reason"
-            placeholder="Why do you need human assistance?"
+            :placeholder="$t('chatbot.whyNeedAssistance')"
             rows="4"
           ></textarea>
         </div>
         <div class="form-group">
-          <label>Priority</label>
+          <label>{{ $t('chatbot.priority') }}</label>
           <select v-model="handoffForm.priority">
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="urgent">Urgent</option>
+            <option value="low">{{ $t('chatbot.low') }}</option>
+            <option value="medium">{{ $t('chatbot.medium') }}</option>
+            <option value="high">{{ $t('chatbot.high') }}</option>
+            <option value="urgent">{{ $t('chatbot.urgent') }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label>Context (will include chat history)</label>
+          <label>{{ $t('chatbot.context') }}</label>
           <input type="checkbox" v-model="handoffForm.include_context" checked />
         </div>
       </div>
       <template #footer>
-        <button @click="showHandoffModal = false" class="btn-secondary">Cancel</button>
+        <button @click="showHandoffModal = false" class="btn-secondary">{{ $t('common.cancel') }}</button>
         <button @click="submitHandoff" class="btn-primary" :disabled="!handoffForm.reason">
-          Submit Handoff
+          {{ $t('chatbot.submitHandoff') }}
         </button>
       </template>
     </Modal>
@@ -360,10 +360,13 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useChatStore } from '../store/chat'
 import { useGroupsStore } from '../store/groups'
 import { chatAPI, groupsAPI } from '../services/api'
 import { Modal } from '../components'
+
+const { t } = useI18n()
 import {
   MessageSquare,
   User,
@@ -539,7 +542,7 @@ const loadAvailableDocuments = async () => {
   } catch (e) {
     console.error('Failed to load available documents', e)
     if (window.$toast) {
-      window.$toast.show('Failed to load available documents', 'error')
+      window.$toast.show(t('chatbot.failedToLoadAvailableDocuments'), 'error')
     }
   } finally {
     loadingDocuments.value = false
@@ -637,7 +640,7 @@ const sendMessage = async () => {
     }
   } catch (e) {
     console.error('Chat failed', e)
-    const errorMsg = e.response?.data?.message || 'Sorry, I encountered an error. Please try again.'
+    const errorMsg = e.response?.data?.message || t('chatbot.chatError')
     messages.value.push({
       id: Date.now() + 1,
       role: 'assistant',
@@ -663,13 +666,13 @@ const loadSession = async (sessionId) => {
   } catch (e) {
     console.error('Failed to load session', e)
     if (window.$toast) {
-      window.$toast.show('Failed to load session', 'error')
+      window.$toast.show(t('chatbot.failedToLoadSession'), 'error')
     }
   }
 }
 
 const clearChat = () => {
-  if (confirm('Clear current chat?')) {
+  if (confirm(t('chatbot.clearChatConfirm'))) {
     messages.value = []
     currentSessionId.value = null
     chatStore.clearMessages()
@@ -689,12 +692,12 @@ const submitFeedback = async (messageId, rating) => {
       msg.feedback = rating
     }
     if (window.$toast) {
-      window.$toast.show('Feedback submitted', 'success')
+      window.$toast.show(t('chatbot.feedbackSubmitted'), 'success')
     }
   } catch (e) {
     console.error('Failed to submit feedback', e)
     if (window.$toast) {
-      window.$toast.show('Failed to submit feedback', 'error')
+      window.$toast.show(t('chatbot.failedToSubmitFeedback'), 'error')
     }
   }
 }
@@ -709,14 +712,14 @@ const submitHandoff = async () => {
       messages: handoffForm.value.include_context ? messages.value : []
     })
     if (window.$toast) {
-      window.$toast.show('Handoff submitted successfully', 'success')
+      window.$toast.show(t('chatbot.handoffSubmitted'), 'success')
     }
     showHandoffModal.value = false
     handoffForm.value = { reason: '', priority: 'medium', include_context: true }
   } catch (e) {
     console.error('Failed to submit handoff', e)
     if (window.$toast) {
-      window.$toast.show('Failed to submit handoff', 'error')
+      window.$toast.show(t('chatbot.failedToSubmitHandoff'), 'error')
     }
   }
 }
@@ -724,7 +727,7 @@ const submitHandoff = async () => {
 const requestSourceAccess = async () => {
   if (!currentSessionId.value) {
     if (window.$toast) {
-      window.$toast.show('Please start a chat session first', 'info')
+      window.$toast.show(t('chatbot.pleaseStartChatSession'), 'info')
     }
     return
   }
@@ -744,7 +747,7 @@ const requestSourceAccess = async () => {
   
   if (sourceIds.length === 0) {
     if (window.$toast) {
-      window.$toast.show('No sources available in current conversation', 'info')
+      window.$toast.show(t('chatbot.noSourcesAvailable'), 'info')
     }
     return
   }
@@ -757,13 +760,13 @@ const requestSourceAccess = async () => {
     if (res.is_success && res.data.sources) {
       // Show sources in a modal or sidebar
       if (window.$toast) {
-        window.$toast.show(`${res.data.sources.length} sources available`, 'success')
+        window.$toast.show(t('chatbot.sourcesAvailable', { count: res.data.sources.length }), 'success')
       }
     }
   } catch (e) {
     console.error('Failed to request source access', e)
     if (window.$toast) {
-      window.$toast.show('Failed to request source access', 'error')
+      window.$toast.show(t('chatbot.failedToRequestSourceAccess'), 'error')
     }
   }
 }
@@ -811,9 +814,9 @@ const formatResponseTime = (timeInSeconds) => {
   const ms = timeInSeconds * 1000
   
   if (ms < 1000) {
-    return `${Math.round(ms)}ms`
+    return `${Math.round(ms)}${t('chatbot.milliseconds')}`
   } else {
-    return `${timeInSeconds.toFixed(2)}s`
+    return `${timeInSeconds.toFixed(2)}${t('chatbot.seconds')}`
   }
 }
 </script>

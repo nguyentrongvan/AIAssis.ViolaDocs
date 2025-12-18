@@ -6,96 +6,97 @@
         <div class="logo-wrapper">
           <img src="/logo.png" alt="ViolaDocs" class="logo-img" />
         </div>
-        <div class="logo-tagline">AI-Powered Document Intelligence</div>
+        <div class="logo-tagline">{{ $t('common.tagline') }}</div>
       </div>
       <nav>
         <router-link to="/" :class="['nav-item', { 'router-link-active': isActiveRoute('/') }]" active-class="" exact-active-class="">
           <Library class="nav-icon" />
-          <span>Library</span>
+          <span>{{ $t('nav.library') }}</span>
         </router-link>
         <router-link to="/documents" :class="['nav-item', { 'router-link-active': isActiveRoute('/documents') }]" active-class="" exact-active-class="">
           <FileText class="nav-icon" />
-          <span>Documents</span>
+          <span>{{ $t('nav.documents') }}</span>
         </router-link>
         <router-link v-if="authStore.hasPermission('upload')" to="/upload" :class="['nav-item', { 'router-link-active': isActiveRoute('/upload') }]" active-class="" exact-active-class="">
           <Upload class="nav-icon" />
-          <span>Upload</span>
+          <span>{{ $t('nav.upload') }}</span>
         </router-link>
         <router-link v-if="authStore.hasPermission('scan')" to="/scan" :class="['nav-item', { 'router-link-active': isActiveRoute('/scan') }]" active-class="" exact-active-class="">
           <Scan class="nav-icon" />
-          <span>Scan Inbox</span>
+          <span>{{ $t('nav.scanInbox') }}</span>
         </router-link>
         <router-link v-if="authStore.hasPermission('folder')" to="/folders" :class="['nav-item', { 'router-link-active': isActiveRoute('/folders') }]" active-class="" exact-active-class="">
           <Folder class="nav-icon" />
-          <span>Folders</span>
+          <span>{{ $t('nav.folders') }}</span>
         </router-link>
         <router-link v-if="authStore.hasPermission('search')" to="/search" :class="['nav-item', { 'router-link-active': isActiveRoute('/search') }]" active-class="" exact-active-class="">
           <Search class="nav-icon" />
-          <span>Search</span>
+          <span>{{ $t('nav.search') }}</span>
         </router-link>
         <router-link v-if="authStore.hasPermission('delete')" to="/recycle-bin" :class="['nav-item', { 'router-link-active': isActiveRoute('/recycle-bin') }]" active-class="" exact-active-class="">
           <Trash2 class="nav-icon" />
-          <span>Recycle Bin</span>
+          <span>{{ $t('nav.recycleBin') }}</span>
         </router-link>
         <router-link to="/tasks" :class="['nav-item', { 'router-link-active': isActiveRoute('/tasks') }]" active-class="" exact-active-class="">
           <CheckSquare class="nav-icon" />
-          <span>Tasks</span>
+          <span>{{ $t('nav.tasks') }}</span>
         </router-link>
         <router-link v-if="authStore.hasPermission('chat')" to="/chatbot" :class="['nav-item', { 'router-link-active': isActiveRoute('/chatbot') }]" active-class="" exact-active-class="">
           <MessageSquare class="nav-icon" />
-          <span>Chatbot</span>
+          <span>{{ $t('nav.chatbot') }}</span>
         </router-link>
         <template v-if="authStore.isAdmin || authStore.isStaff || authStore.hasPermission('user') || authStore.hasPermission('settings') || authStore.hasPermission('reports')">
-          <div class="nav-divider">Admin</div>
+          <div class="nav-divider">{{ $t('nav.admin') }}</div>
           <router-link v-if="authStore.isAdmin || authStore.isStaff || authStore.hasPermission('user')" to="/admin/users" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/users') }]" active-class="" exact-active-class="">
             <Users class="nav-icon" />
-            <span>Users</span>
+            <span>{{ $t('nav.users') }}</span>
           </router-link>
           <router-link v-if="authStore.isAdmin || authStore.isStaff" to="/admin/devices" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/devices') }]" active-class="" exact-active-class="">
             <Printer class="nav-icon" />
-            <span>Devices</span>
+            <span>{{ $t('nav.devices') }}</span>
           </router-link>
           <router-link v-if="authStore.isAdmin || authStore.isStaff" to="/admin/groups" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/groups') }]" active-class="" exact-active-class="">
             <Folder class="nav-icon" />
-            <span>Groups</span>
+            <span>{{ $t('nav.groups') }}</span>
           </router-link>
           <router-link v-if="authStore.isAdmin || authStore.isStaff || authStore.hasPermission('settings')" to="/admin/settings" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/settings') }]" active-class="" exact-active-class="">
             <Settings class="nav-icon" />
-            <span>Settings</span>
+            <span>{{ $t('nav.settings') }}</span>
           </router-link>
           <router-link v-if="authStore.isAdmin || authStore.isStaff || authStore.hasPermission('reports')" to="/admin/reports" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/reports') }]" active-class="" exact-active-class="">
             <BarChart3 class="nav-icon" />
-            <span>Reports</span>
+            <span>{{ $t('nav.reports') }}</span>
           </router-link>
           <router-link v-if="authStore.isAdmin || authStore.isStaff" to="/admin/roles" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/roles') }]" active-class="" exact-active-class="">
             <Shield class="nav-icon" />
-            <span>Roles</span>
+            <span>{{ $t('nav.roles') }}</span>
           </router-link>
           <router-link v-if="authStore.isAdmin || authStore.isStaff" to="/admin/ai-jobs" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/ai-jobs') }]" active-class="" exact-active-class="">
             <Activity class="nav-icon" />
-            <span>AI Jobs</span>
+            <span>{{ $t('nav.aiJobs') }}</span>
           </router-link>
         </template>
         <template v-if="authStore.isMaintainer">
-          <div class="nav-divider">Maintainer</div>
+          <div class="nav-divider">{{ $t('nav.maintainer') }}</div>
           <router-link to="/admin/system-config" :class="['nav-item', { 'router-link-active': isActiveRoute('/admin/system-config') }]" active-class="" exact-active-class="">
             <Settings class="nav-icon" />
-            <span>System Config</span>
+            <span>{{ $t('nav.systemConfig') }}</span>
           </router-link>
         </template>
       </nav>
+      <LanguageSelector />
       <div class="user-menu">
         <div class="user-info">
           <div :class="['user-avatar', getUserRoleColor]">
             <User class="user-icon" />
           </div>
           <div class="user-details">
-            <span class="user-name">{{ authStore.user?.name || 'User' }}</span>
+            <span class="user-name">{{ authStore.user?.name || $t('common.user') }}</span>
             <span class="user-role">{{ authStore.user?.role || 'user' }}</span>
           </div>
           <button @click="handleLogout" class="btn-link">
             <LogOut class="logout-icon" />
-            <span>Logout</span>
+            <span>{{ $t('common.logout') }}</span>
           </button>
         </div>
       </div>
@@ -115,6 +116,7 @@
 import { onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../store/auth'
+import LanguageSelector from './LanguageSelector.vue'
 import {
   Library,
   Upload,
@@ -406,6 +408,8 @@ nav {
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.05);
   transition: all var(--transition-base);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .user-info:hover {
@@ -476,10 +480,11 @@ nav {
 
 .user-details {
   flex: 1;
-  min-width: 0;
+  min-width: 0; /* Allow flex item to shrink below content size */
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow: hidden;
 }
 
 .user-name {
@@ -488,6 +493,7 @@ nav {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .user-role {
@@ -509,6 +515,9 @@ nav {
   border-radius: var(--radius-md);
   transition: all var(--transition-base);
   font-weight: 500;
+  flex-shrink: 0; /* Prevent logout button from shrinking */
+  white-space: nowrap; /* Prevent text wrapping */
+  margin-left: auto; /* Push logout button to the right */
 }
 
 .btn-link:hover {

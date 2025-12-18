@@ -5,31 +5,31 @@
         <div class="icon-wrapper">
           <Scan class="coming-soon-icon" />
         </div>
-        <h1 class="coming-soon-title">Scan Inbox</h1>
-        <p class="coming-soon-subtitle">Coming Soon</p>
+        <h1 class="coming-soon-title">{{ $t('scan.title') }}</h1>
+        <p class="coming-soon-subtitle">{{ $t('scan.comingSoon') }}</p>
         <p class="coming-soon-description">
-          The automatic scan feature is under development. You will be able to:
+          {{ $t('scan.description') }}
         </p>
         <ul class="feature-list">
           <li>
             <CheckCircle class="feature-icon" />
-            <span>Receive and manage documents automatically scanned from scanners</span>
+            <span>{{ $t('scan.feature1') }}</span>
           </li>
           <li>
             <CheckCircle class="feature-icon" />
-            <span>Preview and process scanned documents</span>
+            <span>{{ $t('scan.feature2') }}</span>
           </li>
           <li>
             <CheckCircle class="feature-icon" />
-            <span>Assign documents to users or folders</span>
+            <span>{{ $t('scan.feature3') }}</span>
           </li>
           <li>
             <CheckCircle class="feature-icon" />
-            <span>Track scan status and history</span>
+            <span>{{ $t('scan.feature4') }}</span>
           </li>
         </ul>
         <div class="coming-soon-footer">
-          <p class="footer-text">This feature will be available soon in the next version.</p>
+          <p class="footer-text">{{ $t('scan.footerText') }}</p>
         </div>
       </div>
     </div>
@@ -37,7 +37,10 @@
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
 import { Scan, CheckCircle } from 'lucide-vue-next'
+
+const { t } = useI18n()
 </script>
 
 <style scoped>

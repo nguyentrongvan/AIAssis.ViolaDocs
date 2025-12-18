@@ -7,19 +7,19 @@
           <img src="/logo.png" alt="ViolaDocs" class="logo-img" />
           <h1 class="logo-text gradient-text">ViolaDocs</h1>
         </div>
-        <p class="tagline">AI-Powered Document Intelligence</p>
+        <p class="tagline">{{ $t('login.tagline') }}</p>
       </div>
       <form @submit.prevent="handleLogin">
         <div class="form-group">
-          <label>Email</label>
+          <label>{{ $t('login.email') }}</label>
           <input v-model="email" type="email" required />
         </div>
         <div class="form-group">
-          <label>Password</label>
+          <label>{{ $t('login.password') }}</label>
           <input v-model="password" type="password" required />
         </div>
         <button type="submit" :disabled="loading" class="btn-primary">
-          {{ loading ? 'Logging in...' : 'Login' }}
+          {{ loading ? $t('login.loggingIn') : $t('login.title') }}
         </button>
         <p v-if="error" class="error">{{ error }}</p>
       </form>
@@ -30,7 +30,10 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../store/auth'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -47,7 +50,7 @@ const handleLogin = async () => {
     await authStore.login(email.value, password.value)
     router.push('/')
   } catch (e) {
-    error.value = e.message || 'Login failed'
+    error.value = e.message || t('login.loginFailed')
   } finally {
     loading.value = false
   }

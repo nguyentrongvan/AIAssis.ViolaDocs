@@ -1,17 +1,17 @@
 <template>
   <div class="folders-page">
     <div class="page-header">
-      <h1>Folders</h1>
+      <h1>{{ $t('folders.title') }}</h1>
       <button @click="showCreateModal = true" class="btn-primary">
         <FolderPlus :size="20" />
-        New Folder
+        {{ $t('folders.createFolder') }}
       </button>
     </div>
 
     <div class="folders-content">
       <div class="folders-sidebar">
         <div class="sidebar-section">
-          <h3>All Folders</h3>
+          <h3>{{ $t('folders.allFolders') }}</h3>
           <FolderTree
             v-if="hasFolders"
             :folders="folderTree"
@@ -20,32 +20,32 @@
           />
           <div v-else-if="!isLoading" class="empty-folders">
             <Folder :size="32" />
-            <p>No folders yet. Create your first folder.</p>
+            <p>{{ $t('folders.noFoldersYet') }}</p>
           </div>
-          <div v-else class="loading-state">Loading folders...</div>
+          <div v-else class="loading-state">{{ $t('folders.loadingFolders') }}</div>
         </div>
       </div>
 
       <div class="folders-main">
         <div v-if="selectedFolder" class="folder-detail">
           <div class="folder-header">
-            <h2>{{ selectedFolder.name || 'Unnamed Folder' }}</h2>
+            <h2>{{ selectedFolder.name || $t('folders.unnamedFolder') }}</h2>
             <div class="folder-actions">
               <button @click="openShareModal(selectedFolder)" class="btn-secondary">
                 <Share2 :size="16" />
-                Share
+                {{ $t('common.share') }}
               </button>
               <button @click="openAddDocumentsModal" class="btn-secondary">
                 <FilePlus :size="16" />
-                Add Documents
+                {{ $t('folders.addDocuments') }}
               </button>
               <button @click="editFolder(selectedFolder)" class="btn-secondary">
                 <Edit :size="16" />
-                Edit
+                {{ $t('common.edit') }}
               </button>
               <button @click="deleteFolder(selectedFolder)" class="btn-danger">
                 <Trash2 :size="16" />
-                Delete
+                {{ $t('common.delete') }}
               </button>
             </div>
           </div>
@@ -53,13 +53,13 @@
             {{ selectedFolder.description }}
           </div>
           <div class="folder-meta">
-            <span>Documents: {{ documentsList.length }}</span>
-            <span>Created: {{ formatDate(selectedFolder.created_at) }}</span>
+            <span>{{ $t('folders.documents') }}: {{ documentsList.length }}</span>
+            <span>{{ $t('folders.created') }}: {{ formatDate(selectedFolder.created_at) }}</span>
           </div>
           <div class="documents-list">
-            <h3>Documents in this folder</h3>
+            <h3>{{ $t('folders.documentsInFolder') }}</h3>
             <div v-if="documentsList.length === 0" class="empty-state">
-              No documents in this folder
+              {{ $t('folders.noDocumentsInFolder') }}
             </div>
             <div v-else class="documents-grid">
               <div
@@ -68,7 +68,7 @@
                 class="document-card"
                 @click="viewDocument(doc.id)"
               >
-                <h4>{{ doc.title || 'Untitled Document' }}</h4>
+                <h4>{{ doc.title || $t('documents.untitledDocument') }}</h4>
                 <div class="document-meta">
                   <StatusBadge :status="doc.status || 'unknown'" />
                   <span>{{ formatSize(doc.size) }}</span>
@@ -80,7 +80,7 @@
         </div>
         <div v-else class="empty-state">
           <Folder :size="48" />
-          <p>Select a folder to view its contents</p>
+          <p>{{ $t('folders.selectFolderToView') }}</p>
         </div>
       </div>
     </div>
@@ -88,44 +88,44 @@
     <!-- Create/Edit Folder Modal -->
     <Modal v-model:show="showCreateModal" :title="modalTitle">
       <div class="form-group">
-        <label>Name *</label>
+        <label>{{ $t('folders.name') }} *</label>
         <input v-model="folderForm.name" required />
       </div>
       <div class="form-group">
-        <label>Parent Folder</label>
+        <label>{{ $t('folders.parentFolder') }}</label>
         <select v-model="folderForm.parent_id">
-          <option :value="null">None (Root)</option>
+          <option :value="null">{{ $t('folders.none') }}</option>
           <option v-for="f in allFolders" :key="f.id" :value="f.id">
-            {{ f.name || 'Unnamed Folder' }}
+            {{ f.name || $t('folders.unnamedFolder') }}
           </option>
         </select>
       </div>
       <div class="form-group">
-        <label>Description</label>
+        <label>{{ $t('folders.description') }}</label>
         <textarea v-model="folderForm.description" rows="3"></textarea>
       </div>
       <template #footer>
         <button type="button" @click="showCreateModal = false" class="btn-secondary">
-          Cancel
+          {{ $t('common.cancel') }}
         </button>
-        <button type="button" @click="saveFolder" class="btn-primary">Save</button>
+        <button type="button" @click="saveFolder" class="btn-primary">{{ $t('common.save') }}</button>
       </template>
     </Modal>
 
     <!-- Share Folder Modal -->
-    <Modal v-model:show="showShareModal" title="Share Folder" size="large">
+    <Modal v-model:show="showShareModal" :title="$t('folders.shareFolder')" size="large">
       <div v-if="selectedFolder">
         <div class="share-section">
-          <h4>Share with Users</h4>
+          <h4>{{ $t('folders.shareWithUsers') }}</h4>
           <div class="share-input-group">
             <input
               v-model="shareUserEmail"
               type="email"
-              placeholder="Enter user email"
+              :placeholder="$t('folders.enterUserEmail')"
               @keyup.enter="addShareUser"
               class="share-input"
             />
-            <button @click="addShareUser" class="btn-primary">Add</button>
+            <button @click="addShareUser" class="btn-primary">{{ $t('common.add') }}</button>
           </div>
           <div v-if="shareForm.user_emails.length > 0" class="share-list">
             <div v-for="(email, idx) in shareForm.user_emails" :key="idx" class="share-item">
@@ -136,15 +136,15 @@
         </div>
 
         <div class="share-section">
-          <h4>Share with Roles</h4>
+          <h4>{{ $t('folders.shareWithRoles') }}</h4>
           <div class="share-input-group">
             <select v-model="shareRoleId" class="share-select">
-              <option :value="null">Select a role</option>
+              <option :value="null">{{ $t('folders.selectRole') }}</option>
               <option v-for="role in roles" :key="role.id" :value="role.id">
                 {{ role.name }}
               </option>
             </select>
-            <button @click="addShareRole" class="btn-primary">Add</button>
+            <button @click="addShareRole" class="btn-primary">{{ $t('common.add') }}</button>
           </div>
           <div v-if="shareForm.role_ids.length > 0" class="share-list">
             <div v-for="(roleId, idx) in shareForm.role_ids" :key="idx" class="share-item">
@@ -155,47 +155,47 @@
         </div>
 
         <div class="form-group">
-          <label>Expiration Date (Optional)</label>
+          <label>{{ $t('folders.expirationDate') }}</label>
           <input v-model="shareForm.expires_at" type="datetime-local" />
         </div>
 
         <div v-if="folderShares.length > 0" class="share-section">
-          <h4>Current Shares</h4>
+          <h4>{{ $t('folders.currentShares') }}</h4>
           <div class="shares-list">
             <div v-for="share in folderShares" :key="share.id" class="share-item">
               <div class="share-info">
-                <span class="share-type">{{ share.target_type }}</span>
+                <span class="share-type">{{ share.target_type === 'user' ? $t('folders.shareTypeUser') : $t('folders.shareTypeRole') }}</span>
                 <span v-if="share.target_email">{{ share.target_email }}</span>
                 <span v-else-if="share.target_role_name">{{ share.target_role_name }}</span>
                 <span v-if="share.expires_at" class="share-expires">
-                  Expires: {{ formatDate(share.expires_at) }}
+                  {{ $t('folders.expires') }}: {{ formatDate(share.expires_at) }}
                 </span>
-                <span v-else class="share-expires">No expiration</span>
+                <span v-else class="share-expires">{{ $t('folders.noExpiration') }}</span>
               </div>
-              <button @click="removeShare(share.id)" class="btn-danger-small">Remove</button>
+              <button @click="removeShare(share.id)" class="btn-danger-small">{{ $t('common.remove') }}</button>
             </div>
           </div>
         </div>
       </div>
       <template #footer>
         <button type="button" @click="showShareModal = false" class="btn-secondary">
-          Close
+          {{ $t('common.close') }}
         </button>
-        <button type="button" @click="saveShares" class="btn-primary">Save Shares</button>
+        <button type="button" @click="saveShares" class="btn-primary">{{ $t('folders.saveShares') }}</button>
       </template>
     </Modal>
 
     <!-- Add Documents Modal -->
-    <Modal v-model:show="showAddDocumentsModal" title="Add Documents to Folder">
+    <Modal v-model:show="showAddDocumentsModal" :title="$t('folders.addDocumentsToFolder')">
       <div v-if="selectedFolder">
         <div class="form-group">
-          <label class="form-label-large">Select Documents</label>
-          <p class="form-hint">Choose documents to add to folder "{{ selectedFolder.name }}"</p>
+          <label class="form-label-large">{{ $t('folders.selectDocuments') }}</label>
+          <p class="form-hint">{{ $t('folders.chooseDocumentsToAdd', { name: selectedFolder.name }) }}</p>
           <div class="documents-selector">
             <div v-if="availableDocuments.length === 0" class="empty-documents-state">
               <FileText :size="48" class="empty-icon" />
-              <p class="empty-title">No documents available</p>
-              <p class="empty-description">All documents are already in this folder or you don't have access to any documents.</p>
+              <p class="empty-title">{{ $t('folders.noDocumentsAvailable') }}</p>
+              <p class="empty-description">{{ $t('folders.allDocumentsInFolderOrNoAccess') }}</p>
             </div>
             <div v-else class="documents-checkbox-list">
               <label
@@ -216,7 +216,7 @@
                 <div class="document-info">
                   <div class="document-title-row">
                     <FileText :size="18" class="doc-icon" />
-                    <span class="document-title">{{ doc.title || 'Untitled Document' }}</span>
+                    <span class="document-title">{{ doc.title || $t('documents.untitledDocument') }}</span>
                   </div>
                   <div class="document-meta-row">
                     <span class="doc-size">{{ formatSize(doc.size) }}</span>
@@ -232,7 +232,7 @@
       </div>
       <template #footer>
         <button type="button" @click="showAddDocumentsModal = false" class="btn-secondary">
-          Cancel
+          {{ $t('common.cancel') }}
         </button>
         <button 
           type="button" 
@@ -241,7 +241,7 @@
           :disabled="selectedDocumentIds.length === 0"
         >
           <FilePlus :size="16" />
-          Add {{ selectedDocumentIds.length }} Document{{ selectedDocumentIds.length !== 1 ? 's' : '' }}
+          {{ $t('folders.add', { count: selectedDocumentIds.length }) }}
         </button>
       </template>
     </Modal>
@@ -251,8 +251,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useFoldersStore } from '../store/folders'
 import { useRolesStore } from '../store/roles'
+
+const { t } = useI18n()
 import { foldersAPI, documentsAPI } from '../services/api'
 import { FolderTree, Modal, StatusBadge } from '../components'
 import { Folder, FolderPlus, Edit, Trash2, Share2, FilePlus, FileText } from 'lucide-vue-next'
@@ -303,7 +306,7 @@ const selectedFolderId = computed(() => {
   return selectedFolder.value ? selectedFolder.value.id : null
 })
 const modalTitle = computed(() => {
-  return editingFolder.value ? 'Edit Folder' : 'Create Folder'
+  return editingFolder.value ? t('folders.editFolder') : t('folders.createFolder')
 })
 const documentsList = computed(() => {
   return Array.isArray(folderDocuments.value) ? folderDocuments.value : []
@@ -353,20 +356,20 @@ const saveFolder = async () => {
     folderForm.value = { name: '', parent_id: null, description: '' }
     if (window.$toast) {
       window.$toast.show(
-        editingFolder.value ? 'Folder updated' : 'Folder created',
+        editingFolder.value ? t('folders.folderUpdated') : t('folders.folderCreated'),
         'success'
       )
     }
   } catch (e) {
     console.error('Failed to save folder', e)
     if (window.$toast) {
-      window.$toast.show('Failed to save folder', 'error')
+      window.$toast.show(t('folders.failedToSaveFolder'), 'error')
     }
   }
 }
 
 const deleteFolder = async (folder) => {
-  if (confirm(`Delete folder "${folder.name}"?`)) {
+  if (confirm(t('folders.deleteFolderConfirm', { name: folder.name }))) {
     try {
       await foldersStore.deleteFolder(folder.id)
       if (selectedFolder.value?.id === folder.id) {
@@ -374,12 +377,12 @@ const deleteFolder = async (folder) => {
         folderDocuments.value = []
       }
       if (window.$toast) {
-        window.$toast.show('Folder deleted', 'success')
+        window.$toast.show(t('folders.folderDeleted'), 'success')
       }
     } catch (e) {
       console.error('Failed to delete folder', e)
       if (window.$toast) {
-        window.$toast.show('Failed to delete folder', 'error')
+        window.$toast.show(t('folders.failedToDeleteFolder'), 'error')
       }
     }
   }
@@ -390,11 +393,11 @@ const viewDocument = (id) => {
 }
 
 const formatDate = (dateStr) => {
-  if (!dateStr) return 'N/A'
+  if (!dateStr) return t('common.na')
   try {
     return new Date(dateStr).toLocaleDateString()
   } catch (e) {
-    return 'N/A'
+    return t('common.na')
   }
 }
 
@@ -456,7 +459,7 @@ const removeShareRole = (index) => {
 
 const getRoleName = (roleId) => {
   const role = roles.value.find(r => r.id === roleId)
-  return role ? role.name : `Role ${roleId}`
+  return role ? role.name : t('folders.roleFallback', { id: roleId })
 }
 
 const saveShares = async () => {
@@ -478,7 +481,7 @@ const saveShares = async () => {
     if (res.is_success) {
       await loadFolderShares(selectedFolder.value.id)
       if (window.$toast) {
-        window.$toast.show('Folder shared successfully', 'success')
+        window.$toast.show(t('folders.folderShared'), 'success')
       }
       shareForm.value = {
         user_emails: [],
@@ -491,7 +494,7 @@ const saveShares = async () => {
   } catch (e) {
     console.error('Failed to share folder', e)
     if (window.$toast) {
-      window.$toast.show('Failed to share folder', 'error')
+      window.$toast.show(t('folders.failedToShareFolder'), 'error')
     }
   }
 }
@@ -499,17 +502,17 @@ const saveShares = async () => {
 const removeShare = async (shareId) => {
   if (!selectedFolder.value) return
   
-  if (confirm('Remove this share?')) {
+  if (confirm(t('folders.removeShareConfirm'))) {
     try {
       await foldersAPI.deleteShare(selectedFolder.value.id, shareId)
       await loadFolderShares(selectedFolder.value.id)
       if (window.$toast) {
-        window.$toast.show('Share removed', 'success')
+        window.$toast.show(t('folders.shareRemoved'), 'success')
       }
     } catch (e) {
       console.error('Failed to remove share', e)
       if (window.$toast) {
-        window.$toast.show('Failed to remove share', 'error')
+        window.$toast.show(t('folders.failedToRemoveShare'), 'error')
       }
     }
   }
@@ -562,7 +565,7 @@ const openAddDocumentsModal = async () => {
   } catch (e) {
     console.error('Failed to load documents', e)
     if (window.$toast) {
-      window.$toast.show('Failed to load documents', 'error')
+      window.$toast.show(t('folders.failedToLoadDocuments'), 'error')
     }
     availableDocuments.value = []
   }
@@ -592,15 +595,15 @@ const moveDocumentsToFolder = async () => {
     
     if (window.$toast) {
       if (failCount === 0) {
-        window.$toast.show(`${successCount} document(s) added to folder`, 'success')
+        window.$toast.show(t('folders.documentsAddedToFolder', { count: successCount }), 'success')
       } else {
-        window.$toast.show(`${successCount} added, ${failCount} failed`, 'warning')
+        window.$toast.show(t('folders.documentsAddedWithFailures', { success: successCount, fail: failCount }), 'warning')
       }
     }
   } catch (e) {
     console.error('Failed to move documents', e)
     if (window.$toast) {
-      window.$toast.show('Failed to add documents', 'error')
+      window.$toast.show(t('folders.failedToAddDocuments'), 'error')
     }
   }
 }

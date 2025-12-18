@@ -1,10 +1,12 @@
 <template>
   <span :class="['status-badge', `status-${status}`]">
-    {{ label || status }}
+    {{ label || getStatusLabel(status) }}
   </span>
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
+
 const props = defineProps({
   status: {
     type: String,
@@ -15,6 +17,15 @@ const props = defineProps({
     default: null
   }
 })
+
+const { t } = useI18n()
+
+const getStatusLabel = (status) => {
+  const statusKey = `status.${status.toLowerCase()}`
+  const translated = t(statusKey)
+  // If translation exists (not the same as key), use it, otherwise use status as-is
+  return translated !== statusKey ? translated : status
+}
 </script>
 
 <style scoped>

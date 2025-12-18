@@ -1,15 +1,15 @@
 <template>
   <div class="system-config-page">
     <div class="page-header">
-      <h1>System Configuration</h1>
+      <h1>{{ $t('admin.systemConfig.title') }}</h1>
       <div class="header-actions">
         <button @click="refreshConfig" class="btn-secondary" :disabled="loading">
           <RefreshCw :size="16" :class="{ 'spinning': loading }" />
-          Refresh
+          {{ $t('common.refresh') }}
         </button>
         <button @click="saveAll" class="btn-primary" :disabled="loading || !hasChanges">
           <Save :size="16" />
-          Save All Changes
+          {{ $t('admin.systemConfig.saveAllChanges') }}
         </button>
       </div>
     </div>
@@ -27,14 +27,13 @@
     <div class="config-warning">
       <AlertTriangle :size="20" />
       <div>
-        <strong>Warning:</strong> Changes to system configuration require server restart to take effect.
-        Sensitive values (passwords, API keys) are masked for security.
+        <strong>{{ $t('admin.systemConfig.warning') }}:</strong> {{ $t('admin.systemConfig.warningMessage') }}
       </div>
     </div>
 
     <div v-if="loading && !config" class="loading-state">
       <Loader2 :size="32" class="spinning" />
-      <p>Loading configuration...</p>
+      <p>{{ $t('admin.systemConfig.loadingConfiguration') }}</p>
     </div>
 
     <div v-else class="config-content">
@@ -64,7 +63,7 @@
             >
               <div class="config-item-header">
                 <label :for="`config-${key}`">{{ formatKey(key) }}</label>
-                <span v-if="item.sensitive" class="sensitive-badge">Sensitive</span>
+                <span v-if="item.sensitive" class="sensitive-badge">{{ $t('admin.systemConfig.sensitive') }}</span>
               </div>
               <div class="config-item-input">
                 <input
@@ -73,7 +72,7 @@
                   :type="item.type === 'integer' ? 'number' : 'text'"
                   v-model="editedConfig[key]"
                   :disabled="item.sensitive && item.value === '***'"
-                  :placeholder="item.sensitive ? 'Enter new value to update' : ''"
+                  :placeholder="item.sensitive ? $t('admin.systemConfig.enterNewValueToUpdate') : ''"
                   class="config-input"
                   @input="markChanged(key)"
                 />
@@ -84,13 +83,13 @@
                   class="config-input"
                   @change="markChanged(key)"
                 >
-                  <option :value="true">True</option>
-                  <option :value="false">False</option>
+                  <option :value="true">{{ $t('admin.systemConfig.true') }}</option>
+                  <option :value="false">{{ $t('admin.systemConfig.false') }}</option>
                 </select>
                 <div v-else class="config-value-display">{{ item.value }}</div>
               </div>
               <div v-if="item.sensitive && item.value === '***'" class="config-hint">
-                Current value is hidden. Enter new value to update.
+                {{ $t('admin.systemConfig.currentValueHiddenHint') }}
               </div>
             </div>
           </div>
@@ -102,10 +101,13 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { systemConfigAPI } from '../../services/api'
 import {
   RefreshCw, Save, AlertCircle, CheckCircle, AlertTriangle, Loader2
 } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const config = ref(null)
 const editedConfig = ref({})
@@ -166,7 +168,7 @@ const loadConfig = async () => {
     }
   } catch (e) {
     console.error('Failed to load config', e)
-    error.value = e.response?.data?.message || 'Failed to load configuration'
+    error.value = e.response?.data?.message || t('admin.systemConfig.failedToLoadConfiguration')
   } finally {
     loading.value = false
   }
@@ -200,15 +202,15 @@ const saveAll = async () => {
     
     const res = await systemConfigAPI.updateBulk(configsToUpdate)
     if (res.is_success) {
-      success.value = `Successfully updated ${res.data.updated_keys.length} configuration(s). Server restart required.`
+      success.value = t('admin.systemConfig.successfullyUpdated', { count: res.data.updated_keys.length })
       changedKeys.value.clear()
       await loadConfig() // Reload to get updated values
     } else {
-      error.value = res.message || 'Failed to update configuration'
+      error.value = res.message || t('admin.systemConfig.failedToUpdateConfiguration')
     }
   } catch (e) {
     console.error('Failed to save config', e)
-    error.value = e.response?.data?.message || 'Failed to save configuration'
+    error.value = e.response?.data?.message || t('admin.systemConfig.failedToSaveConfiguration')
   } finally {
     loading.value = false
   }

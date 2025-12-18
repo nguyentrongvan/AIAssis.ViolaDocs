@@ -1,32 +1,32 @@
 <template>
   <div class="recycle-bin-page">
     <div class="page-header">
-      <h1>Recycle Bin</h1>
+      <h1>{{ $t('recycleBin.title') }}</h1>
     </div>
 
     <!-- Filters -->
     <div class="filters-bar">
       <div class="filter-group">
-        <label>Search</label>
+        <label>{{ $t('common.search') }}</label>
         <input
           v-model="filters.search"
           @keyup.enter="loadDocuments"
-          placeholder="Search deleted documents..."
+          :placeholder="$t('recycleBin.title')"
           class="search-input"
         />
       </div>
       <button @click="loadDocuments" class="btn-secondary">
         <Search :size="16" />
-        Filter
+        {{ $t('common.filter') }}
       </button>
       <button @click="clearFilters" class="btn-clear">
         <X :size="16" />
-        Clear
+        {{ $t('common.clear') }}
       </button>
     </div>
 
     <!-- Loading State -->
-    <div v-if="loading" class="loading">Loading deleted documents...</div>
+    <div v-if="loading" class="loading">{{ $t('common.loading') }}</div>
 
     <!-- Documents Table -->
     <div v-else-if="documents.length > 0" class="documents-content">
@@ -34,15 +34,15 @@
         <table>
           <thead>
             <tr>
-              <th>Title</th>
-              <th>Status</th>
-              <th>Size</th>
-              <th>Folder</th>
-              <th>Deleted By</th>
-              <th>Deleted At</th>
-              <th>Purge At</th>
-              <th>Days Until Purge</th>
-              <th>Actions</th>
+              <th>{{ $t('common.title') }}</th>
+              <th>{{ $t('common.status') }}</th>
+              <th>{{ $t('common.size') }}</th>
+              <th>{{ $t('common.folder') }}</th>
+              <th>{{ $t('recycleBin.deletedBy') }}</th>
+              <th>{{ $t('recycleBin.deletedAt') }}</th>
+              <th>{{ $t('recycleBin.purgeAt') }}</th>
+              <th>{{ $t('recycleBin.daysUntilPurge') }}</th>
+              <th>{{ $t('common.actions') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -62,24 +62,24 @@
                     >
                       {{ getDocumentTypeLabel(doc) }}
                     </span>
-                    <span class="table-title-text">{{ doc.title || 'Untitled Document' }}</span>
+                    <span class="table-title-text">{{ doc.title || $t('documents.untitledDocument') }}</span>
                   </div>
                 </div>
               </td>
               <td><StatusBadge :status="doc.status" /></td>
               <td>{{ formatSize(doc.size) }}</td>
-              <td>{{ doc.folder?.name || '-' }}</td>
-              <td>{{ doc.deleted_by?.name || 'Unknown' }}</td>
+              <td>{{ doc.folder?.name || $t('common.na') }}</td>
+              <td>{{ doc.deleted_by?.name || $t('common.unknown') }}</td>
               <td>{{ formatDate(doc.deleted_at) }}</td>
               <td>
                 <span v-if="doc.purge_at" :class="['purge-date', { 'purge-date-warning': doc.days_until_purge !== null && doc.days_until_purge <= 1 }]">
                   {{ formatDate(doc.purge_at) }}
                 </span>
-                <span v-else class="purge-date-na">N/A</span>
+                <span v-else class="purge-date-na">{{ $t('common.na') }}</span>
               </td>
               <td>
                 <span :class="['days-badge', { 'days-warning': doc.days_until_purge !== null && doc.days_until_purge <= 1 }]">
-                  {{ doc.days_until_purge !== null ? `${doc.days_until_purge} day(s)` : 'N/A' }}
+                  {{ doc.days_until_purge !== null ? `${doc.days_until_purge} ${$t('upload.days')}` : $t('common.na') }}
                 </span>
               </td>
               <td>
@@ -88,14 +88,14 @@
                     @click="restoreDocument(doc)"
                     class="btn-link-small"
                   >
-                    Restore
+                    {{ $t('recycleBin.restore') }}
                   </button>
                   <button
                     v-if="isAdmin"
                     @click="confirmPermanentDelete(doc)"
                     class="btn-link-small btn-danger"
                   >
-                    Delete Permanently
+                    {{ $t('recycleBin.permanentDelete') }}
                   </button>
                 </div>
               </td>
@@ -115,37 +115,37 @@
     <!-- Empty State -->
     <div v-else-if="!loading && documents.length === 0" class="empty-state">
       <Trash2 :size="48" />
-      <p>Recycle Bin is empty</p>
+      <p>{{ $t('recycleBin.noItems') }}</p>
     </div>
 
     <!-- Restore Confirmation Modal -->
     <Modal
       :show="showRestoreModal"
-      title="Restore Document"
+      :title="$t('recycleBin.restore') + ' ' + $t('documents.title')"
       @update:show="showRestoreModal = $event"
     >
       <p v-if="documentToRestore">
-        Are you sure you want to restore "{{ documentToRestore.title }}"?
+        {{ $t('recycleBin.restoreConfirm') }} "{{ documentToRestore.title }}"?
       </p>
       <template #footer>
-        <button @click="showRestoreModal = false" class="btn-secondary">Cancel</button>
-        <button @click="restoreDocumentConfirm" class="btn-primary">Restore</button>
+        <button @click="showRestoreModal = false" class="btn-secondary">{{ $t('common.cancel') }}</button>
+        <button @click="restoreDocumentConfirm" class="btn-primary">{{ $t('recycleBin.restore') }}</button>
       </template>
     </Modal>
 
     <!-- Permanent Delete Confirmation Modal -->
     <Modal
       :show="showPermanentDeleteModal"
-      title="Delete Permanently"
+      :title="$t('recycleBin.permanentDelete')"
       @update:show="showPermanentDeleteModal = $event"
     >
       <p v-if="documentToDelete">
-        Are you sure you want to permanently delete "{{ documentToDelete.title }}"? 
-        This action cannot be undone. All files, embeddings, and related data will be permanently removed.
+        {{ $t('recycleBin.permanentDeleteConfirm') }} "{{ documentToDelete.title }}"? 
+        {{ $t('recycleBin.permanentDeleteWarning') }}
       </p>
       <template #footer>
-        <button @click="showPermanentDeleteModal = false" class="btn-secondary">Cancel</button>
-        <button @click="deletePermanently" class="btn-danger">Delete Permanently</button>
+        <button @click="showPermanentDeleteModal = false" class="btn-secondary">{{ $t('common.cancel') }}</button>
+        <button @click="deletePermanently" class="btn-danger">{{ $t('recycleBin.permanentDelete') }}</button>
       </template>
     </Modal>
   </div>
@@ -154,9 +154,12 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../store/auth'
 import { recycleBinAPI } from '../services/api'
 import { StatusBadge, Pagination, Modal } from '../components'
+
+const { t } = useI18n()
 import {
   Search,
   FileText,
@@ -196,7 +199,7 @@ const formatSize = (bytes) => {
 }
 
 const formatDate = (dateString) => {
-  if (!dateString) return '-'
+  if (!dateString) return t('common.na')
   const date = new Date(dateString)
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
@@ -323,7 +326,7 @@ const loadDocuments = async () => {
   } catch (e) {
     console.error('Failed to load deleted documents', e)
     if (window.$toast) {
-      window.$toast.show('Failed to load deleted documents', 'error')
+      window.$toast.show(t('recycleBin.failedToLoadDeletedDocuments'), 'error')
     }
   } finally {
     loading.value = false
@@ -354,20 +357,20 @@ const restoreDocumentConfirm = async () => {
     const res = await recycleBinAPI.restore(documentToRestore.value.id)
     if (res.is_success) {
       if (window.$toast) {
-        window.$toast.show('Document restored successfully', 'success')
+        window.$toast.show(t('recycleBin.documentRestored'), 'success')
       }
       showRestoreModal.value = false
       documentToRestore.value = null
       await loadDocuments()
     } else {
       if (window.$toast) {
-        window.$toast.show(res.message || 'Failed to restore document', 'error')
+        window.$toast.show(res.message || t('recycleBin.failedToRestoreDocument'), 'error')
       }
     }
   } catch (e) {
     console.error('Failed to restore document', e)
     if (window.$toast) {
-      window.$toast.show('Failed to restore document', 'error')
+      window.$toast.show(t('recycleBin.failedToRestoreDocument'), 'error')
     }
   }
 }
@@ -384,20 +387,20 @@ const deletePermanently = async () => {
     const res = await recycleBinAPI.deletePermanently(documentToDelete.value.id)
     if (res.is_success) {
       if (window.$toast) {
-        window.$toast.show('Document permanently deleted', 'success')
+        window.$toast.show(t('recycleBin.documentPermanentlyDeleted'), 'success')
       }
       showPermanentDeleteModal.value = false
       documentToDelete.value = null
       await loadDocuments()
     } else {
       if (window.$toast) {
-        window.$toast.show(res.message || 'Failed to delete document', 'error')
+        window.$toast.show(res.message || t('recycleBin.failedToPermanentlyDeleteDocument'), 'error')
       }
     }
   } catch (e) {
     console.error('Failed to permanently delete document', e)
     if (window.$toast) {
-      window.$toast.show('Failed to permanently delete document', 'error')
+      window.$toast.show(t('recycleBin.failedToPermanentlyDeleteDocument'), 'error')
     }
   }
 }

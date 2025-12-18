@@ -1,76 +1,76 @@
 <template>
   <div class="ai-jobs-page">
     <div class="page-header">
-      <h1>AI Jobs</h1>
+      <h1>{{ $t('admin.aiJobs.title') }}</h1>
       <button @click="refreshJobs" class="btn-primary" :disabled="loading">
         <RefreshCw :size="20" :class="{ spinning: loading }" />
-        Refresh
+        {{ $t('common.refresh') }}
       </button>
     </div>
 
     <!-- Filters -->
     <div class="filters-bar glass">
       <div class="filter-group">
-        <label>Job Type</label>
+        <label>{{ $t('admin.aiJobs.filters.jobType') }}</label>
         <select v-model="filters.job_type">
-          <option value="">All Types</option>
-          <option value="ocr">OCR</option>
-          <option value="embed">Embedding</option>
-          <option value="classify">Classify</option>
-          <option value="qa">Q&A</option>
+          <option value="">{{ $t('admin.aiJobs.filterOptions.allTypes') }}</option>
+          <option value="ocr">{{ $t('admin.aiJobs.filterOptions.ocr') }}</option>
+          <option value="embed">{{ $t('admin.aiJobs.filterOptions.embedding') }}</option>
+          <option value="classify">{{ $t('admin.aiJobs.filterOptions.classify') }}</option>
+          <option value="qa">{{ $t('admin.aiJobs.filterOptions.qa') }}</option>
         </select>
       </div>
       <div class="filter-group">
-        <label>Status</label>
+        <label>{{ $t('admin.aiJobs.filters.status') }}</label>
         <select v-model="filters.status">
-          <option value="">All Status</option>
-          <option value="queued">Queued</option>
-          <option value="processing">Processing</option>
-          <option value="completed">Completed</option>
-          <option value="failed">Failed</option>
+          <option value="">{{ $t('admin.aiJobs.filterOptions.allStatus') }}</option>
+          <option value="queued">{{ $t('admin.aiJobs.filterOptions.queued') }}</option>
+          <option value="processing">{{ $t('admin.aiJobs.filterOptions.processing') }}</option>
+          <option value="completed">{{ $t('admin.aiJobs.filterOptions.completed') }}</option>
+          <option value="failed">{{ $t('admin.aiJobs.filterOptions.failed') }}</option>
         </select>
       </div>
       <div class="filter-group">
-        <label>Provider</label>
+        <label>{{ $t('admin.aiJobs.filters.provider') }}</label>
         <select v-model="filters.provider">
-          <option value="">All Providers</option>
-          <option value="paddle">Paddle</option>
-          <option value="ollama">Ollama</option>
+          <option value="">{{ $t('admin.aiJobs.filterOptions.allProviders') }}</option>
+          <option value="paddle">{{ $t('admin.aiJobs.filterOptions.paddle') }}</option>
+          <option value="ollama">{{ $t('admin.aiJobs.filterOptions.ollama') }}</option>
         </select>
       </div>
       <div class="filter-actions">
-        <button @click="applyFilters" class="btn-primary">Apply</button>
-        <button @click="clearFilters" class="btn-secondary">Clear</button>
+        <button @click="applyFilters" class="btn-primary">{{ $t('admin.aiJobs.buttons.apply') }}</button>
+        <button @click="clearFilters" class="btn-secondary">{{ $t('admin.aiJobs.buttons.clear') }}</button>
       </div>
     </div>
 
     <!-- Jobs Table -->
     <div class="jobs-table-container">
       <div v-if="loading && jobs.length === 0" class="loading-state">
-        <LoadingSpinner text="Loading AI Jobs..." />
+        <LoadingSpinner :text="$t('admin.aiJobs.messages.loadingAiJobs')" />
       </div>
       <div v-else-if="jobs.length === 0" class="empty-state">
         <div class="empty-icon">
           <Activity :size="64" />
         </div>
-        <h3>No AI Jobs Found</h3>
-        <p>No jobs match the selected filters.</p>
+        <h3>{{ $t('admin.aiJobs.messages.noAiJobsFound') }}</h3>
+        <p>{{ $t('admin.aiJobs.messages.noJobsMatchFilters') }}</p>
       </div>
       <div v-else class="jobs-table glass">
         <table>
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Job Type</th>
-              <th>Target</th>
-              <th>Provider</th>
-              <th>Status</th>
-              <th>Worker</th>
-              <th>Retries</th>
-              <th>Output</th>
-              <th>Error</th>
-              <th>Created At</th>
-              <th>Actions</th>
+              <th>{{ $t('admin.aiJobs.tableHeaders.id') }}</th>
+              <th>{{ $t('admin.aiJobs.tableHeaders.jobType') }}</th>
+              <th>{{ $t('admin.aiJobs.tableHeaders.target') }}</th>
+              <th>{{ $t('admin.aiJobs.tableHeaders.provider') }}</th>
+              <th>{{ $t('admin.aiJobs.tableHeaders.status') }}</th>
+              <th>{{ $t('admin.aiJobs.tableHeaders.worker') }}</th>
+              <th>{{ $t('admin.aiJobs.tableHeaders.retries') }}</th>
+              <th>{{ $t('admin.aiJobs.tableHeaders.output') }}</th>
+              <th>{{ $t('admin.aiJobs.tableHeaders.error') }}</th>
+              <th>{{ $t('admin.aiJobs.tableHeaders.createdAt') }}</th>
+              <th>{{ $t('admin.aiJobs.tableHeaders.actions') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -83,11 +83,11 @@
               </td>
               <td>
                 <div class="target-info">
-                  <span v-if="job.target?.document_id">Doc: {{ job.target.document_id }}</span>
-                  <span v-if="job.target?.version_id">Ver: {{ job.target.version_id }}</span>
+                  <span v-if="job.target?.document_id">{{ $t('admin.aiJobs.messages.document') }} {{ job.target.document_id }}</span>
+                  <span v-if="job.target?.version_id">{{ $t('admin.aiJobs.messages.version') }} {{ job.target.version_id }}</span>
                 </div>
               </td>
-              <td>{{ job.provider || 'N/A' }}</td>
+              <td>{{ job.provider || $t('common.na') }}</td>
               <td>
                 <StatusBadge :status="job.status" />
               </td>
@@ -110,7 +110,7 @@
                 <div v-if="job.output_ref" class="output-preview">
                   <button @click="viewOutput(job)" class="btn-link-small">
                     <FileText :size="14" />
-                    View
+                    {{ $t('admin.aiJobs.buttons.view') }}
                   </button>
                 </div>
                 <span v-else class="text-muted">-</span>
@@ -132,7 +132,7 @@
                 <div class="action-buttons">
                   <button @click="viewJobDetails(job)" class="btn-action btn-details">
                     <Eye :size="16" />
-                    <span>Details</span>
+                    <span>{{ $t('admin.aiJobs.buttons.details') }}</span>
                   </button>
                   <button 
                     v-if="job.status === 'queued' || job.status === 'processing'"
@@ -141,7 +141,7 @@
                     :disabled="cancellingJobs.includes(job.id)"
                   >
                     <X :size="16" />
-                    <span>Cancel</span>
+                    <span>{{ $t('admin.aiJobs.buttons.cancel') }}</span>
                   </button>
                   <button 
                     v-if="job.status === 'failed' || job.status === 'completed' || job.status === 'cancelled'"
@@ -150,7 +150,7 @@
                     :disabled="reprocessingJobs.includes(job.id)"
                   >
                     <RefreshCw :size="16" />
-                    <span>Reprocess</span>
+                    <span>{{ $t('admin.aiJobs.buttons.reprocess') }}</span>
                   </button>
                 </div>
               </td>
@@ -163,11 +163,14 @@
       <div v-if="total > 0" class="pagination-container">
         <div class="pagination-info">
           <span class="pagination-text">
-            Showing {{ (currentPage - 1) * limit + 1 }} - {{ Math.min(currentPage * limit, total) }} of {{ total }} jobs
+            {{ $t('admin.aiJobs.messages.showingJobs', { 
+              start: (currentPage - 1) * limit + 1, 
+              end: Math.min(currentPage * limit, total), 
+              total: total 
+            }) }}
           </span>
         </div>
         <Pagination
-          v-if="total > limit"
           :current-page="currentPage"
           :total-items="total"
           :items-per-page="limit"
@@ -177,48 +180,48 @@
     </div>
 
     <!-- Job Details Modal -->
-    <Modal v-model:show="showDetailsModal" :title="`AI Job #${selectedJob?.id || ''}`">
+    <Modal v-model:show="showDetailsModal" :title="t('admin.aiJobs.aiJobTitle', { id: selectedJob?.id || '' })">
       <div v-if="selectedJob" class="job-details">
         <div class="detail-section">
-          <h3>Basic Information</h3>
+          <h3>{{ $t('admin.aiJobs.basicInformation') }}</h3>
           <div class="detail-grid">
             <div class="detail-item">
-              <label>Job Type:</label>
+              <label>{{ $t('admin.aiJobs.type') }}:</label>
               <span>{{ selectedJob.job_type }}</span>
             </div>
             <div class="detail-item">
-              <label>Status:</label>
+              <label>{{ $t('admin.aiJobs.status') }}:</label>
               <StatusBadge :status="selectedJob.status" />
             </div>
             <div class="detail-item">
-              <label>Provider:</label>
-              <span>{{ selectedJob.provider || 'N/A' }}</span>
+              <label>{{ $t('admin.aiJobs.provider') }}:</label>
+              <span>{{ selectedJob.provider || $t('common.na') }}</span>
             </div>
             <div class="detail-item">
-              <label>Created At:</label>
+              <label>{{ $t('admin.aiJobs.createdAt') }}:</label>
               <span>{{ formatDate(selectedJob.created_at) }}</span>
             </div>
             <div class="detail-item">
-              <label>Updated At:</label>
+              <label>{{ $t('admin.aiJobs.updatedAt') }}:</label>
               <span>{{ formatDate(selectedJob.updated_at) }}</span>
             </div>
             <div v-if="selectedJob.worker_id" class="detail-item">
-              <label>Worker ID:</label>
+              <label>{{ $t('admin.aiJobs.workerId') }}:</label>
               <span>{{ selectedJob.worker_id }}</span>
             </div>
             <div v-if="selectedJob.claimed_at" class="detail-item">
-              <label>Claimed At:</label>
+              <label>{{ $t('admin.aiJobs.claimedAt') }}:</label>
               <span>{{ formatDate(selectedJob.claimed_at) }}</span>
             </div>
             <div class="detail-item">
-              <label>Retry Count:</label>
+              <label>{{ $t('admin.aiJobs.retryCount') }}:</label>
               <span>{{ selectedJob.retry_count || 0 }} / {{ selectedJob.max_retries || 3 }}</span>
             </div>
           </div>
         </div>
         
         <div class="detail-section">
-          <h3>Actions</h3>
+          <h3>{{ $t('common.actions') }}</h3>
           <div class="action-buttons-horizontal">
             <button 
               v-if="selectedJob.status === 'queued' || selectedJob.status === 'processing'"
@@ -227,7 +230,7 @@
               :disabled="cancellingJobs.includes(selectedJob.id)"
             >
               <X :size="16" />
-              Cancel Job
+              {{ $t('admin.aiJobs.cancelJob') }}
             </button>
             <button 
               v-if="selectedJob.status === 'failed' || selectedJob.status === 'completed' || selectedJob.status === 'cancelled'"
@@ -236,28 +239,28 @@
               :disabled="reprocessingJobs.includes(selectedJob.id)"
             >
               <RefreshCw :size="16" />
-              Reprocess Job
+              {{ $t('admin.aiJobs.reprocessJob') }}
             </button>
           </div>
         </div>
 
         <div class="detail-section">
-          <h3>Target</h3>
+          <h3>{{ $t('admin.aiJobs.target') }}</h3>
           <pre class="json-view">{{ JSON.stringify(selectedJob.target, null, 2) }}</pre>
         </div>
 
         <div v-if="selectedJob.input_ref" class="detail-section">
-          <h3>Input Reference</h3>
+          <h3>{{ $t('admin.aiJobs.inputReference') }}</h3>
           <pre class="json-view">{{ JSON.stringify(selectedJob.input_ref, null, 2) }}</pre>
         </div>
 
         <div v-if="selectedJob.output_ref" class="detail-section">
-          <h3>Output Reference</h3>
+          <h3>{{ $t('admin.aiJobs.outputReference') }}</h3>
           <pre class="json-view">{{ JSON.stringify(selectedJob.output_ref, null, 2) }}</pre>
         </div>
 
         <div v-if="selectedJob.error" class="detail-section">
-          <h3>Error</h3>
+          <h3>{{ $t('common.error') }}</h3>
           <div class="error-box">
             <AlertTriangle :size="20" />
             <pre>{{ selectedJob.error }}</pre>
@@ -265,17 +268,17 @@
         </div>
       </div>
       <template #footer>
-        <button @click="showDetailsModal = false" class="btn-secondary">Close</button>
+        <button @click="showDetailsModal = false" class="btn-secondary">{{ $t('common.close') }}</button>
       </template>
     </Modal>
 
     <!-- Output View Modal -->
-    <Modal v-model:show="showOutputModal" title="Job Output">
+    <Modal v-model:show="showOutputModal" :title="$t('admin.aiJobs.jobOutput')">
       <div v-if="selectedOutput" class="output-view">
         <pre class="json-view">{{ JSON.stringify(selectedOutput, null, 2) }}</pre>
       </div>
       <template #footer>
-        <button @click="showOutputModal = false" class="btn-secondary">Close</button>
+        <button @click="showOutputModal = false" class="btn-secondary">{{ $t('common.close') }}</button>
       </template>
     </Modal>
   </div>
@@ -283,14 +286,17 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { aiAPI } from '../../services/api'
 import { Modal, StatusBadge, Pagination, LoadingSpinner } from '../../components'
 import { RefreshCw, Activity, FileText, AlertTriangle, Eye } from 'lucide-vue-next'
 
+const { t } = useI18n()
+
 const jobs = ref([])
 const loading = ref(false)
 const total = ref(0)
-const limit = ref(50)
+const limit = ref(20)
 const offset = ref(0)
 const currentPage = ref(1)
 const showDetailsModal = ref(false)
@@ -342,7 +348,7 @@ const loadJobs = async () => {
   } catch (e) {
     console.error('Failed to load AI jobs', e)
     if (window.$toast) {
-      window.$toast.show('Failed to load AI jobs', 'error')
+      window.$toast.show(t('admin.aiJobs.failedToLoadAiJobs'), 'error')
     }
   } finally {
     loading.value = false
@@ -352,7 +358,7 @@ const loadJobs = async () => {
 const refreshJobs = async () => {
   await loadJobs()
   if (window.$toast) {
-    window.$toast.show('Jobs refreshed', 'success')
+    window.$toast.show(t('admin.aiJobs.jobsRefreshed'), 'success')
   }
 }
 
@@ -388,12 +394,12 @@ const viewOutput = (job) => {
 }
 
 const formatDate = (dateStr) => {
-  if (!dateStr) return 'N/A'
+  if (!dateStr) return t('common.na')
   return new Date(dateStr).toLocaleString()
 }
 
 const formatTime = (dateStr) => {
-  if (!dateStr) return 'N/A'
+  if (!dateStr) return t('common.na')
   return new Date(dateStr).toLocaleTimeString('en-US', { 
     hour: '2-digit', 
     minute: '2-digit', 
@@ -403,7 +409,7 @@ const formatTime = (dateStr) => {
 }
 
 const formatDateOnly = (dateStr) => {
-  if (!dateStr) return 'N/A'
+  if (!dateStr) return t('common.na')
   return new Date(dateStr).toLocaleDateString('en-US', {
     month: '2-digit',
     day: '2-digit',
@@ -418,7 +424,7 @@ const truncateText = (text, maxLength) => {
 }
 
 const cancelJob = async (jobId) => {
-  if (!confirm('Are you sure you want to cancel this job?')) {
+  if (!confirm(t('admin.aiJobs.cancelJobConfirm'))) {
     return
   }
   
@@ -427,13 +433,13 @@ const cancelJob = async (jobId) => {
     const res = await aiAPI.cancelJob(jobId)
     if (res.is_success) {
       if (window.$toast) {
-        window.$toast.show('Job cancelled successfully', 'success')
+        window.$toast.show(t('admin.aiJobs.jobCancelled'), 'success')
       }
       await loadJobs()
     }
   } catch (e) {
     console.error('Failed to cancel job', e)
-    const errorMsg = e.response?.data?.message || e.message || 'Failed to cancel job'
+    const errorMsg = e.response?.data?.message || e.message || t('admin.aiJobs.failedToCancelJob')
     if (window.$toast) {
       window.$toast.show(errorMsg, 'error')
     }
@@ -443,7 +449,7 @@ const cancelJob = async (jobId) => {
 }
 
 const reprocessJob = async (jobId) => {
-  if (!confirm('Reprocess this job?')) {
+  if (!confirm(t('admin.aiJobs.reprocessJobConfirm'))) {
     return
   }
   
@@ -452,13 +458,13 @@ const reprocessJob = async (jobId) => {
     const res = await aiAPI.reprocessJob(jobId)
     if (res.is_success) {
       if (window.$toast) {
-        window.$toast.show('Job queued for reprocessing', 'success')
+        window.$toast.show(t('admin.aiJobs.jobQueuedForReprocessing'), 'success')
       }
       await loadJobs()
     }
   } catch (e) {
     console.error('Failed to reprocess job', e)
-    const errorMsg = e.response?.data?.message || e.message || 'Failed to reprocess job'
+    const errorMsg = e.response?.data?.message || e.message || t('admin.aiJobs.failedToReprocessJob')
     if (window.$toast) {
       window.$toast.show(errorMsg, 'error')
     }

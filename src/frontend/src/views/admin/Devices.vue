@@ -1,17 +1,17 @@
 <template>
   <div class="admin-page">
     <div class="page-header">
-      <h1>Device Management</h1>
-      <button @click="showCreateModal = true" class="btn-primary">+ Add Device</button>
+      <h1>{{ $t('admin.devices.title') }}</h1>
+      <button @click="showCreateModal = true" class="btn-primary">+ {{ $t('admin.devices.addDevice') }}</button>
     </div>
       <table class="data-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Location</th>
-            <th>Status</th>
-            <th>Last Seen</th>
-            <th>Actions</th>
+            <th>{{ $t('admin.devices.name') }}</th>
+            <th>{{ $t('admin.devices.location') }}</th>
+            <th>{{ $t('admin.devices.status') }}</th>
+            <th>{{ $t('admin.devices.lastSeen') }}</th>
+            <th>{{ $t('admin.devices.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -21,11 +21,11 @@
             <td>
               <span :class="['status-badge', device.status]">{{ device.status }}</span>
             </td>
-            <td>{{ device.last_seen ? formatDate(device.last_seen) : 'Never' }}</td>
+            <td>{{ device.last_seen ? formatDate(device.last_seen) : $t('admin.users.never') }}</td>
             <td>
-              <button @click="editDevice(device)" class="btn-small">Edit</button>
-              <button @click="issueKey(device)" class="btn-small">Issue Key</button>
-              <button @click="deleteDevice(device)" class="btn-small btn-danger">Delete</button>
+              <button @click="editDevice(device)" class="btn-small">{{ $t('common.edit') }}</button>
+              <button @click="issueKey(device)" class="btn-small">{{ $t('admin.devices.issueKey') }}</button>
+              <button @click="deleteDevice(device)" class="btn-small btn-danger">{{ $t('common.delete') }}</button>
             </td>
           </tr>
         </tbody>
@@ -35,7 +35,10 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import api from '../../services/api'
+
+const { t } = useI18n()
 
 const devices = ref([])
 const showCreateModal = ref(false)
@@ -63,7 +66,7 @@ const issueKey = async (device) => {
   try {
     const res = await api.post(`/devices/${device.id}/issue-key`)
     if (res.is_success) {
-      alert('Device key issued: ' + res.data.key)
+      alert(t('admin.devices.deviceKeyIssued', { key: res.data.key }))
     }
   } catch (e) {
     console.error('Failed to issue key', e)
@@ -71,7 +74,8 @@ const issueKey = async (device) => {
 }
 
 const deleteDevice = async (device) => {
-  if (confirm('Delete this device?')) {
+  const { t } = useI18n()
+  if (confirm(t('admin.devices.deleteConfirm'))) {
     try {
       await api.delete(`/devices/${device.id}`)
       await loadDevices()

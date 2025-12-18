@@ -1,6 +1,6 @@
 <template>
   <div class="tasks-page">
-    <h1 class="page-header">Tasks</h1>
+    <h1 class="page-header">{{ $t('tasks.title') }}</h1>
       <div class="task-filters">
         <button 
           v-for="filterOption in filterOptions" 
@@ -15,24 +15,24 @@
         <div class="empty-icon">
           <CheckSquare :size="64" />
         </div>
-        <h3>No tasks found</h3>
-        <p>You don't have any tasks matching the selected filter.</p>
+        <h3>{{ $t('tasks.noTasks') }}</h3>
+        <p>{{ $t('tasks.noTasksMatching') }}</p>
       </div>
       <div v-else class="task-list">
         <div v-for="task in filteredTasks" :key="task.id" class="task-item">
           <div class="task-info">
             <div class="task-header">
-              <h3>{{ task.document?.title || 'Untitled' }}</h3>
+              <h3>{{ task.document?.title || $t('common.unknown') }}</h3>
               <StatusBadge :status="task.state || 'pending'" :label="getStatusLabel(task.state)" />
             </div>
             <p class="meta">
-              <span>Workflow: {{ task.workflow?.template || 'N/A' }}</span>
-              <span v-if="task.due_at">• Due: {{ formatDate(task.due_at) }}</span>
-              <span v-if="task.assignee">• Assignee: {{ task.assignee.name }}</span>
+              <span>{{ $t('tasks.workflow') }}: {{ task.workflow?.template || $t('common.na') }}</span>
+              <span v-if="task.due_at">• {{ $t('tasks.due') }}: {{ formatDate(task.due_at) }}</span>
+              <span v-if="task.assignee">• {{ $t('tasks.assignee') }}: {{ task.assignee.name }}</span>
             </p>
             <p v-if="task.description" class="description">{{ task.description }}</p>
             <div v-if="task.comment" class="task-comment">
-              <strong>Comment:</strong> {{ task.comment }}
+              <strong>{{ $t('tasks.comment') }}:</strong> {{ task.comment }}
             </div>
           </div>
           <div class="task-actions">
@@ -42,7 +42,7 @@
               class="btn-primary"
             >
               <Check :size="16" />
-              Approve
+              {{ $t('tasks.approve') }}
             </button>
             <button 
               v-if="task.state === 'pending' || task.state === 'changes_requested'"
@@ -50,7 +50,7 @@
               class="btn-danger"
             >
               <X :size="16" />
-              Reject
+              {{ $t('tasks.reject') }}
             </button>
             <button 
               v-if="task.state === 'pending'"
@@ -58,11 +58,11 @@
               class="btn-secondary"
             >
               <Edit :size="16" />
-              Request Changes
+              {{ $t('tasks.requestChanges') }}
             </button>
             <button @click="viewDocument(task.document_id)" class="btn-secondary">
               <FileText :size="16" />
-              View Doc
+              {{ $t('tasks.viewDoc') }}
             </button>
           </div>
         </div>
@@ -73,23 +73,29 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import api from '../services/api'
 import { StatusBadge } from '../components'
 import { CheckSquare, Check, X, Edit, FileText } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const tasks = ref([])
 const filter = ref('all')
 
-const filterOptions = [
-  { value: 'all', label: 'All' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'rejected', label: 'Rejected' },
-  { value: 'changes_requested', label: 'Changes Requested' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'completed', label: 'Completed' }
-]
+const filterOptions = computed(() => {
+  const { t } = useI18n()
+  return [
+    { value: 'all', label: t('tasks.all') },
+    { value: 'pending', label: t('tasks.pending') },
+    { value: 'approved', label: t('tasks.approved') },
+    { value: 'rejected', label: t('tasks.rejected') },
+    { value: 'changes_requested', label: t('tasks.changesRequested') },
+    { value: 'in_progress', label: t('tasks.inProgress') },
+    { value: 'completed', label: t('tasks.completed') }
+  ]
+})
 
 const filteredTasks = computed(() => {
   if (filter.value === 'all') return tasks.value
@@ -97,13 +103,14 @@ const filteredTasks = computed(() => {
 })
 
 const getStatusLabel = (state) => {
+  const { t } = useI18n()
   const labels = {
-    'pending': 'Pending',
-    'approved': 'Approved',
-    'rejected': 'Rejected',
-    'changes_requested': 'Changes Requested',
-    'in_progress': 'In Progress',
-    'completed': 'Completed'
+    'pending': t('tasks.pending'),
+    'approved': t('tasks.approved'),
+    'rejected': t('tasks.rejected'),
+    'changes_requested': t('tasks.changesRequested'),
+    'in_progress': t('tasks.inProgress'),
+    'completed': t('tasks.completed')
   }
   return labels[state] || state
 }
@@ -128,48 +135,48 @@ const approveTask = async (task) => {
     await api.post(`/tasks/${task.id}/action`, { action: 'approve' })
     await loadTasks()
     if (window.$toast) {
-      window.$toast.show('Task approved', 'success')
+      window.$toast.show(t('tasks.taskApproved'), 'success')
     }
   } catch (e) {
     console.error('Failed to approve task', e)
     if (window.$toast) {
-      window.$toast.show('Failed to approve task', 'error')
+      window.$toast.show(t('tasks.failedToApprove'), 'error')
     }
   }
 }
 
 const rejectTask = async (task) => {
   try {
-    const comment = prompt('Please provide a reason for rejection:')
+    const comment = prompt(t('tasks.rejectReason'))
     if (comment !== null) {
       await api.post(`/tasks/${task.id}/action`, { action: 'reject', comment })
       await loadTasks()
       if (window.$toast) {
-        window.$toast.show('Task rejected', 'success')
+        window.$toast.show(t('tasks.taskRejected'), 'success')
       }
     }
   } catch (e) {
     console.error('Failed to reject task', e)
     if (window.$toast) {
-      window.$toast.show('Failed to reject task', 'error')
+      window.$toast.show(t('tasks.failedToReject'), 'error')
     }
   }
 }
 
 const requestChanges = async (task) => {
   try {
-    const comment = prompt('Please describe the changes needed:')
+    const comment = prompt(t('tasks.changesNeeded'))
     if (comment !== null) {
       await api.post(`/tasks/${task.id}/action`, { action: 'request_changes', comment })
       await loadTasks()
       if (window.$toast) {
-        window.$toast.show('Changes requested', 'success')
+        window.$toast.show(t('tasks.changesRequestedSuccess'), 'success')
       }
     }
   } catch (e) {
     console.error('Failed to request changes', e)
     if (window.$toast) {
-      window.$toast.show('Failed to request changes', 'error')
+      window.$toast.show(t('tasks.failedToRequestChanges'), 'error')
     }
   }
 }

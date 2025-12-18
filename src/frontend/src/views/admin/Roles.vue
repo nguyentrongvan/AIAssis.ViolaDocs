@@ -1,10 +1,10 @@
 <template>
   <div class="admin-page">
     <div class="page-header">
-      <h1>Roles</h1>
+      <h1>{{ $t('admin.roles.title') }}</h1>
       <button @click="showCreateModal = true" class="btn-primary">
         <Plus :size="20" />
-        New Role
+        {{ $t('admin.roles.createRole') }}
       </button>
     </div>
 
@@ -15,46 +15,46 @@
           <div class="role-actions">
             <button @click="editRole(role)" class="btn-small">
               <Edit :size="16" />
-              Edit
+              {{ $t('common.edit') }}
             </button>
             <button @click="deleteRole(role)" class="btn-small btn-danger">
               <Trash2 :size="16" />
-              Delete
+              {{ $t('common.delete') }}
             </button>
           </div>
         </div>
         <div class="role-permissions">
-          <div class="permissions-label">Permissions:</div>
+          <div class="permissions-label">{{ $t('admin.roles.permissions') }}:</div>
           <div class="permissions-list">
             <span
               v-for="perm in role.permissions"
               :key="perm"
               class="permission-badge"
             >
-              {{ perm }}
+              {{ getPermissionName(perm) }}
             </span>
             <span v-if="role.permissions.length === 0" class="no-permissions">
-              No permissions
+              {{ $t('admin.roles.noPermissions') }}
             </span>
           </div>
         </div>
       </div>
       <div v-if="roles.length === 0" class="empty-state">
-        No roles found. Create your first role.
+        {{ $t('admin.roles.noRoles') }}
       </div>
     </div>
 
     <!-- Create/Edit Role Modal -->
     <Modal
       v-model:show="showCreateModal"
-      :title="editingRole ? 'Edit Role' : 'Create Role'"
+      :title="editingRole ? $t('admin.roles.editRole') : $t('admin.roles.createRole')"
     >
       <div class="form-group">
-        <label>Name *</label>
+        <label>{{ $t('admin.roles.name') }} *</label>
         <input v-model="roleForm.name" required />
       </div>
       <div class="form-group">
-        <label>Permissions</label>
+        <label>{{ $t('admin.roles.permissions') }}</label>
         <div class="permissions-editor">
           <div
             v-for="perm in availablePermissions"
@@ -67,7 +67,7 @@
                 :value="perm"
                 v-model="roleForm.permissions"
               />
-              {{ perm }}
+              {{ getPermissionName(perm) }}
             </label>
           </div>
         </div>
@@ -78,9 +78,9 @@
           @click="showCreateModal = false"
           class="btn-secondary"
         >
-          Cancel
+          {{ $t('common.cancel') }}
         </button>
-        <button type="button" @click="saveRole" class="btn-primary">Save</button>
+        <button type="button" @click="saveRole" class="btn-primary">{{ $t('common.save') }}</button>
       </template>
     </Modal>
   </div>
@@ -88,9 +88,12 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRolesStore } from '../../store/roles'
 import { Modal } from '../../components'
 import { Plus, Edit, Trash2 } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const rolesStore = useRolesStore()
 
@@ -127,7 +130,7 @@ const loadRoles = async () => {
   } catch (e) {
     console.error('Failed to load roles', e)
     if (window.$toast) {
-      window.$toast.show('Failed to load roles', 'error')
+      window.$toast.show(t('admin.roles.failedToLoadRoles'), 'error')
     }
   }
 }
@@ -155,30 +158,37 @@ const saveRole = async () => {
     roleForm.value = { name: '', permissions: [] }
     if (window.$toast) {
       window.$toast.show(
-        isEditing ? 'Role updated' : 'Role created',
+        isEditing ? t('admin.roles.roleUpdated') : t('admin.roles.roleCreated'),
         'success'
       )
     }
   } catch (e) {
     console.error('Failed to save role', e)
     if (window.$toast) {
-      window.$toast.show('Failed to save role', 'error')
+      window.$toast.show(t('admin.roles.failedToSaveRole'), 'error')
     }
   }
 }
 
+const getPermissionName = (perm) => {
+  const key = `admin.roles.permissionNames.${perm}`
+  const translated = t(key)
+  // If translation key doesn't exist, return the original permission name
+  return translated !== key ? translated : perm
+}
+
 const deleteRole = async (role) => {
-  if (confirm(`Delete role "${role.name}"?`)) {
+  if (confirm(t('admin.roles.deleteRoleConfirm', { name: role.name }))) {
     try {
       await rolesStore.deleteRole(role.id)
       await loadRoles()
       if (window.$toast) {
-        window.$toast.show('Role deleted', 'success')
+        window.$toast.show(t('admin.roles.roleDeleted'), 'success')
       }
     } catch (e) {
       console.error('Failed to delete role', e)
       if (window.$toast) {
-        window.$toast.show('Failed to delete role', 'error')
+        window.$toast.show(t('admin.roles.failedToDeleteRole'), 'error')
       }
     }
   }

@@ -3,9 +3,9 @@
     <!-- Hero Section -->
     <div class="hero-section">
       <h1 class="hero-title">
-        <span class="gradient-text">Welcome to ViolaDocs</span>
+        <span class="gradient-text">{{ $t('home.welcome') }}</span>
       </h1>
-      <p class="hero-subtitle">AI-Powered Document Intelligence Platform</p>
+      <p class="hero-subtitle">{{ $t('home.subtitle') }}</p>
     </div>
 
     <!-- Stats Grid -->
@@ -50,8 +50,11 @@
 
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import api from '../services/api'
 import { Upload, Search, MessageSquare, CheckSquare, FileText, Clock, TrendingUp } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const stats = ref({
   totalDocuments: 0,
@@ -65,59 +68,65 @@ const animatedStats = ref({
   recentUploads: 0
 })
 
-const statCards = computed(() => [
-  {
-    key: 'totalDocuments',
-    label: 'Total Documents',
-    icon: FileText,
-    value: stats.value.totalDocuments
-  },
-  {
-    key: 'pendingTasks',
-    label: 'Pending Tasks',
-    icon: Clock,
-    value: stats.value.pendingTasks
-  },
-  {
-    key: 'recentUploads',
-    label: 'Recent Uploads',
-    icon: TrendingUp,
-    value: stats.value.recentUploads
-  }
-])
+const statCards = computed(() => {
+  const { t } = useI18n()
+  return [
+    {
+      key: 'totalDocuments',
+      label: t('home.totalDocuments'),
+      icon: FileText,
+      value: stats.value.totalDocuments
+    },
+    {
+      key: 'pendingTasks',
+      label: t('home.pendingTasks'),
+      icon: Clock,
+      value: stats.value.pendingTasks
+    },
+    {
+      key: 'recentUploads',
+      label: t('home.recentUploads'),
+      icon: TrendingUp,
+      value: stats.value.recentUploads
+    }
+  ]
+})
 
-const actions = [
-  {
-    path: '/documents',
-    title: 'Documents',
-    description: 'View all your documents',
-    icon: FileText
-  },
-  {
-    path: '/upload',
-    title: 'Upload Documents',
-    description: 'Add new documents to your library',
-    icon: Upload
-  },
-  {
-    path: '/search',
-    title: 'Search',
-    description: 'Find documents quickly',
-    icon: Search
-  },
-  {
-    path: '/chatbot',
-    title: 'Chatbot',
-    description: 'Ask AI about your documents',
-    icon: MessageSquare
-  },
-  {
-    path: '/tasks',
-    title: 'Tasks',
-    description: 'Manage your workflow',
-    icon: CheckSquare
-  }
-]
+const actions = computed(() => {
+  const { t } = useI18n()
+  return [
+    {
+      path: '/documents',
+      title: t('nav.documents'),
+      description: t('home.viewAllDocuments'),
+      icon: FileText
+    },
+    {
+      path: '/upload',
+      title: t('home.uploadDocuments'),
+      description: t('home.addNewDocuments'),
+      icon: Upload
+    },
+    {
+      path: '/search',
+      title: t('home.search'),
+      description: t('home.findDocumentsQuickly'),
+      icon: Search
+    },
+    {
+      path: '/chatbot',
+      title: t('home.chatbot'),
+      description: t('home.askAI'),
+      icon: MessageSquare
+    },
+    {
+      path: '/tasks',
+      title: t('home.tasks'),
+      description: t('home.manageWorkflow'),
+      icon: CheckSquare
+    }
+  ]
+})
 
 const animateValue = (key, start, end, duration) => {
   const startTime = performance.now()
