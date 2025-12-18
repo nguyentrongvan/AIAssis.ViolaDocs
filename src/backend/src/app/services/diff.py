@@ -39,30 +39,6 @@ async def get_text_from_uri(text_uri: str) -> Optional[str]:
             # text_uri is already the object name
             object_name = text_uri
         
-        # #region agent log
-        import json
-        import os
-        try:
-            log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), ".cursor", "debug.log")
-            with open(log_path, "a", encoding="utf-8") as f:
-                log_entry = {
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "A",
-                    "location": "diff.py:42",
-                    "message": "Parsing text URI",
-                    "data": {
-                        "text_uri": text_uri,
-                        "bucket_name": bucket_name,
-                        "object_name": object_name
-                    },
-                    "timestamp": int(__import__("time").time() * 1000)
-                }
-                f.write(json.dumps(log_entry) + "\n")
-        except:
-            pass
-        # #endregion
-        
         # Read object
         response = client.get_object(bucket_name, object_name)
         content = response.read()
@@ -72,28 +48,6 @@ async def get_text_from_uri(text_uri: str) -> Optional[str]:
         return content.decode('utf-8')
     except Exception as e:
         print(f"Error reading text from URI {text_uri}: {e}")
-        # #region agent log
-        import json
-        import os
-        try:
-            log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), ".cursor", "debug.log")
-            with open(log_path, "a", encoding="utf-8") as f:
-                log_entry = {
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "A",
-                    "location": "diff.py:65",
-                    "message": "Error reading text from URI",
-                    "data": {
-                        "text_uri": text_uri,
-                        "error": str(e)
-                    },
-                    "timestamp": int(__import__("time").time() * 1000)
-                }
-                f.write(json.dumps(log_entry) + "\n")
-        except:
-            pass
-        # #endregion
         return None
 
 

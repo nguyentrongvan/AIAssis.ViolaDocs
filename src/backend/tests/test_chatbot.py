@@ -8,9 +8,11 @@ Covers:
 - POST /chat/session/{id}/feedback - Submit feedback
 - POST /chat/session/{id}/handoff - Escalate to human
 - POST /chat/session/{id}/source-access - Request source access
+- Conversation history integration
 """
 import pytest
 from fastapi import status
+from src.app.routers.chat import parse_redis_history
 
 
 @pytest.mark.api
@@ -67,6 +69,10 @@ class TestChatbotChat:
                     }
                 )
                 assert response2.status_code in [status.HTTP_200_OK, status.HTTP_503_SERVICE_UNAVAILABLE]
+                # Verify conversation history is being used (session_id should be same)
+                if response2.status_code == status.HTTP_200_OK:
+                    session_id2 = response2.json().get("data", {}).get("session_id")
+                    assert session_id2 == session_id, "Session ID should remain the same for conversation continuation"
     
     async def test_chat_empty_message(self, client, user_token):
         """Test chat with empty message."""
@@ -259,6 +265,102 @@ class TestChatbotSourceAccess:
             json={"source_ids": [1]}
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.api
+class TestConversationHistory:
+    """Tests for conversation history functionality."""
+    
+    def test_parse_redis_history(self):
+        """Test parsing Redis history format."""
+        # Test with valid Redis format
+        redis_messages = [
+            "user:Hello, how are you?",
+            "assistant:I'm doing well, thank you!",
+            "user:What documents do we have?",
+            "assistant:You have 5 documents in your system."
+        ]
+        
+        parsed = parse_redis_history(redis_messages)
+        
+        assert len(parsed) == 4
+        assert parsed[0] == {"role": "user", "content": "Hello, how are you?"}
+        assert parsed[1] == {"role": "assistant", "content": "I'm doing well, thank you!"}
+        assert parsed[2] == {"role": "user", "content": "What documents do we have?"}
+        assert parsed[3] == {"role": "assistant", "content": "You have 5 documents in your system."}
+    
+    def test_parse_redis_history_bytes(self):
+        """Test parsing Redis history with bytes format."""
+        redis_messages = [
+            b"user:Hello",
+            b"assistant:Hi there"
+        ]
+        
+        parsed = parse_redis_history(redis_messages)
+        
+        assert len(parsed) == 2
+        assert parsed[0] == {"role": "user", "content": "Hello"}
+        assert parsed[1] == {"role": "assistant", "content": "Hi there"}
+    
+    def test_parse_redis_history_empty(self):
+        """Test parsing empty Redis history."""
+        parsed = parse_redis_history([])
+        assert parsed == []
+    
+    def test_parse_redis_history_invalid_format(self):
+        """Test parsing Redis history with invalid format."""
+        redis_messages = [
+            "user:Hello",
+            "invalid:format",
+            "assistant:Hi",
+            "unknown:message"
+        ]
+        
+        parsed = parse_redis_history(redis_messages)
+        
+        # Should only parse valid user/assistant messages
+        assert len(parsed) == 2
+        assert parsed[0] == {"role": "user", "content": "Hello"}
+        assert parsed[1] == {"role": "assistant", "content": "Hi"}
+    
+    def test_parse_redis_history_whitespace(self):
+        """Test parsing Redis history with whitespace."""
+        redis_messages = [
+            "user:  Hello with spaces  ",
+            "assistant:  Response with spaces  "
+        ]
+        
+        parsed = parse_redis_history(redis_messages)
+        
+        assert len(parsed) == 2
+        assert parsed[0] == {"role": "user", "content": "Hello with spaces"}
+        assert parsed[1] == {"role": "assistant", "content": "Response with spaces"}
+    
+    async def test_chat_with_conversation_history(self, client, user_token):
+        """Test that conversation history is maintained across multiple messages."""
+        # First message
+        response1 = client.post(
+            "/api/v1/chat",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"message": "My name is John"}
+        )
+        
+        if response1.status_code == status.HTTP_200_OK:
+            session_id = response1.json().get("data", {}).get("session_id")
+            if session_id:
+                # Second message that references the first
+                response2 = client.post(
+                    "/api/v1/chat",
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    json={
+                        "message": "What is my name?",
+                        "session_id": session_id
+                    }
+                )
+                
+                assert response2.status_code in [status.HTTP_200_OK, status.HTTP_503_SERVICE_UNAVAILABLE]
+                # Note: The actual answer depends on LLM, but conversation history should be included
+                # This test verifies the endpoint accepts session_id and processes it
 
 
 

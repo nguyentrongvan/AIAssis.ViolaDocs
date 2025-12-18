@@ -5,6 +5,8 @@ from ...prompts import (
     CHATBOT_SYSTEM_PROMPT,
     CHATBOT_CONTEXT_PROMPT,
     CHATBOT_NO_CONTEXT_PROMPT,
+    CHATBOT_CONTEXT_WITH_HISTORY_PROMPT,
+    CHATBOT_HISTORY_ONLY_PROMPT,
     CLASSIFY_DOCUMENT_PROMPT,
     SUMMARIZE_DOCUMENT_PROMPT,
     EXTRACT_ENTITIES_PROMPT,
@@ -171,11 +173,19 @@ class LLMService:
                 "chatbot_no_context_prompt",
                 default=CHATBOT_NO_CONTEXT_PROMPT
             )
-            return system_prompt, context_prompt, no_context_prompt
+            context_with_history_prompt = await SettingsService.get_setting(
+                "chatbot_context_with_history_prompt",
+                default=CHATBOT_CONTEXT_WITH_HISTORY_PROMPT
+            )
+            history_only_prompt = await SettingsService.get_setting(
+                "chatbot_history_only_prompt",
+                default=CHATBOT_HISTORY_ONLY_PROMPT
+            )
+            return system_prompt, context_prompt, no_context_prompt, context_with_history_prompt, history_only_prompt
         except Exception as e:
             # If settings service fails, use defaults
             print(f"Failed to load prompts from settings, using defaults: {e}")
-            return CHATBOT_SYSTEM_PROMPT, CHATBOT_CONTEXT_PROMPT, CHATBOT_NO_CONTEXT_PROMPT
+            return CHATBOT_SYSTEM_PROMPT, CHATBOT_CONTEXT_PROMPT, CHATBOT_NO_CONTEXT_PROMPT, CHATBOT_CONTEXT_WITH_HISTORY_PROMPT, CHATBOT_HISTORY_ONLY_PROMPT
     
     def chat(self, question: str, context: Optional[List[str]] = None) -> str:
         """Chat with context (RAG) - synchronous version uses defaults"""
@@ -192,35 +202,100 @@ class LLMService:
         
         return self.provider.generate_response(prompt, system_prompt=CHATBOT_SYSTEM_PROMPT)
     
-    async def chat_with_usage_async(self, question: str, context: Optional[List[str]] = None, session=None) -> tuple[str, dict]:
-        """Chat with context (RAG) and return token usage - async version loads prompts from settings"""
+    def _format_conversation_history(self, conversation_history: Optional[List[Dict[str, str]]]) -> str:
+        """Format conversation history into a readable string"""
+        if not conversation_history:
+            return ""
+        
+        formatted_lines = []
+        for msg in conversation_history:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "user":
+                formatted_lines.append(f"User: {content}")
+            elif role == "assistant":
+                formatted_lines.append(f"Assistant: {content}")
+        
+        return "\n".join(formatted_lines)
+    
+    async def chat_with_usage_async(
+        self, 
+        question: str, 
+        context: Optional[List[str]] = None, 
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        session=None
+    ) -> tuple[str, dict]:
+        """Chat with context (RAG) and conversation history, return token usage - async version loads prompts from settings"""
         if not self.provider:
             return "LLM provider not configured", {"token_in": 0, "token_out": 0}
         
         # Load prompts from settings
-        system_prompt, context_prompt, no_context_prompt = await self._get_prompts()
+        system_prompt, context_prompt, no_context_prompt, context_with_history_prompt, history_only_prompt = await self._get_prompts()
         
-        if context:
+        # Format conversation history if provided
+        history_text = self._format_conversation_history(conversation_history) if conversation_history else ""
+        
+        # Choose appropriate prompt based on available context
+        if history_text and context:
+            # Both conversation history and document context
+            prompt = context_with_history_prompt.format(
+                conversation_history=history_text,
+                context="\n\n".join([f"Document {i+1}:\n{ctx}" for i, ctx in enumerate(context)]),
+                question=question
+            )
+        elif history_text:
+            # Only conversation history, no document context
+            prompt = history_only_prompt.format(
+                conversation_history=history_text,
+                question=question
+            )
+        elif context:
+            # Only document context, no conversation history
             prompt = context_prompt.format(
                 context="\n\n".join([f"Document {i+1}:\n{ctx}" for i, ctx in enumerate(context)]),
                 question=question
             )
         else:
+            # No context at all
             prompt = no_context_prompt.format(question=question)
         
         return self.provider.generate_response_with_usage(prompt, system_prompt=system_prompt)
     
-    def chat_with_usage(self, question: str, context: Optional[List[str]] = None) -> tuple[str, dict]:
-        """Chat with context (RAG) and return token usage - synchronous version uses defaults"""
+    def chat_with_usage(
+        self, 
+        question: str, 
+        context: Optional[List[str]] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> tuple[str, dict]:
+        """Chat with context (RAG) and conversation history, return token usage - synchronous version uses defaults"""
         if not self.provider:
             return "LLM provider not configured", {"token_in": 0, "token_out": 0}
         
-        if context:
+        # Format conversation history if provided
+        history_text = self._format_conversation_history(conversation_history) if conversation_history else ""
+        
+        # Choose appropriate prompt based on available context
+        if history_text and context:
+            # Both conversation history and document context
+            prompt = CHATBOT_CONTEXT_WITH_HISTORY_PROMPT.format(
+                conversation_history=history_text,
+                context="\n\n".join([f"Document {i+1}:\n{ctx}" for i, ctx in enumerate(context)]),
+                question=question
+            )
+        elif history_text:
+            # Only conversation history, no document context
+            prompt = CHATBOT_HISTORY_ONLY_PROMPT.format(
+                conversation_history=history_text,
+                question=question
+            )
+        elif context:
+            # Only document context, no conversation history
             prompt = CHATBOT_CONTEXT_PROMPT.format(
                 context="\n\n".join([f"Document {i+1}:\n{ctx}" for i, ctx in enumerate(context)]),
                 question=question
             )
         else:
+            # No context at all
             prompt = CHATBOT_NO_CONTEXT_PROMPT.format(question=question)
         
         return self.provider.generate_response_with_usage(prompt, system_prompt=CHATBOT_SYSTEM_PROMPT)

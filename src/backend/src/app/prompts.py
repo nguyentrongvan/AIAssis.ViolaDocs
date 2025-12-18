@@ -24,6 +24,27 @@ Please provide a helpful answer. If you need information from documents, let the
 
 IMPORTANT: Respond in the same language that the user used in their question. Match the user's language naturally."""
 
+CHATBOT_CONTEXT_WITH_HISTORY_PROMPT = """Previous conversation:
+{conversation_history}
+
+Context from documents:
+{context}
+
+Current question: {question}
+
+Please answer based on the context above and the previous conversation. Consider the conversation history to understand the context and provide a coherent response. If the information is not in the context, say so clearly.
+
+IMPORTANT: Respond in the same language that the user used in their question. Match the user's language naturally."""
+
+CHATBOT_HISTORY_ONLY_PROMPT = """Previous conversation:
+{conversation_history}
+
+Current question: {question}
+
+Please answer based on the previous conversation context. Provide a helpful and coherent response that continues the conversation naturally.
+
+IMPORTANT: Respond in the same language that the user used in their question. Match the user's language naturally."""
+
 # Document classification prompts
 CLASSIFY_DOCUMENT_PROMPT = """Classify the following document content into one of these categories:
 - invoice

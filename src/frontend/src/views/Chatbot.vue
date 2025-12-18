@@ -388,7 +388,7 @@ const showHandoffModal = ref(false)
 const tagFilter = ref('')
 const availableDocuments = ref([])
 const selectedDocumentIds = ref([])
-const selectAllDocuments = ref(true)
+const selectAllDocuments = ref(false) // Default: không chọn document nào
 const loadingDocuments = ref(false)
 const documentSearchTerm = ref('')
 let documentsRefreshInterval = null
@@ -598,12 +598,16 @@ const sendMessage = async () => {
       }
     }
 
-    // Add selected document IDs (if not selecting all)
-    if (!selectAllDocuments.value && selectedDocumentIds.value.length > 0) {
-      chatData.selected_document_ids = selectedDocumentIds.value
-    } else if (selectAllDocuments.value) {
-      // Send null or empty array to indicate "all"
+    // Add selected document IDs
+    if (selectAllDocuments.value) {
+      // Send null to indicate "select all"
       chatData.selected_document_ids = null
+    } else if (selectedDocumentIds.value.length > 0) {
+      // Send selected document IDs
+      chatData.selected_document_ids = selectedDocumentIds.value
+    } else {
+      // No documents selected - send empty array to skip RAG
+      chatData.selected_document_ids = []
     }
 
     const res = await chatAPI.chat(chatData)

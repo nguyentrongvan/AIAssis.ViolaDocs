@@ -41,6 +41,95 @@ async def get_redis():
     return _redis_client
 
 
+def parse_redis_history(history_messages: List[str]) -> List[Dict[str, str]]:
+    """
+    Parse conversation history from Redis format to structured format.
+    
+    Redis format: ["user:{message}", "assistant:{answer}", ...]
+    Returns: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}, ...]
+    """
+    parsed = []
+    for msg in history_messages:
+        if isinstance(msg, bytes):
+            msg = msg.decode()
+        
+        if msg.startswith("user:"):
+            content = msg[5:].strip()  # Remove "user:" prefix
+            if content:
+                parsed.append({"role": "user", "content": content})
+        elif msg.startswith("assistant:"):
+            content = msg[10:].strip()  # Remove "assistant:" prefix
+            if content:
+                parsed.append({"role": "assistant", "content": content})
+    
+    return parsed
+
+
+async def get_conversation_history(
+    session_id: str,
+    redis_client: Optional[Any],
+    db_session: AsyncSession,
+    user_id: int,
+    limit: int = 10
+) -> List[Dict[str, str]]:
+    """
+    Get conversation history from Redis cache with fallback to database.
+    
+    Args:
+        session_id: Chat session ID
+        redis_client: Redis client instance (can be None)
+        db_session: Database session
+        user_id: User ID for database query
+        limit: Maximum number of message pairs to return
+    
+    Returns:
+        List of message dicts with "role" and "content" keys
+    """
+    conversation_history = []
+    
+    # Try Redis first
+    try:
+        if redis_client:
+            session_key = f"chat:session:{session_id}"
+            history = await redis_client.lrange(session_key, 0, -1)
+            if history:
+                # Parse Redis format and limit to last N messages
+                parsed = parse_redis_history(history)
+                # Limit to last 'limit' pairs (each pair is user + assistant)
+                # Take last (limit * 2) messages to get limit pairs
+                conversation_history = parsed[-(limit * 2):]
+                return conversation_history
+    except Exception as e:
+        print(f"Redis error getting conversation history (trying database fallback): {e}")
+    
+    # Fallback to database
+    try:
+        chat_session_result = await db_session.execute(
+            select(ChatSession).where(
+                and_(
+                    ChatSession.session_id == session_id,
+                    ChatSession.user_id == user_id
+                )
+            )
+        )
+        chat_session = chat_session_result.scalar_one_or_none()
+        
+        if chat_session and chat_session.messages:
+            # Database messages are already in structured format
+            # Limit to last N messages
+            messages = chat_session.messages[-(limit * 2):]
+            # Convert to format expected by LLM service
+            conversation_history = [
+                {"role": msg.get("role", "user"), "content": msg.get("content", "")}
+                for msg in messages
+                if msg.get("role") in ["user", "assistant"] and msg.get("content")
+            ]
+    except Exception as e:
+        print(f"Database error getting conversation history: {e}")
+    
+    return conversation_history
+
+
 class ChatRequest(BaseModel):
     message: str
     group_id: Optional[int] = None
@@ -127,18 +216,15 @@ async def chat(
     
     # Get or create session
     session_id = request.session_id or str(uuid.uuid4())
-    context = []
     
-    try:
-        if redis_client:
-            session_key = f"chat:session:{session_id}"
-            # Get chat history from cache
-            history = await redis_client.lrange(session_key, 0, -1)
-            context = [msg.decode() if isinstance(msg, bytes) else msg for msg in history[-10:]]  # Last 10 messages
-    except Exception as e:
-        # Redis not available or error - continue without cache
-        print(f"Redis error (continuing without cache): {e}")
-        context = []
+    # Get conversation history (from Redis with database fallback)
+    conversation_history = await get_conversation_history(
+        session_id=session_id,
+        redis_client=redis_client,
+        db_session=session,
+        user_id=current_user.id,
+        limit=5  # Last 5 pairs (10 messages total)
+    )
     
     # Get user accessible documents with "chat" permission
     base_query = select(Document).where(
@@ -225,9 +311,16 @@ async def chat(
             doc_group_map[doc_id].append(group_id)
     
     # Apply selected_document_ids filter if provided
-    if request.selected_document_ids:
-        # Intersection: only documents that are both accessible AND selected
-        accessible_doc_ids = [doc_id for doc_id in accessible_doc_ids if doc_id in request.selected_document_ids]
+    # If selected_document_ids is explicitly provided (even if empty list), use it to filter
+    # If None, it means "select all" or not specified, so use all accessible documents
+    if request.selected_document_ids is not None:
+        if len(request.selected_document_ids) == 0:
+            # Empty list means user explicitly selected nothing - skip RAG
+            accessible_doc_ids = []
+        else:
+            # Intersection: only documents that are both accessible AND selected
+            accessible_doc_ids = [doc_id for doc_id in accessible_doc_ids if doc_id in request.selected_document_ids]
+    # else: selected_document_ids is None - use all accessible documents (original behavior)
     
     # Retrieve relevant documents from vector store
     doc_contexts = []
@@ -435,10 +528,20 @@ async def chat(
     
     # Generate response using LLM service with prompts and get token usage
     # Use async version to load prompts from settings
+    # Pass conversation history to maintain context
     if hasattr(llm_service, 'chat_with_usage_async'):
-        answer, token_usage = await llm_service.chat_with_usage_async(request.message, context=doc_contexts, session=session)
+        answer, token_usage = await llm_service.chat_with_usage_async(
+            question=request.message,
+            context=doc_contexts,
+            conversation_history=conversation_history,
+            session=session
+        )
     else:
-        answer, token_usage = llm_service.chat_with_usage(request.message, context=doc_contexts)
+        answer, token_usage = llm_service.chat_with_usage(
+            question=request.message,
+            context=doc_contexts,
+            conversation_history=conversation_history
+        )
     token_in = token_usage.get("token_in", 0)
     token_out = token_usage.get("token_out", 0)
     
