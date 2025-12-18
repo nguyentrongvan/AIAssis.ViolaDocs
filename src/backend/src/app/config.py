@@ -94,6 +94,10 @@ class Settings(BaseSettings):
     max_concurrent_ocr_jobs: int = 5  # Max parallel OCR jobs
     max_concurrent_embed_jobs: int = 3  # Max parallel embedding jobs
     worker_batch_size: int = 10  # Number of jobs to fetch per iteration
+    
+    # Purge Worker Configuration
+    purge_worker_poll_interval: int = 3600  # Poll interval in seconds (default: 1 hour)
+    purge_worker_batch_size: int = 100  # Max documents to process per run
 
     @property
     def max_upload_size_bytes(self) -> int:

@@ -40,6 +40,7 @@
               <th>Folder</th>
               <th>Deleted By</th>
               <th>Deleted At</th>
+              <th>Purge At</th>
               <th>Days Until Purge</th>
               <th>Actions</th>
             </tr>
@@ -71,7 +72,13 @@
               <td>{{ doc.deleted_by?.name || 'Unknown' }}</td>
               <td>{{ formatDate(doc.deleted_at) }}</td>
               <td>
-                <span :class="['days-badge', { 'days-warning': doc.days_until_purge <= 1 }]">
+                <span v-if="doc.purge_at" :class="['purge-date', { 'purge-date-warning': doc.days_until_purge !== null && doc.days_until_purge <= 1 }]">
+                  {{ formatDate(doc.purge_at) }}
+                </span>
+                <span v-else class="purge-date-na">N/A</span>
+              </td>
+              <td>
+                <span :class="['days-badge', { 'days-warning': doc.days_until_purge !== null && doc.days_until_purge <= 1 }]">
                   {{ doc.days_until_purge !== null ? `${doc.days_until_purge} day(s)` : 'N/A' }}
                 </span>
               </td>
@@ -676,6 +683,23 @@ onMounted(async () => {
 .days-badge.days-warning {
   background: var(--warn-light);
   color: var(--warn);
+}
+
+.purge-date {
+  font-size: 0.875rem;
+  color: var(--text-medium);
+  font-weight: 500;
+}
+
+.purge-date.purge-date-warning {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.purge-date-na {
+  font-size: 0.875rem;
+  color: var(--text-light);
+  font-style: italic;
 }
 
 .empty-state {

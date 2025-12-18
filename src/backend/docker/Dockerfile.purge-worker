@@ -1,0 +1,41 @@
+# Dockerfile for Purge Worker Service
+# Lightweight - no OCR dependencies needed
+FROM python:3.10-slim
+
+# Install minimal system dependencies
+RUN apt-get update && apt-get install -y \
+    # Basic utilities
+    curl \
+    # Cleanup
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Upgrade pip, setuptools and wheel
+RUN pip install --upgrade pip setuptools wheel
+
+# Copy requirements first for better caching
+COPY requirements-purge.txt .
+
+# Install Python dependencies (minimal - no OCR/AI dependencies)
+RUN pip install --no-cache-dir -r requirements-purge.txt
+
+# Copy application code
+COPY src/ ./src/
+COPY alembic.ini .
+COPY migrations/ ./migrations/
+COPY docker/purge_worker_entrypoint.sh ./
+RUN chmod +x purge_worker_entrypoint.sh
+
+# Set Python path
+ENV PYTHONPATH=/app/src
+
+# Default environment variables
+ENV PURGE_WORKER_POLL_INTERVAL=3600
+ENV PURGE_WORKER_BATCH_SIZE=100
+ENV PURGE_WORKER_DRY_RUN=false
+
+# Run migrations and start worker
+CMD ["./purge_worker_entrypoint.sh"]
+

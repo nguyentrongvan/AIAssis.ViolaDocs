@@ -1,0 +1,23 @@
+# Minimal requirements for Purge Worker
+# Only includes dependencies needed for document deletion, not OCR/AI processing
+
+# Database
+sqlalchemy[asyncio]==2.0.23
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+alembic==1.13.0
+pgvector==0.2.4
+
+# Configuration
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Storage (MinIO)
+minio==7.2.0
+
+# Vector store (Qdrant for embedding deletion)
+qdrant-client==1.7.0
+
+# Redis (optional, for caching/settings)
+redis==5.0.1
+

@@ -52,7 +52,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY alembic.ini .
 COPY migrations/ ./migrations/
-COPY worker_entrypoint.sh ./
+COPY docker/worker_entrypoint.sh ./
 RUN chmod +x worker_entrypoint.sh
 
 # Set Python path
@@ -66,5 +66,4 @@ ENV OCR_WORKER_STUCK_TIMEOUT=10
 
 # Run migrations and start worker
 CMD ["./worker_entrypoint.sh"]
-
 

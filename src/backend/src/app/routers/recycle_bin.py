@@ -118,10 +118,16 @@ async def list_deleted_documents(
     
     for doc in documents:
         # Calculate days until purge
+        # Use ceil to round up partial days (e.g., 1.5 days = 2 days)
         days_until_purge = None
         if doc.purge_at:
             delta = doc.purge_at - now
-            days_until_purge = max(0, delta.days) if delta.total_seconds() > 0 else 0
+            if delta.total_seconds() > 0:
+                # Calculate days with decimal precision, then round up
+                # This ensures that even if there's 1 hour left, it shows as 1 day
+                days_until_purge = max(0, int(delta.total_seconds() / 86400) + (1 if delta.total_seconds() % 86400 > 0 else 0))
+            else:
+                days_until_purge = 0
         
         # Get deleted_by user info
         deleted_by_info = None

@@ -13,8 +13,8 @@ from ..models.workflows import Workflow, Task
 from ..models.ai import AIJob, Embedding
 from ..models.audit import AuditEvent
 from ..services.storage import delete_file_from_minio
-from ..services.ai import get_embedding_service
 from ..services.settings_service import SettingsService
+# Don't import embedding service at module level - import lazily in function to avoid importing OCR service
 from ..services.retention import check_legal_hold
 from ..config import settings
 
@@ -287,9 +287,13 @@ class DocumentDeletionService:
     @staticmethod
     async def delete_embeddings(doc_id: int, version_ids: List[int], session: AsyncSession):
         """Delete embeddings from vector store and database"""
-        # Delete from Qdrant
+        # Import embedding service lazily using importlib to avoid importing OCR service (which needs PIL)
+        # This is important for purge worker which doesn't have OCR dependencies
+        # Using importlib to import directly without going through __init__.py
         try:
-            embedding_service = get_embedding_service()
+            import importlib
+            embedding_module = importlib.import_module('app.services.ai.embedding_service')
+            embedding_service = embedding_module.get_embedding_service()
             if embedding_service and embedding_service.store and embedding_service.store.client:
                 try:
                     # Get all points for this document from Qdrant

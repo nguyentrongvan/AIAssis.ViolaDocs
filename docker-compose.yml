@@ -79,7 +79,7 @@ services:
   ocr-worker:
     build:
       context: ./src/backend
-      dockerfile: Dockerfile.worker
+      dockerfile: docker/Dockerfile.worker
     container_name: viadocs_ocr_worker
     environment:
       # Database
@@ -117,6 +117,43 @@ services:
         condition: service_started
     restart: unless-stopped
     # Scale with: docker-compose up -d --scale ocr-worker=2
+
+  purge-worker:
+    build:
+      context: ./src/backend
+      dockerfile: docker/Dockerfile.purge-worker
+    container_name: viadocs_purge_worker
+    environment:
+      # Database
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: viadocs
+      POSTGRES_PASSWORD: viadocs_pass
+      POSTGRES_DB: viadocs_db
+      # MinIO
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_SECURE: "false"
+      MINIO_BUCKET: documents
+      # Qdrant - Use Docker service name for HTTP client
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      QDRANT_GRPC_PORT: 6334
+      QDRANT_COLLECTION: embeddings
+      QDRANT_API_KEY: ""
+      # Worker config
+      PURGE_WORKER_POLL_INTERVAL: 3600
+      PURGE_WORKER_BATCH_SIZE: 100
+      PURGE_WORKER_DRY_RUN: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
 
 volumes:
   postgres_data:

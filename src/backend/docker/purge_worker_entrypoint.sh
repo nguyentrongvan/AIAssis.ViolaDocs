@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== OCR Worker Entrypoint ==="
+echo "=== Purge Worker Entrypoint ==="
 echo "Working directory: $(pwd)"
 echo "Python path: $PYTHONPATH"
 echo "Python version: $(python --version)"
@@ -23,9 +23,9 @@ if [ -z "$PYTHONPATH" ]; then
 fi
 
 # Check if module exists
-echo "Checking if app.workers.worker_main exists..."
-if ! python -c "import app.workers.worker_main" 2>&1; then
-    echo "ERROR: Cannot import app.workers.worker_main"
+echo "Checking if app.workers.purge_worker_main exists..."
+if ! python -c "import app.workers.purge_worker_main" 2>&1; then
+    echo "ERROR: Cannot import app.workers.purge_worker_main"
     echo "Python path: $PYTHONPATH"
     echo "Contents of /app/src:"
     ls -la /app/src/ || true
@@ -38,6 +38,5 @@ fi
 echo "Module check passed."
 
 # Start worker
-echo "Starting OCR worker..."
-exec python -m app.workers.worker_main
-
+echo "Starting purge worker..."
+exec python -m app.workers.purge_worker_main
