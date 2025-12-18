@@ -76,7 +76,7 @@ async def search(
         keyword_results = await filter_accessible_documents(session, current_user, all_docs, "search")
         keyword_results = keyword_results[:request.limit]  # Limit to requested amount
     
-    # Vector search via Chroma
+    # Vector search via Qdrant
     vector_results = []
     if request.mode in ["vector", "hybrid"]:
         embedding_service = get_embedding_service()
@@ -87,16 +87,16 @@ async def search(
                 search_filters = {"owner_id": current_user.id}
                 if request.group_id:
                     search_filters["group_id"] = request.group_id
-                chroma_result = embedding_service.query_embeddings(
+                vector_result = embedding_service.query_embeddings(
                     query_embedding=query_embedding,
                     where=search_filters,
                     top_k=request.limit
                 )
                 
-                # Process chroma results
+                # Process Qdrant results
                 doc_ids = []
-                if chroma_result and chroma_result.get("metadatas"):
-                    for metas in chroma_result["metadatas"]:
+                if vector_result and vector_result.get("metadatas"):
+                    for metas in vector_result["metadatas"]:
                         for meta in metas:
                             doc_id = meta.get("doc_id")
                             if doc_id:
@@ -182,15 +182,15 @@ async def vector_search(
         if "group_id" in request.filters:
             search_filters["group_id"] = request.filters["group_id"]
     
-    chroma_result = embedding_service.query_embeddings(
+    vector_result = embedding_service.query_embeddings(
         query_embedding=query_embedding,
         where=search_filters,
         top_k=request.top_k
     )
     
     doc_ids = []
-    if chroma_result and chroma_result.get("metadatas"):
-        for metas in chroma_result["metadatas"]:
+    if vector_result and vector_result.get("metadatas"):
+        for metas in vector_result["metadatas"]:
             for meta in metas:
                 doc_id = meta.get("doc_id")
                 if doc_id:
@@ -233,7 +233,7 @@ async def reindex_all(
 ):
     """Reindex all documents (admin only)."""
     # Note: Existing pgvector data is no longer used; this triggers fresh
-    # embedding jobs to populate the Chroma vector store.
+    # embedding jobs to populate the Qdrant vector store.
     # Get all documents that need reindexing
     result = await session.execute(
         select(Document).where(

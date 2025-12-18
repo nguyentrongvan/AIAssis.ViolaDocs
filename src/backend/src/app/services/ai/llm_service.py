@@ -11,6 +11,7 @@ from ...prompts import (
     RAG_QA_PROMPT,
     COMPARE_DOCUMENTS_PROMPT,
 )
+from ...services.settings_service import SettingsService
 
 
 class LLMProvider:
@@ -155,8 +156,29 @@ class LLMService:
         
         return None
     
+    async def _get_prompts(self):
+        """Get prompts from settings with fallback to defaults"""
+        try:
+            system_prompt = await SettingsService.get_setting(
+                "chatbot_system_prompt",
+                default=CHATBOT_SYSTEM_PROMPT
+            )
+            context_prompt = await SettingsService.get_setting(
+                "chatbot_context_prompt",
+                default=CHATBOT_CONTEXT_PROMPT
+            )
+            no_context_prompt = await SettingsService.get_setting(
+                "chatbot_no_context_prompt",
+                default=CHATBOT_NO_CONTEXT_PROMPT
+            )
+            return system_prompt, context_prompt, no_context_prompt
+        except Exception as e:
+            # If settings service fails, use defaults
+            print(f"Failed to load prompts from settings, using defaults: {e}")
+            return CHATBOT_SYSTEM_PROMPT, CHATBOT_CONTEXT_PROMPT, CHATBOT_NO_CONTEXT_PROMPT
+    
     def chat(self, question: str, context: Optional[List[str]] = None) -> str:
-        """Chat with context (RAG)"""
+        """Chat with context (RAG) - synchronous version uses defaults"""
         if not self.provider:
             return "LLM provider not configured"
         
@@ -170,8 +192,26 @@ class LLMService:
         
         return self.provider.generate_response(prompt, system_prompt=CHATBOT_SYSTEM_PROMPT)
     
+    async def chat_with_usage_async(self, question: str, context: Optional[List[str]] = None, session=None) -> tuple[str, dict]:
+        """Chat with context (RAG) and return token usage - async version loads prompts from settings"""
+        if not self.provider:
+            return "LLM provider not configured", {"token_in": 0, "token_out": 0}
+        
+        # Load prompts from settings
+        system_prompt, context_prompt, no_context_prompt = await self._get_prompts()
+        
+        if context:
+            prompt = context_prompt.format(
+                context="\n\n".join([f"Document {i+1}:\n{ctx}" for i, ctx in enumerate(context)]),
+                question=question
+            )
+        else:
+            prompt = no_context_prompt.format(question=question)
+        
+        return self.provider.generate_response_with_usage(prompt, system_prompt=system_prompt)
+    
     def chat_with_usage(self, question: str, context: Optional[List[str]] = None) -> tuple[str, dict]:
-        """Chat with context (RAG) and return token usage"""
+        """Chat with context (RAG) and return token usage - synchronous version uses defaults"""
         if not self.provider:
             return "LLM provider not configured", {"token_in": 0, "token_out": 0}
         

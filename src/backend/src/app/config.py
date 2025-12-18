@@ -64,10 +64,17 @@ class Settings(BaseSettings):
     ocr_provider: str = "paddle"
     ocr_languages: str = "en,vi"  # Default: English and Vietnamese. Can add: ja,ko,zh
     
-    # Chroma vector store config (local persistent by default; can point to HTTP server)
+    # Qdrant vector store config
+    qdrant_host: str = "localhost"  # Qdrant server host (use "qdrant" in Docker)
+    qdrant_port: int = 6333  # HTTP API port
+    qdrant_grpc_port: int = 6334  # gRPC API port (optional, for better performance)
+    qdrant_collection: str = "embeddings"  # Collection name
+    qdrant_api_key: str = ""  # Optional API key for Qdrant Cloud
+    
+    # Backward compatibility - ChromaDB settings (deprecated, will be removed)
     chroma_persist_dir: str = "./data/chroma"
     chroma_collection: str = "embeddings"
-    chroma_server_host: str = ""   # e.g., "localhost" to use HTTP server
+    chroma_server_host: str = ""
     chroma_server_port: int = 8001
     chroma_server_ssl: bool = False
 

@@ -5,18 +5,24 @@ Prompt templates for AI services
 # Chatbot prompts
 CHATBOT_SYSTEM_PROMPT = """You are a helpful document management assistant. 
 You help users find information in their documents and answer questions based on the provided context.
-Always cite the source documents when providing answers."""
+Always cite the source documents when providing answers.
+
+IMPORTANT: Respond in the same language that the user is using. If the user asks in Vietnamese, respond in Vietnamese. If the user asks in English, respond in English. Match the user's language naturally."""
 
 CHATBOT_CONTEXT_PROMPT = """Context from documents:
 {context}
 
 Question: {question}
 
-Please answer based on the context above. If the information is not in the context, say so clearly."""
+Please answer based on the context above. If the information is not in the context, say so clearly.
+
+IMPORTANT: Respond in the same language that the user used in their question. Match the user's language naturally."""
 
 CHATBOT_NO_CONTEXT_PROMPT = """Question: {question}
 
-Please provide a helpful answer. If you need information from documents, let the user know they should search for specific documents first."""
+Please provide a helpful answer. If you need information from documents, let the user know they should search for specific documents first.
+
+IMPORTANT: Respond in the same language that the user used in their question. Match the user's language naturally."""
 
 # Document classification prompts
 CLASSIFY_DOCUMENT_PROMPT = """Classify the following document content into one of these categories:

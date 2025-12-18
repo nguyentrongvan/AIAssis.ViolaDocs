@@ -11,14 +11,57 @@ async def get_text_from_uri(text_uri: str) -> Optional[str]:
         client = get_minio_client()
         
         # Parse bucket and object name from URI
-        # Assuming format: bucket/path/to/file or just path/to/file
-        parts = text_uri.split("/", 1)
-        if len(parts) == 2:
-            bucket_name, object_name = parts
+        # URI formats:
+        # 1. minio://bucket/path/to/file
+        # 2. s3://bucket/path/to/file
+        # 3. path/to/file (use default bucket from settings)
+        bucket_name = settings.minio_bucket
+        object_name = text_uri
+        
+        if text_uri.startswith("minio://"):
+            # Format: minio://bucket/path/to/file
+            uri_without_prefix = text_uri.replace("minio://", "")
+            parts = uri_without_prefix.split("/", 1)
+            if len(parts) == 2:
+                bucket_name, object_name = parts
+            else:
+                object_name = uri_without_prefix
+        elif text_uri.startswith("s3://"):
+            # Format: s3://bucket/path/to/file
+            uri_without_prefix = text_uri.replace("s3://", "")
+            parts = uri_without_prefix.split("/", 1)
+            if len(parts) == 2:
+                bucket_name, object_name = parts
+            else:
+                object_name = uri_without_prefix
         else:
-            # Default bucket from settings
-            bucket_name = settings.minio_bucket
+            # Plain path format: path/to/file - use default bucket
+            # text_uri is already the object name
             object_name = text_uri
+        
+        # #region agent log
+        import json
+        import os
+        try:
+            log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), ".cursor", "debug.log")
+            with open(log_path, "a", encoding="utf-8") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "A",
+                    "location": "diff.py:42",
+                    "message": "Parsing text URI",
+                    "data": {
+                        "text_uri": text_uri,
+                        "bucket_name": bucket_name,
+                        "object_name": object_name
+                    },
+                    "timestamp": int(__import__("time").time() * 1000)
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except:
+            pass
+        # #endregion
         
         # Read object
         response = client.get_object(bucket_name, object_name)
@@ -29,6 +72,28 @@ async def get_text_from_uri(text_uri: str) -> Optional[str]:
         return content.decode('utf-8')
     except Exception as e:
         print(f"Error reading text from URI {text_uri}: {e}")
+        # #region agent log
+        import json
+        import os
+        try:
+            log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), ".cursor", "debug.log")
+            with open(log_path, "a", encoding="utf-8") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "A",
+                    "location": "diff.py:65",
+                    "message": "Error reading text from URI",
+                    "data": {
+                        "text_uri": text_uri,
+                        "error": str(e)
+                    },
+                    "timestamp": int(__import__("time").time() * 1000)
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except:
+            pass
+        # #endregion
         return None
 
 

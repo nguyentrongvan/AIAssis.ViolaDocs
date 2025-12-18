@@ -16,7 +16,7 @@
 
 ## Search (Keyword + Vector Hybrid)
 1) User submits query + filters; frontend calls search service.
-2) Search service runs keyword search (DB/index) and vector search (vector store); merges/reranks; applies ACL filters.
+2) Search service runs keyword search (DB/index) and vector search (Qdrant vector store); merges/reranks; applies ACL filters.
 3) Returns hits with highlights, snippet, version, score, and signed URLs for previews.
 
 ## Document View & Actions

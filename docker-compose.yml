@@ -49,20 +49,19 @@ services:
       timeout: 5s
       retries: 5
 
-  chroma:
-    image: chromadb/chroma:latest
-    container_name: viadocs_chroma
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: viadocs_qdrant
     ports:
-      - "8001:8000"
-    environment:
-      ANONYMIZED_TELEMETRY: "false"
+      - "6333:6333"  # HTTP API and Web UI
+      - "6334:6334"  # gRPC API
     volumes:
-      - chroma_data:/chroma
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    # Healthcheck removed - Qdrant container doesn't have wget/curl
+    # Container will be considered healthy if it's running
+    # Worker will handle connection errors gracefully
 
   ollama:
     image: ollama/ollama:latest
@@ -98,6 +97,12 @@ services:
       # Ollama - Use Docker service name
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_EMBEDDING_MODEL: nomic-embed-text:latest
+      # Qdrant - Use Docker service name for HTTP client
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      QDRANT_GRPC_PORT: 6334
+      QDRANT_COLLECTION: embeddings
+      QDRANT_API_KEY: ""
       # Worker config
       OCR_WORKER_POLL_INTERVAL: 2
       OCR_WORKER_MAX_CONCURRENT: 2
@@ -108,6 +113,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      qdrant:
+        condition: service_started
     restart: unless-stopped
     # Scale with: docker-compose up -d --scale ocr-worker=2
 
@@ -115,7 +122,7 @@ volumes:
   postgres_data:
   minio_data:
   redis_data:
-  chroma_data:
+  qdrant_data:
   ollama_data:
 
 

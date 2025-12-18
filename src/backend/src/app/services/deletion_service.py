@@ -287,25 +287,42 @@ class DocumentDeletionService:
     @staticmethod
     async def delete_embeddings(doc_id: int, version_ids: List[int], session: AsyncSession):
         """Delete embeddings from vector store and database"""
-        # Delete from ChromaDB
+        # Delete from Qdrant
         try:
             embedding_service = get_embedding_service()
-            if embedding_service and embedding_service.store and embedding_service.store.collection:
+            if embedding_service and embedding_service.store and embedding_service.store.client:
                 try:
-                    # First, get all embedding IDs for this document
-                    query_result = embedding_service.store.collection.get(
-                        where={"doc_id": doc_id}
+                    # Get all points for this document from Qdrant
+                    points_result = embedding_service.store.get(
+                        where={"doc_id": doc_id},
+                        limit=10000
                     )
                     
-                    if query_result and query_result.get("ids") and len(query_result["ids"]) > 0:
-                        ids_to_delete = query_result["ids"]
-                        # Delete by IDs (more reliable)
-                        embedding_service.store.collection.delete(ids=ids_to_delete)
-                        print(f"Deleted {len(ids_to_delete)} embeddings from ChromaDB for document {doc_id}")
+                    if points_result and points_result.get("ids") and len(points_result["ids"]) > 0:
+                        ids_to_delete = points_result["ids"]
+                        # Convert string IDs back to int/str as needed by Qdrant
+                        point_ids = []
+                        for id_str in ids_to_delete:
+                            try:
+                                # Try to convert to int if numeric
+                                if id_str.startswith("embed-"):
+                                    point_ids.append(int(id_str.split("-")[-1]))
+                                else:
+                                    point_ids.append(int(id_str))
+                            except (ValueError, IndexError):
+                                point_ids.append(id_str)
+                        
+                        # Delete by point IDs
+                        from qdrant_client.models import PointIdsList
+                        embedding_service.store.client.delete(
+                            collection_name=embedding_service.store.collection_name,
+                            points_selector=PointIdsList(points=point_ids)
+                        )
+                        print(f"Deleted {len(point_ids)} embeddings from Qdrant for document {doc_id}")
                     else:
-                        print(f"No embeddings found in ChromaDB for document {doc_id}")
+                        print(f"No embeddings found in Qdrant for document {doc_id}")
                 except Exception as e:
-                    print(f"Error deleting embeddings from ChromaDB: {e}")
+                    print(f"Error deleting embeddings from Qdrant: {e}")
                     import traceback
                     traceback.print_exc()
         except Exception as e:

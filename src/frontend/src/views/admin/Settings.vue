@@ -619,7 +619,59 @@
 
       <!-- Chatbot Policies Tab -->
       <div v-if="activeTab === 'chatbot'" class="tab-content">
+        <!-- Chatbot Prompts Section -->
         <div class="section-header">
+          <h2>Chatbot Prompts</h2>
+        </div>
+        <div class="prompts-section">
+          <div class="form-section">
+            <div class="form-group">
+              <label for="system_prompt">System Prompt</label>
+              <textarea
+                id="system_prompt"
+                v-model="promptsForm.system_prompt"
+                rows="4"
+                placeholder="System prompt for chatbot assistant..."
+                class="prompt-textarea"
+              ></textarea>
+              <small>This prompt defines the chatbot's role and behavior. Use {context} and {question} placeholders in context prompts.</small>
+            </div>
+            <div class="form-group">
+              <label for="context_prompt">Context Prompt (with documents)</label>
+              <textarea
+                id="context_prompt"
+                v-model="promptsForm.context_prompt"
+                rows="6"
+                placeholder="Prompt template when documents are provided..."
+                class="prompt-textarea"
+              ></textarea>
+              <small>Template used when answering questions with document context. Use {context} for document content and {question} for user question.</small>
+            </div>
+            <div class="form-group">
+              <label for="no_context_prompt">No Context Prompt (without documents)</label>
+              <textarea
+                id="no_context_prompt"
+                v-model="promptsForm.no_context_prompt"
+                rows="4"
+                placeholder="Prompt template when no documents are provided..."
+                class="prompt-textarea"
+              ></textarea>
+              <small>Template used when answering questions without document context. Use {question} placeholder.</small>
+            </div>
+            <div class="form-actions">
+              <button @click="savePrompts" class="btn-primary" :disabled="savingPrompts">
+                <Save :size="16" />
+                {{ savingPrompts ? 'Saving...' : 'Save Prompts' }}
+              </button>
+              <button @click="resetPromptsToDefaults" class="btn-secondary" :disabled="savingPrompts">
+                <RefreshCw :size="16" />
+                Reset to Defaults
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-header" style="margin-top: 3rem;">
           <h2>Chatbot Policies</h2>
         </div>
         <div class="chatbot-policies">
@@ -877,6 +929,12 @@ const llmForm = ref({
   ollama_embedding_model: ''
 })
 const savingLLM = ref(false)
+const promptsForm = ref({
+  system_prompt: '',
+  context_prompt: '',
+  no_context_prompt: ''
+})
+const savingPrompts = ref(false)
 
 // Ollama Models Management
 const ollamaModels = ref([])
@@ -956,6 +1014,7 @@ onMounted(async () => {
   await loadLLMSettings()
   await loadOCRSettings()
   await loadPurgeGracePeriod()
+  await loadPrompts()
   // Load Ollama models when LLM tab is active
   if (activeTab.value === 'llm') {
     await loadOllamaModels()
@@ -1111,6 +1170,70 @@ const saveProviders = async () => {
     if (window.$toast) {
       window.$toast.show('Failed to save providers', 'error')
     }
+  }
+}
+
+const loadPrompts = async () => {
+  try {
+    const res = await settingsAPI.chatbot.getPrompts()
+    if (res.is_success) {
+      promptsForm.value = {
+        system_prompt: res.data.system_prompt || '',
+        context_prompt: res.data.context_prompt || '',
+        no_context_prompt: res.data.no_context_prompt || ''
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load prompts', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to load prompts', 'error')
+    }
+  }
+}
+
+const resetPromptsToDefaults = async () => {
+  if (!confirm('Reset prompts to defaults? This will reload the default prompts from the system.')) {
+    return
+  }
+  
+  try {
+    // Delete custom prompts from settings to use defaults
+    await settingsAPI.chatbot.updatePrompts({
+      system_prompt: null,
+      context_prompt: null,
+      no_context_prompt: null
+    })
+    
+    // Reload prompts (will get defaults)
+    await loadPrompts()
+    
+    if (window.$toast) {
+      window.$toast.show('Prompts reset to defaults', 'success')
+    }
+  } catch (e) {
+    console.error('Failed to reset prompts', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to reset prompts', 'error')
+    }
+  }
+}
+
+const savePrompts = async () => {
+  savingPrompts.value = true
+  try {
+    const res = await settingsAPI.chatbot.updatePrompts(promptsForm.value)
+    if (res.is_success) {
+      if (window.$toast) {
+        window.$toast.show('Prompts saved successfully', 'success')
+      }
+    }
+  } catch (e) {
+    console.error('Failed to save prompts', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to save prompts', 'error')
+    }
+  } finally {
+    savingPrompts.value = false
   }
 }
 
@@ -2398,5 +2521,39 @@ const formatDate = (dateString) => {
   to {
     transform: rotate(360deg);
   }
+}
+
+.prompts-section {
+  background: var(--bg-light);
+  padding: 2rem;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  margin-bottom: 2rem;
+}
+
+.prompt-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 100px;
+}
+
+.prompt-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.form-group small {
+  display: block;
+  margin-top: 0.5rem;
+  color: #666;
+  font-size: 0.85rem;
+  line-height: 1.4;
 }
 </style>

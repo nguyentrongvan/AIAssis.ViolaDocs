@@ -1,6 +1,7 @@
 import os
 from typing import List, Optional, Dict, Any
 from ...config import settings, get_ollama_base_url_from_db, get_ollama_embedding_model_from_db
+from .qdrant_store import QdrantVectorStore
 
 
 class EmbeddingModelUnavailableError(Exception):
@@ -289,7 +290,13 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
 
 
 class ChromaVectorStore:
-    """Chroma vector store wrapper (local persistent or HTTP server)"""
+    """
+    Chroma vector store wrapper (local persistent or HTTP server)
+    
+    DEPRECATED: This class is kept temporarily for migration purposes only.
+    Will be removed after migration from ChromaDB to Qdrant is complete.
+    Use QdrantVectorStore instead.
+    """
     
     def __init__(
         self,
@@ -347,56 +354,77 @@ class ChromaVectorStore:
                 # If we can't patch it, that's okay - errors are non-critical
                 pass
             
+            # Detect Docker environment
+            is_docker = os.path.exists('/.dockerenv') or os.environ.get('DOCKER_CONTAINER') == 'true'
+            
+            # Auto-detect ChromaDB server host if in Docker and not set
+            server_host = self.server_host
+            if not server_host and is_docker:
+                server_host = "chroma"  # Docker service name
+                print(f"WARNING: Detected Docker environment but CHROMA_SERVER_HOST not set. Auto-using '{server_host}'")
+            
             # If server_host is provided, use HTTP client; otherwise use local persistent
-            if self.server_host:
+            if server_host:
                 scheme = "https" if self.server_ssl else "http"
+                print(f"[ChromaVectorStore] Initializing HTTP client: {scheme}://{server_host}:{self.server_port}")
                 self.client = chromadb.HttpClient(
-                    host=self.server_host,
+                    host=server_host,
                     port=self.server_port,
                     ssl=self.server_ssl
                 )
-                print(f"Chroma HTTP client connected to {scheme}://{self.server_host}:{self.server_port}")
+                print(f"[ChromaVectorStore] ✓ HTTP client connected to {scheme}://{server_host}:{self.server_port}")
             else:
+                print(f"[ChromaVectorStore] Initializing persistent client at: {self.persist_dir}")
                 os.makedirs(self.persist_dir, exist_ok=True)
                 self.client = chromadb.PersistentClient(path=self.persist_dir)
-                print(f"Chroma persistent client at {self.persist_dir}")
+                print(f"[ChromaVectorStore] ✓ Persistent client ready at {self.persist_dir}")
             
             # Check if collection exists and get its dimension
+            print(f"[ChromaVectorStore] Checking collection: '{self.collection_name}'")
             try:
                 existing_collection = self.client.get_collection(name=self.collection_name)
                 existing_dim = existing_collection.metadata.get("dimension") if hasattr(existing_collection, 'metadata') else None
-                # Try to get dimension from collection count (if empty, we can recreate)
-                count = existing_collection.count()
-                if count == 0:
-                    # Empty collection, can safely delete and recreate with new dimension
-                    print(f"Collection '{self.collection_name}' is empty, will recreate with correct dimension")
-                    self.client.delete_collection(name=self.collection_name)
-                    self.collection = None
-                else:
-                    # Collection has data, check dimension
-                    # Get dimension from first embedding if possible
+                
+                # Get collection count and dimension from first embedding if possible
+                collection_count = 0
+                try:
+                    collection_count = existing_collection.count()
+                    print(f"[ChromaVectorStore] Collection exists with {collection_count} embeddings")
+                except Exception as e:
+                    print(f"[ChromaVectorStore] Warning: Could not get collection count: {e}")
+                
+                # Get dimension from first embedding if possible
+                if collection_count > 0:
                     try:
                         sample = existing_collection.peek(limit=1)
                         if sample.get("embeddings") and len(sample["embeddings"]) > 0:
                             existing_dim = len(sample["embeddings"][0])
-                    except:
-                        pass
-                    self.collection = existing_collection
-                    if existing_dim:
-                        print(f"Existing collection dimension: {existing_dim}")
-            except:
+                            print(f"[ChromaVectorStore] Collection dimension: {existing_dim}")
+                    except Exception as e:
+                        print(f"[ChromaVectorStore] Warning: Could not get dimension from sample: {e}")
+                
+                # Use existing collection - don't delete even if empty
+                # Empty collections are fine, they'll be populated when embeddings are added
+                self.collection = existing_collection
+                if existing_dim:
+                    print(f"[ChromaVectorStore] ✓ Using existing collection (dimension: {existing_dim}, count: {collection_count})")
+                else:
+                    print(f"[ChromaVectorStore] ✓ Using existing collection (dimension unknown, count: {collection_count})")
+            except Exception as e:
                 # Collection doesn't exist, will create new one
+                print(f"[ChromaVectorStore] Collection '{self.collection_name}' does not exist, will create new one: {e}")
                 self.collection = None
             
             # Create or get collection
             if not self.collection:
+                print(f"[ChromaVectorStore] Creating new collection: '{self.collection_name}'")
                 self.collection = self.client.get_or_create_collection(
                     name=self.collection_name,
                     metadata={"hnsw:space": "cosine"}
                 )
-                print(f"Chroma collection ready ({self.collection_name})")
+                print(f"[ChromaVectorStore] ✓ Collection created/ready: '{self.collection_name}'")
             else:
-                print(f"Chroma collection ready ({self.collection_name})")
+                print(f"[ChromaVectorStore] ✓ Collection ready: '{self.collection_name}'")
         except ImportError:
             print("chromadb not installed. Install with: pip install chromadb")
             self.collection = None
@@ -408,41 +436,84 @@ class ChromaVectorStore:
     
     def upsert(self, ids: List[str], embeddings: List[List[float]], metadatas: List[Dict[str, Any]]):
         if not self.collection:
+            print("[ChromaVectorStore] ERROR: Collection is None, skipping upsert")
             return
+        
+        if not embeddings or len(embeddings) == 0:
+            print("[ChromaVectorStore] ERROR: No embeddings provided, skipping upsert")
+            return
+        
+        if not ids or len(ids) == 0:
+            print("[ChromaVectorStore] ERROR: No IDs provided, skipping upsert")
+            return
+        
         try:
-            # Check dimension mismatch
-            if embeddings and len(embeddings) > 0:
-                embedding_dim = len(embeddings[0])
-                # Try to get collection dimension
+            embedding_dim = len(embeddings[0])
+            
+            # Get collection count before upsert
+            collection_count_before = 0
+            try:
+                collection_count_before = self.collection.count()
+            except Exception as e:
+                print(f"[ChromaVectorStore] Warning: Could not get collection count before upsert: {e}")
+            
+            # Log before upsert
+            metadata_sample = metadatas[0] if metadatas else {}
+            print(f"[ChromaVectorStore] Upserting {len(ids)} embedding(s):")
+            print(f"  - IDs: {ids[:3]}{'...' if len(ids) > 3 else ''}")
+            print(f"  - Embedding dimension: {embedding_dim}")
+            print(f"  - Metadata sample: doc_id={metadata_sample.get('doc_id')}, version_id={metadata_sample.get('version_id')}")
+            print(f"  - Collection count before: {collection_count_before}")
+            
+            # Check dimension mismatch only if collection has data
+            if collection_count_before > 0:
                 try:
                     sample = self.collection.peek(limit=1)
                     if sample.get("embeddings") and len(sample["embeddings"]) > 0:
                         collection_dim = len(sample["embeddings"][0])
                         if embedding_dim != collection_dim:
-                            print(f"Dimension mismatch: embedding={embedding_dim}, collection={collection_dim}")
-                            print(f"Deleting and recreating collection '{self.collection_name}' with dimension {embedding_dim}")
+                            print(f"[ChromaVectorStore] ERROR: Dimension mismatch: embedding={embedding_dim}, collection={collection_dim}")
+                            print(f"[ChromaVectorStore] Deleting and recreating collection '{self.collection_name}' with dimension {embedding_dim}")
                             # Delete and recreate collection
                             self.client.delete_collection(name=self.collection_name)
                             self.collection = self.client.create_collection(
                                 name=self.collection_name,
                                 metadata={"hnsw:space": "cosine"}
                             )
-                            print(f"Collection recreated with dimension {embedding_dim}")
-                except:
-                    # Collection might be empty, proceed with upsert
-                    pass
+                            print(f"[ChromaVectorStore] ✓ Collection recreated with dimension {embedding_dim}")
+                            collection_count_before = 0  # Reset count after recreation
+                except Exception as e:
+                    print(f"[ChromaVectorStore] Warning: Error checking collection dimension: {e}, proceeding with upsert")
             
+            # Perform upsert
             self.collection.upsert(
                 ids=ids,
                 embeddings=embeddings,
                 metadatas=metadatas
             )
+            
+            # Verify upsert success
+            collection_count_after = 0
+            try:
+                collection_count_after = self.collection.count()
+                print(f"[ChromaVectorStore] ✓ Upsert completed. Collection count after: {collection_count_after}")
+                
+                if collection_count_after <= collection_count_before:
+                    print(f"[ChromaVectorStore] WARNING: Collection count did not increase! Before: {collection_count_before}, After: {collection_count_after}")
+                else:
+                    print(f"[ChromaVectorStore] ✓ Success: Collection count increased by {collection_count_after - collection_count_before}")
+            except Exception as e:
+                print(f"[ChromaVectorStore] Warning: Could not verify upsert success (count check failed): {e}")
         except Exception as e:
             error_msg = str(e)
+            import traceback
+            print(f"[ChromaVectorStore] ERROR: Upsert failed: {error_msg}")
+            print(f"[ChromaVectorStore] Traceback:")
+            traceback.print_exc()
+            
             if "dimension" in error_msg.lower():
                 # Dimension mismatch - try to fix by recreating collection
-                print(f"Chroma dimension mismatch detected: {e}")
-                print(f"Attempting to recreate collection '{self.collection_name}'...")
+                print(f"[ChromaVectorStore] Dimension mismatch detected, attempting to recreate collection '{self.collection_name}'...")
                 try:
                     self.client.delete_collection(name=self.collection_name)
                     if embeddings and len(embeddings) > 0:
@@ -451,18 +522,17 @@ class ChromaVectorStore:
                             name=self.collection_name,
                             metadata={"hnsw:space": "cosine"}
                         )
-                        print(f"Collection recreated with dimension {embedding_dim}, retrying upsert...")
+                        print(f"[ChromaVectorStore] Collection recreated with dimension {embedding_dim}, retrying upsert...")
                         # Retry upsert
                         self.collection.upsert(
                             ids=ids,
                             embeddings=embeddings,
                             metadatas=metadatas
                         )
-                        print("Upsert successful after collection recreation")
+                        print("[ChromaVectorStore] ✓ Upsert successful after collection recreation")
                 except Exception as e2:
-                    print(f"Failed to fix dimension mismatch: {e2}")
-            else:
-                print(f"Chroma upsert failed: {e}")
+                    print(f"[ChromaVectorStore] ERROR: Failed to fix dimension mismatch: {e2}")
+                    traceback.print_exc()
     
     def query(self, query_embeddings: List[List[float]], where: Optional[Dict[str, Any]], top_k: int):
         if not self.collection:
@@ -484,7 +554,7 @@ class EmbeddingService:
     def __init__(
         self,
         embedder: Optional[EmbeddingProvider] = None,
-        store: Optional[ChromaVectorStore] = None
+        store: Optional[QdrantVectorStore] = None
     ):
         self.embedder = embedder or self._get_default_embedder()
         self.store = store or self._get_default_store()
@@ -517,18 +587,20 @@ class EmbeddingService:
         print("Warning: No embedding provider available. Please configure Ollama.")
         return None
     
-    def _get_default_store(self) -> Optional[ChromaVectorStore]:
-        """Get default vector store (Chroma local)"""
+    def _get_default_store(self) -> Optional[QdrantVectorStore]:
+        """Get default vector store (Qdrant)"""
         try:
-            return ChromaVectorStore(
-                persist_dir=getattr(settings, "chroma_persist_dir", "./data/chroma"),
-                collection_name=getattr(settings, "chroma_collection", "embeddings"),
-                server_host=getattr(settings, "chroma_server_host", ""),
-                server_port=getattr(settings, "chroma_server_port", 8000),
-                server_ssl=getattr(settings, "chroma_server_ssl", False),
+            return QdrantVectorStore(
+                host=getattr(settings, "qdrant_host", "localhost"),
+                port=getattr(settings, "qdrant_port", 6333),
+                grpc_port=getattr(settings, "qdrant_grpc_port", None),
+                collection_name=getattr(settings, "qdrant_collection", "embeddings"),
+                api_key=getattr(settings, "qdrant_api_key", None) or None,
             )
         except Exception as e:
-            print(f"Chroma store not available: {e}")
+            print(f"Qdrant store not available: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def is_available(self) -> bool:
@@ -627,15 +699,17 @@ class EmbeddingService:
         
         # Check store
         if self.store:
-            if self.store.collection is not None:
+            if self.store.client is not None:
                 status["store"] = {
-                    "type": "chroma",
+                    "type": "qdrant",
                     "collection": self.store.collection_name,
-                    "persist_dir": self.store.persist_dir if not self.store.server_host else None,
-                    "server": f"{self.store.server_host}:{self.store.server_port}" if self.store.server_host else None
+                    "host": self.store.host,
+                    "port": self.store.port,
+                    "grpc_port": self.store.grpc_port,
+                    "web_ui": f"http://{self.store.host}:6333/dashboard" if self.store.host else None
                 }
             else:
-                status["errors"].append("Chroma vector store not initialized")
+                status["errors"].append("Qdrant vector store not initialized")
         else:
             status["errors"].append("No vector store configured")
         
@@ -666,9 +740,22 @@ class EmbeddingService:
     def upsert_embeddings(self, ids: List[str], embeddings: List[List[float]], metadatas: List[Dict[str, Any]]):
         """Upsert embeddings into vector store"""
         if not self.store:
-            print("Vector store not configured; skipping upsert")
+            print("[EmbeddingService] ERROR: Vector store not configured; skipping upsert")
             return
-        self.store.upsert(ids=ids, embeddings=embeddings, metadatas=metadatas)
+        
+        if not self.store.client:
+            print("[EmbeddingService] ERROR: Vector store client is None; skipping upsert")
+            return
+        
+        print(f"[EmbeddingService] Calling store.upsert() with {len(ids)} embedding(s)")
+        try:
+            self.store.upsert(ids=ids, embeddings=embeddings, metadatas=metadatas)
+            print(f"[EmbeddingService] ✓ store.upsert() completed successfully")
+        except Exception as e:
+            print(f"[EmbeddingService] ERROR: store.upsert() failed: {e}")
+            import traceback
+            traceback.print_exc()
+            raise  # Re-raise to ensure error is not silently ignored
     
     def query_embeddings(self, query_embedding: List[float], where: Optional[Dict[str, Any]], top_k: int = 10):
         """Query vector store for similar embeddings"""

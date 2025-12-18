@@ -566,27 +566,30 @@ class OCRWorkerService:
                         heartbeat_task.cancel()
                         return
                     
+                    # Log job claimed
+                    target = job.target
+                    doc_id = target.get("document_id")
+                    version_id = target.get("version_id")
+                    print(f"[{self.worker_id}] Processing EMBED job {job.id}: doc_id={doc_id}, version_id={version_id}")
+                    
                     from ..services.ai import get_embedding_service
                     from ..services.ai.embedding_service import EmbeddingModelUnavailableError
                     
+                    # Initialize embedding service
+                    print(f"[{self.worker_id}] Initializing embedding service...")
                     embedding_service = get_embedding_service()
-                    if not embedding_service or not embedding_service.is_available():
-                        diagnostic = ""
-                        if embedding_service:
-                            diagnostic = embedding_service.get_availability_diagnostic()
-                        else:
-                            diagnostic = (
-                                "Embedding service could not be initialized. "
-                                f"Ollama base URL: {settings.ollama_base_url}, "
-                                f"Model: {settings.ollama_embedding_model}"
-                            )
-                        raise ValueError(
-                            f"Embedding provider not configured or model not available. {diagnostic}"
-                        )
                     
-                    # Get document version
-                    target = job.target
-                    version_id = target.get("version_id")
+                    if not embedding_service:
+                        raise ValueError("Embedding service could not be initialized")
+                    
+                    if not embedding_service.is_available():
+                        diagnostic = embedding_service.get_availability_diagnostic()
+                        raise ValueError(f"Embedding provider not available: {diagnostic}")
+                    
+                    # Log embedding service status
+                    store_type = "Qdrant"
+                    has_client = bool(embedding_service.store and embedding_service.store.client)
+                    print(f"[{self.worker_id}] ✓ Embedding service ready (store_type={store_type}, has_client={has_client})")
                     
                     if not version_id:
                         raise ValueError("No version_id in target")
@@ -609,6 +612,7 @@ class OCRWorkerService:
                     if not version.text_uri:
                         raise ValueError("No OCR text available for embedding")
                     
+                    print(f"[{self.worker_id}] Retrieving OCR text from MinIO: {version.text_uri}")
                     minio_client = get_minio_client()
                     text_object_name = version.text_uri
                     if text_object_name.startswith(f"minio://{settings.minio_bucket}/"):
@@ -619,17 +623,31 @@ class OCRWorkerService:
                         text = file_data.read().decode('utf-8')
                         file_data.close()
                         file_data.release_conn()
+                        print(f"[{self.worker_id}] ✓ Text retrieved: {len(text)} characters")
                     except Exception as e:
                         raise ValueError(f"Failed to read OCR text: {e}")
                     
                     # Generate embedding
+                    print(f"[{self.worker_id}] Generating embedding...")
                     try:
                         embedding_vector = embedding_service.generate_embedding(text)
+                        embedding_dim = len(embedding_vector)
+                        print(f"[{self.worker_id}] ✓ Embedding generated: dimension={embedding_dim}")
                     except EmbeddingModelUnavailableError as e:
                         raise ValueError(f"Embedding model unavailable: {str(e)}")
                     
                     # Save embedding to vector store
                     embed_id = f"embed-{job.id}"
+                    
+                    # Get collection count before upsert
+                    collection_count_before = 0
+                    if embedding_service.store and embedding_service.store.client:
+                        try:
+                            collection_count_before = embedding_service.store.count()
+                        except:
+                            pass
+                    
+                    print(f"[{self.worker_id}] Upserting embedding to Qdrant (collection count before: {collection_count_before})...")
                     embedding_service.upsert_embeddings(
                         ids=[embed_id],
                         embeddings=[embedding_vector],
@@ -642,6 +660,17 @@ class OCRWorkerService:
                         }]
                     )
                     
+                    # Verify collection count after upsert
+                    collection_count_after = 0
+                    if embedding_service.store and embedding_service.store.client:
+                        try:
+                            collection_count_after = embedding_service.store.count()
+                            print(f"[{self.worker_id}] ✓ Upsert completed (collection count after: {collection_count_after})")
+                            if collection_count_after <= collection_count_before:
+                                print(f"[{self.worker_id}] WARNING: Collection count did not increase!")
+                        except Exception as e:
+                            print(f"[{self.worker_id}] Warning: Could not verify collection count after upsert: {e}")
+                    
                     # Update job
                     job.status = "completed"
                     job.output_ref = {
@@ -651,13 +680,17 @@ class OCRWorkerService:
                     job.release()  # Clear worker tracking
                     
                     await session.commit()
+                    print(f"[{self.worker_id}] ✓ EMBED job {job.id} completed successfully")
                 
                 heartbeat_task.cancel()
                 
             except Exception as e:
                 heartbeat_task.cancel()
                 error_msg = str(e)[:500]
-                print(f"[{self.worker_id}] EMBED job {job.id} failed: {error_msg}")
+                import traceback
+                print(f"[{self.worker_id}] ERROR: EMBED job {job.id} failed: {error_msg}")
+                print(f"[{self.worker_id}] Traceback:")
+                traceback.print_exc()
                 
                 async with AsyncSessionLocal() as session:
                     result = await session.execute(
@@ -669,10 +702,12 @@ class OCRWorkerService:
                             job.increment_retry()
                             job.release()
                             job.status = "queued"  # Retry
+                            print(f"[{self.worker_id}] Job {job.id} will be retried (attempt {job.retry_count})")
                         else:
                             job.status = "failed"
                             job.error = error_msg
                             job.release()
+                            print(f"[{self.worker_id}] Job {job.id} marked as failed (max retries reached)")
                         await session.commit()
     
     async def _heartbeat_loop(self, job_id: int):

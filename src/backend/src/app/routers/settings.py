@@ -537,6 +537,146 @@ async def get_chatbot_settings(
     } for g in groups])
 
 
+@router.get("/chatbot/prompts")
+async def get_chatbot_prompts(
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get chatbot prompt templates."""
+    from ..services.settings_service import SettingsService
+    from ..prompts import (
+        CHATBOT_SYSTEM_PROMPT,
+        CHATBOT_CONTEXT_PROMPT,
+        CHATBOT_NO_CONTEXT_PROMPT
+    )
+    
+    # Get prompts from settings, fallback to defaults
+    system_prompt = await SettingsService.get_setting(
+        "chatbot_system_prompt",
+        default=CHATBOT_SYSTEM_PROMPT,
+        session=session
+    )
+    context_prompt = await SettingsService.get_setting(
+        "chatbot_context_prompt",
+        default=CHATBOT_CONTEXT_PROMPT,
+        session=session
+    )
+    no_context_prompt = await SettingsService.get_setting(
+        "chatbot_no_context_prompt",
+        default=CHATBOT_NO_CONTEXT_PROMPT,
+        session=session
+    )
+    
+    return success_response({
+        "system_prompt": system_prompt,
+        "context_prompt": context_prompt,
+        "no_context_prompt": no_context_prompt
+    })
+
+
+class ChatbotPromptsUpdate(BaseModel):
+    system_prompt: Optional[str] = None
+    context_prompt: Optional[str] = None
+    no_context_prompt: Optional[str] = None
+
+
+@router.post("/chatbot/prompts")
+async def update_chatbot_prompts(
+    payload: ChatbotPromptsUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update chatbot prompt templates."""
+    from ..services.settings_service import SettingsService
+    from ..models.settings import SystemSettings
+    
+    updated = []
+    deleted = []
+    
+    # Handle system_prompt
+    if payload.system_prompt is not None:
+        if payload.system_prompt == "":
+            # Delete setting to use default
+            result = await session.execute(
+                select(SystemSettings).where(SystemSettings.key == "chatbot_system_prompt")
+            )
+            setting = result.scalar_one_or_none()
+            if setting:
+                await session.delete(setting)
+                deleted.append("system_prompt")
+        else:
+            await SettingsService.set_setting(
+                key="chatbot_system_prompt",
+                value=payload.system_prompt,
+                category="chatbot",
+                description="System prompt for chatbot assistant",
+                sensitive=False,
+                user_id=current_user.id,
+                session=session
+            )
+            updated.append("system_prompt")
+    
+    # Handle context_prompt
+    if payload.context_prompt is not None:
+        if payload.context_prompt == "":
+            # Delete setting to use default
+            result = await session.execute(
+                select(SystemSettings).where(SystemSettings.key == "chatbot_context_prompt")
+            )
+            setting = result.scalar_one_or_none()
+            if setting:
+                await session.delete(setting)
+                deleted.append("context_prompt")
+        else:
+            await SettingsService.set_setting(
+                key="chatbot_context_prompt",
+                value=payload.context_prompt,
+                category="chatbot",
+                description="Prompt template for chatbot with document context",
+                sensitive=False,
+                user_id=current_user.id,
+                session=session
+            )
+            updated.append("context_prompt")
+    
+    # Handle no_context_prompt
+    if payload.no_context_prompt is not None:
+        if payload.no_context_prompt == "":
+            # Delete setting to use default
+            result = await session.execute(
+                select(SystemSettings).where(SystemSettings.key == "chatbot_no_context_prompt")
+            )
+            setting = result.scalar_one_or_none()
+            if setting:
+                await session.delete(setting)
+                deleted.append("no_context_prompt")
+        else:
+            await SettingsService.set_setting(
+                key="chatbot_no_context_prompt",
+                value=payload.no_context_prompt,
+                category="chatbot",
+                description="Prompt template for chatbot without document context",
+                sensitive=False,
+                user_id=current_user.id,
+                session=session
+            )
+            updated.append("no_context_prompt")
+    
+    await session.commit()
+    
+    message_parts = []
+    if updated:
+        message_parts.append(f"Updated: {', '.join(updated)}")
+    if deleted:
+        message_parts.append(f"Reset to defaults: {', '.join(deleted)}")
+    
+    return success_response({
+        "message": "; ".join(message_parts) if message_parts else "No changes",
+        "updated": updated,
+        "deleted": deleted
+    })
+
+
 @router.post("/chatbot")
 async def update_chatbot_policy(
     payload: ChatbotPolicyUpdate,

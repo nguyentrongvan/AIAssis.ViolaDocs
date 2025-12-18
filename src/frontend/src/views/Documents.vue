@@ -140,6 +140,13 @@
             >
               Download
             </button>
+            <button
+              @click.stop="confirmDelete(doc)"
+              class="btn-link-small btn-danger"
+            >
+              <Trash2 :size="14" />
+              Delete
+            </button>
           </div>
         </div>
       </div>
@@ -1097,6 +1104,15 @@ onMounted(async () => {
 
 .card-actions .btn-link-small:active {
   transform: translateY(0);
+}
+
+.card-actions .btn-link-small.btn-danger {
+  color: var(--error);
+}
+
+.card-actions .btn-link-small.btn-danger:hover {
+  background: rgba(231, 76, 60, 0.1);
+  color: #C0392B;
 }
 
 .btn-clear {

@@ -228,6 +228,7 @@ async def process_embedding_job(job_id: int):
             
             # Save embedding to vector store
             embed_id = f"embed-{job.id}"
+            
             embedding_service.upsert_embeddings(
                 ids=[embed_id],
                 embeddings=[embedding_vector],

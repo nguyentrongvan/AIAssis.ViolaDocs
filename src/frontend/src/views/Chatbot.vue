@@ -63,17 +63,100 @@
         </div>
 
         <div class="sidebar-section">
+          <h3>Source Documents</h3>
+          <div class="source-documents">
+            <div class="document-search-wrapper">
+              <div class="document-search-input">
+                <Search :size="16" class="search-icon" />
+                <input
+                  type="text"
+                  v-model="documentSearchTerm"
+                  placeholder="Search documents..."
+                  class="document-search"
+                />
+                <button
+                  v-if="documentSearchTerm"
+                  @click="documentSearchTerm = ''"
+                  class="search-clear-btn"
+                  title="Clear search"
+                >
+                  <X :size="14" />
+                </button>
+              </div>
+              <div v-if="documentSearchTerm" class="search-results-info">
+                {{ filteredDocuments.length }} of {{ availableDocuments.length }} documents
+              </div>
+            </div>
+            <div class="select-all-control">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  v-model="selectAllDocuments"
+                  @change="onSelectAllChange"
+                />
+                <span>Select All</span>
+              </label>
+            </div>
+            <div class="source-documents-list" v-if="filteredDocuments.length > 0">
+              <div
+                v-for="doc in filteredDocuments"
+                :key="doc.id"
+                class="source-document-item"
+              >
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    :value="doc.id"
+                    v-model="selectedDocumentIds"
+                    @change="onDocumentSelectionChange"
+                  />
+                  <div class="document-info">
+                    <div class="document-title">{{ doc.title }}</div>
+                    <div class="document-meta">
+                      <span class="document-type">{{ doc.mime }}</span>
+                      <span 
+                        v-if="!doc.has_embedding" 
+                        class="no-embedding-badge"
+                        title="Document is not indexed. Vector search will not be used but the document can still be used."
+                      >
+                        <AlertTriangle :size="12" />
+                        Not indexed
+                      </span>
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+            <div v-else-if="loadingDocuments" class="loading-documents">
+              Loading documents...
+            </div>
+            <div v-else-if="documentSearchTerm && filteredDocuments.length === 0" class="empty-documents">
+              <div>No documents found matching "{{ documentSearchTerm }}"</div>
+              <div style="font-size: 0.8rem; margin-top: 0.5rem; color: #999;">
+                Try a different search term
+              </div>
+            </div>
+            <div v-else class="empty-documents">
+              <div>No documents available</div>
+              <div style="font-size: 0.8rem; margin-top: 0.5rem; color: #999;">
+                Total: {{ availableDocuments.length }} documents
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
           <h3>Chat History</h3>
           <div class="chat-history">
             <div
               v-for="session in sessions"
-              :key="session.id"
+              :key="session.session_id || session.id"
               class="session-item"
-              :class="{ active: currentSessionId === session.id }"
-              @click="loadSession(session.id)"
+              :class="{ active: currentSessionId === (session.session_id || session.id) }"
+              @click="loadSession(session.session_id || session.id)"
             >
               <div class="session-title">
-                {{ session.title || `Chat ${session.id.slice(0, 8)}` }}
+                {{ session.title || `Chat ${(session.session_id || session.id || '').slice(0, 8)}` }}
               </div>
               <div class="session-date">
                 {{ formatDate(session.created_at) }}
@@ -144,15 +227,18 @@
                   class="citation"
                 >
                   <a
-                    @click.prevent="viewDocument(cite.doc_id)"
+                    @click.prevent="viewDocument(cite.document_id || cite.doc_id)"
                     class="citation-link"
                   >
                     <FileText :size="14" />
-                    {{ cite.doc_title || `Document ${cite.doc_id}` }}
+                    {{ cite.title || cite.doc_title || `Document ${cite.document_id || cite.doc_id}` }}
                   </a>
                   <span v-if="cite.score" class="citation-score">
                     ({{ (cite.score * 100).toFixed(0) }}% match)
                   </span>
+                  <div v-if="cite.snippet" class="citation-snippet">
+                    {{ cite.snippet }}
+                  </div>
                 </div>
               </div>
               <div v-if="msg.role === 'assistant' && msg.id" class="message-feedback">
@@ -266,7 +352,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../store/chat'
 import { useGroupsStore } from '../store/groups'
@@ -281,7 +367,9 @@ import {
   Send,
   Trash2,
   AlertTriangle,
-  Circle
+  Circle,
+  Search,
+  X
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -298,6 +386,11 @@ const messagesContainer = ref(null)
 const currentSessionId = ref(null)
 const showHandoffModal = ref(false)
 const tagFilter = ref('')
+const availableDocuments = ref([])
+const selectedDocumentIds = ref([])
+const selectAllDocuments = ref(true)
+const loadingDocuments = ref(false)
+const documentSearchTerm = ref('')
 
 const filters = ref({
   tags: [],
@@ -312,10 +405,53 @@ const handoffForm = ref({
   include_context: true
 })
 
+// Filtered documents based on search term
+const filteredDocuments = computed(() => {
+  if (!documentSearchTerm.value.trim()) {
+    return availableDocuments.value
+  }
+  
+  const searchLower = documentSearchTerm.value.toLowerCase().trim()
+  return availableDocuments.value.filter(doc => {
+    const titleMatch = doc.title?.toLowerCase().includes(searchLower)
+    const mimeMatch = doc.mime?.toLowerCase().includes(searchLower)
+    return titleMatch || mimeMatch
+  })
+})
+
+// Watch search term to update select all state
+watch(documentSearchTerm, () => {
+  if (filteredDocuments.value.length > 0) {
+    const filteredIds = new Set(filteredDocuments.value.map(d => d.id))
+    const selectedFilteredCount = selectedDocumentIds.value.filter(id => filteredIds.has(id)).length
+    selectAllDocuments.value = selectedFilteredCount === filteredDocuments.value.length
+  } else {
+    selectAllDocuments.value = false
+  }
+})
+
 onMounted(async () => {
   await loadGroups()
   await loadChatHistory()
+  await loadAvailableDocuments()
+  
+  // Auto-refresh available documents every 30 seconds to catch embedding updates
+  documentsRefreshInterval = setInterval(() => {
+    loadAvailableDocuments()
+  }, 30000) // 30 seconds
 })
+
+// Cleanup interval on unmount
+onUnmounted(() => {
+  if (documentsRefreshInterval) {
+    clearInterval(documentsRefreshInterval)
+  }
+})
+
+// Watch filters and group changes to reload available documents
+watch([selectedGroup, () => filters.value.tags, () => filters.value.type, () => filters.value.date_from, () => filters.value.date_to], () => {
+  loadAvailableDocuments()
+}, { deep: true })
 
 const loadGroups = async () => {
   try {
@@ -329,7 +465,10 @@ const loadGroups = async () => {
 const loadChatHistory = async () => {
   try {
     await chatStore.fetchHistory({ group_id: selectedGroup.value || undefined })
-    sessions.value = chatStore.sessions
+    sessions.value = chatStore.sessions.map(s => ({
+      ...s,
+      id: s.session_id || s.id  // Ensure id exists for backward compatibility
+    }))
   } catch (e) {
     console.error('Failed to load chat history', e)
   }
@@ -339,6 +478,79 @@ const onGroupChange = () => {
   currentSessionId.value = null
   messages.value = []
   loadChatHistory()
+  loadAvailableDocuments()
+}
+
+const loadAvailableDocuments = async () => {
+  loadingDocuments.value = true
+  try {
+    const params = {}
+    if (selectedGroup.value) {
+      params.group_id = selectedGroup.value
+    }
+    if (filters.value.tags.length > 0) {
+      params.tags = filters.value.tags.join(',')
+    }
+    if (filters.value.type) {
+      params.type = filters.value.type
+    }
+    if (filters.value.date_from) {
+      params.date_from = filters.value.date_from
+    }
+    if (filters.value.date_to) {
+      params.date_to = filters.value.date_to
+    }
+    
+    const res = await chatAPI.availableDocuments(params)
+    console.log('Available documents response:', res)
+    
+    if (res.is_success) {
+      // Handle both response.data.documents and response.data structure
+      const documents = res.data?.documents || res.data || []
+      console.log('Loaded documents:', documents)
+      
+      availableDocuments.value = Array.isArray(documents) ? documents : []
+      
+      // If select all is true, select all document IDs
+      if (selectAllDocuments.value) {
+        selectedDocumentIds.value = availableDocuments.value.map(d => d.id)
+      } else {
+        // Keep only selected IDs that are still available
+        selectedDocumentIds.value = selectedDocumentIds.value.filter(
+          id => availableDocuments.value.some(d => d.id === id)
+        )
+      }
+    } else {
+      console.error('Failed to load documents:', res.message || 'Unknown error')
+    }
+  } catch (e) {
+    console.error('Failed to load available documents', e)
+    if (window.$toast) {
+      window.$toast.show('Failed to load available documents', 'error')
+    }
+  } finally {
+    loadingDocuments.value = false
+  }
+}
+
+const onSelectAllChange = () => {
+  if (selectAllDocuments.value) {
+    // Select all filtered documents when search is active, otherwise all documents
+    selectedDocumentIds.value = filteredDocuments.value.map(d => d.id)
+  } else {
+    // Deselect all filtered documents
+    const filteredIds = new Set(filteredDocuments.value.map(d => d.id))
+    selectedDocumentIds.value = selectedDocumentIds.value.filter(id => !filteredIds.has(id))
+  }
+}
+
+const onDocumentSelectionChange = () => {
+  // Update select all state based on current selection of filtered documents
+  if (filteredDocuments.value.length > 0) {
+    const filteredIds = new Set(filteredDocuments.value.map(d => d.id))
+    const selectedFilteredCount = selectedDocumentIds.value.filter(id => filteredIds.has(id)).length
+    selectAllDocuments.value = selectedFilteredCount === filteredDocuments.value.length
+  }
 }
 
 const sendMessage = async () => {
@@ -364,17 +576,28 @@ const sendMessage = async () => {
     }
 
     // Add filters
-    if (filters.value.tags.length > 0) {
-      chatData.filters = { ...chatData.filters, tags: filters.value.tags }
+    if (filters.value.tags.length > 0 || filters.value.type || filters.value.date_from || filters.value.date_to) {
+      chatData.filters = {}
+      if (filters.value.tags.length > 0) {
+        chatData.filters.tags = filters.value.tags
+      }
+      if (filters.value.type) {
+        chatData.filters.type = filters.value.type
+      }
+      if (filters.value.date_from) {
+        chatData.filters.date_from = filters.value.date_from
+      }
+      if (filters.value.date_to) {
+        chatData.filters.date_to = filters.value.date_to
+      }
     }
-    if (filters.value.type) {
-      chatData.filters = { ...chatData.filters, type: filters.value.type }
-    }
-    if (filters.value.date_from) {
-      chatData.filters = { ...chatData.filters, date_from: filters.value.date_from }
-    }
-    if (filters.value.date_to) {
-      chatData.filters = { ...chatData.filters, date_to: filters.value.date_to }
+
+    // Add selected document IDs (if not selecting all)
+    if (!selectAllDocuments.value && selectedDocumentIds.value.length > 0) {
+      chatData.selected_document_ids = selectedDocumentIds.value
+    } else if (selectAllDocuments.value) {
+      // Send null or empty array to indicate "all"
+      chatData.selected_document_ids = null
     }
 
     const res = await chatAPI.chat(chatData)
@@ -486,9 +709,31 @@ const requestSourceAccess = async () => {
     }
     return
   }
+  
+  // Collect document IDs from citations in the last assistant message
+  const lastAssistantMsg = [...messages.value].reverse().find(msg => msg.role === 'assistant')
+  const sourceIds = []
+  
+  if (lastAssistantMsg && lastAssistantMsg.citations) {
+    lastAssistantMsg.citations.forEach(cite => {
+      const docId = cite.document_id || cite.doc_id
+      if (docId && !sourceIds.includes(docId)) {
+        sourceIds.push(docId)
+      }
+    })
+  }
+  
+  if (sourceIds.length === 0) {
+    if (window.$toast) {
+      window.$toast.show('No sources available in current conversation', 'info')
+    }
+    return
+  }
+  
   try {
     const res = await chatAPI.sourceAccess(currentSessionId.value, {
-      request_type: 'documents'
+      source_ids: sourceIds,
+      access_type: 'preview'
     })
     if (res.is_success && res.data.sources) {
       // Show sources in a modal or sidebar
@@ -754,6 +999,186 @@ const formatDate = (dateStr) => {
   font-size: 0.9rem;
 }
 
+.source-documents {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.document-search-wrapper {
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.document-search-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--bg-white);
+  border: 2px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-lg);
+  padding: var(--space-sm) var(--space-md);
+  transition: all var(--transition-base);
+  margin-bottom: var(--space-xs);
+}
+
+.document-search-input:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.1);
+}
+
+.search-icon {
+  color: var(--text-light);
+  flex-shrink: 0;
+  margin-right: var(--space-sm);
+}
+
+.document-search {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.9rem;
+  color: var(--text-dark);
+  font-family: inherit;
+}
+
+.document-search::placeholder {
+  color: var(--text-lighter);
+}
+
+.search-clear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-light);
+  border: none;
+  border-radius: var(--radius-full);
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  color: var(--text-light);
+  transition: all var(--transition-base);
+  flex-shrink: 0;
+  margin-left: var(--space-xs);
+  padding: 0;
+}
+
+.search-clear-btn:hover {
+  background: var(--primary-light);
+  color: var(--primary);
+  transform: scale(1.1);
+}
+
+.search-results-info {
+  font-size: 0.75rem;
+  color: var(--text-light);
+  text-align: right;
+  padding-top: var(--space-xs);
+  font-weight: 500;
+}
+
+.select-all-control {
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  cursor: pointer;
+  padding: var(--space-sm);
+  border-radius: var(--radius-md);
+  transition: background-color var(--transition-base);
+}
+
+.checkbox-label:hover {
+  background-color: var(--bg-light);
+}
+
+.checkbox-label input[type="checkbox"] {
+  margin-top: 0.25rem;
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+
+.source-documents-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.source-document-item {
+  margin-bottom: var(--space-xs);
+}
+
+.source-document-item .checkbox-label {
+  width: 100%;
+}
+
+.document-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.document-title {
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--text-dark);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.document-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 0.75rem;
+  color: var(--text-light);
+}
+
+.document-type {
+  padding: 0.125rem 0.5rem;
+  background: var(--bg-light);
+  border-radius: var(--radius-sm);
+}
+
+.no-embedding-badge {
+  padding: 0.125rem 0.5rem;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #92400e;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  cursor: help;
+  transition: all var(--transition-base);
+}
+
+.no-embedding-badge:hover {
+  background: linear-gradient(135deg, #fde68a 0%, #fcd34d 100%);
+  border-color: #f59e0b;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+}
+
+.loading-documents,
+.empty-documents {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+  font-size: 0.9rem;
+}
+
 .chat-main {
   background: var(--bg-white);
   border-radius: var(--radius-xl);
@@ -780,21 +1205,33 @@ const formatDate = (dateStr) => {
   justify-content: space-between;
   align-items: center;
   padding: var(--space-lg) var(--space-xl);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  background: var(--bg-white);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: linear-gradient(to bottom, var(--bg-white) 0%, rgba(255, 255, 255, 0.95) 100%);
+  backdrop-filter: blur(10px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .session-indicator {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  font-size: 0.9rem;
-  font-weight: 500;
+  font-size: 0.875rem;
+  font-weight: 600;
   color: var(--text-medium);
+  padding: var(--space-xs) var(--space-md);
+  background: var(--bg-light);
+  border-radius: var(--radius-lg);
 }
 
 .session-indicator.new {
   color: var(--primary);
+  background: var(--gradient-ai-soft);
+}
+
+.session-indicator svg {
+  animation: pulse 2s var(--ease-in-out) infinite;
 }
 
 .chat-actions {
@@ -808,36 +1245,54 @@ const formatDate = (dateStr) => {
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   background: var(--bg-white);
-  border: 2px solid rgba(0, 0, 0, 0.1);
+  border: 2px solid rgba(0, 0, 0, 0.08);
   border-radius: var(--radius-lg);
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-dark);
   cursor: pointer;
   transition: all var(--transition-base);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .btn-small:hover {
   background: var(--gradient-ai-soft);
   border-color: var(--ai-cyan);
   color: var(--primary);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 217, 255, 0.15);
 }
 
 .btn-small:active {
   transform: translateY(0);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: var(--space-xl) var(--space-lg);
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--space-lg);
+  background: linear-gradient(to bottom, rgba(248, 249, 255, 0.5) 0%, rgba(255, 255, 255, 0.5) 100%);
+}
+
+.messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+.messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.messages::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-full);
+}
+
+.messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
 }
 
 .welcome-message {
@@ -845,23 +1300,25 @@ const formatDate = (dateStr) => {
   padding: var(--space-3xl) var(--space-xl);
   color: var(--text-medium);
   animation: fadeInUp var(--transition-slow) var(--ease-out);
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 .welcome-icon-wrapper {
   position: relative;
-  width: 120px;
-  height: 120px;
+  width: 140px;
+  height: 140px;
   margin: 0 auto var(--space-xl);
 }
 
 .welcome-icon {
-  width: 80px;
-  height: 80px;
+  width: 90px;
+  height: 90px;
   color: var(--primary);
   position: relative;
   z-index: 2;
   animation: float 3s var(--ease-in-out) infinite;
-  filter: drop-shadow(0 0 20px rgba(0, 217, 255, 0.4));
+  filter: drop-shadow(0 0 30px rgba(0, 217, 255, 0.5));
 }
 
 .welcome-glow {
@@ -873,28 +1330,36 @@ const formatDate = (dateStr) => {
   background: var(--gradient-cyan-purple);
   border-radius: var(--radius-full);
   transform: translate(-50%, -50%);
-  opacity: 0.3;
-  filter: blur(20px);
-  animation: glow-pulse 2s var(--ease-in-out) infinite;
+  opacity: 0.4;
+  filter: blur(30px);
+  animation: glow-pulse 3s var(--ease-in-out) infinite;
 }
 
 .welcome-message h3 {
-  font-size: 1.75rem;
+  font-size: 2rem;
   font-weight: 700;
   margin: 0 0 var(--space-md) 0;
+  background: var(--gradient-ai);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.3;
 }
 
 .welcome-message p {
-  font-size: 1rem;
-  color: var(--text-light);
+  font-size: 1.05rem;
+  color: var(--text-medium);
   margin: 0;
+  line-height: 1.6;
 }
 
 .message {
   display: flex;
-  gap: var(--space-md);
+  gap: var(--space-lg);
   align-items: flex-start;
+  margin-bottom: var(--space-xl);
   animation: fadeInUp var(--transition-base) var(--ease-out);
+  padding: 0 var(--space-md);
 }
 
 .message-enter-active {
@@ -903,7 +1368,7 @@ const formatDate = (dateStr) => {
 
 .message-enter-from {
   opacity: 0;
-  transform: translateY(10px);
+  transform: translateY(20px) scale(0.95);
 }
 
 .message.user {
@@ -912,29 +1377,32 @@ const formatDate = (dateStr) => {
 
 .message-avatar {
   flex-shrink: 0;
+  position: relative;
 }
 
 .avatar-circle {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   transition: all var(--transition-base);
+  border: 3px solid transparent;
+  background-clip: padding-box;
 }
 
 .user-avatar {
   background: var(--gradient-primary);
   color: white;
-  box-shadow: var(--shadow-glow);
+  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
 }
 
 .ai-avatar {
   background: var(--gradient-cyan-purple);
   color: white;
-  box-shadow: var(--shadow-glow-cyan);
+  box-shadow: 0 4px 12px rgba(0, 217, 255, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
 }
 
 .avatar-pulse {
@@ -946,28 +1414,35 @@ const formatDate = (dateStr) => {
   border-radius: var(--radius-full);
   background: var(--gradient-cyan-purple);
   transform: translate(-50%, -50%);
-  opacity: 0.6;
+  opacity: 0.4;
   animation: pulse 2s var(--ease-in-out) infinite;
+  z-index: -1;
 }
 
 .message-content {
   flex: 1;
-  max-width: 70%;
+  max-width: 75%;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
 }
 
 .message.user .message-content {
-  text-align: right;
+  align-items: flex-end;
 }
 
 .message-text {
   background: var(--bg-light);
-  padding: var(--space-lg);
+  padding: var(--space-lg) var(--space-xl);
   border-radius: var(--radius-xl);
-  line-height: 1.7;
+  line-height: 1.8;
   position: relative;
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
   transition: all var(--transition-base);
+  font-size: 0.95rem;
+  word-wrap: break-word;
+  border: 1px solid rgba(0, 0, 0, 0.03);
 }
 
 .message-text::before {
@@ -983,107 +1458,195 @@ const formatDate = (dateStr) => {
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  opacity: 0;
+  opacity: 0.3;
   transition: opacity var(--transition-base);
 }
 
+.message.assistant .message-text {
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%);
+  border-left: 3px solid var(--ai-cyan);
+}
+
 .message.assistant .message-text::before {
-  opacity: 1;
+  opacity: 0.5;
 }
 
 .message.user .message-text {
   background: var(--gradient-primary);
   color: white;
-  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  box-shadow: 0 4px 16px rgba(108, 92, 231, 0.3), 0 2px 8px rgba(108, 92, 231, 0.2);
+  border: none;
 }
 
 .message.user .message-text::before {
   display: none;
 }
 
+.message.user .message-text:hover {
+  box-shadow: 0 6px 20px rgba(108, 92, 231, 0.4), 0 4px 12px rgba(108, 92, 231, 0.3);
+  transform: translateY(-1px);
+}
+
 .citations {
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 2px solid rgba(0, 217, 255, 0.15);
+  background: linear-gradient(135deg, rgba(0, 217, 255, 0.05) 0%, rgba(108, 92, 231, 0.05) 100%);
+  padding: var(--space-md);
+  border-radius: var(--radius-lg);
+  margin-top: var(--space-md);
 }
 
 .citations-header {
-  font-size: 0.85rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-  color: #666;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-bottom: var(--space-sm);
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.citations-header::before {
+  content: '📎';
+  font-size: 1rem;
 }
 
 .citation {
-  font-size: 0.85rem;
-  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  margin-top: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: white;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(0, 217, 255, 0.2);
+  transition: all var(--transition-base);
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.citation:hover {
+  border-color: var(--ai-cyan);
+  box-shadow: 0 2px 8px rgba(0, 217, 255, 0.15);
+  transform: translateX(4px);
 }
 
 .citation-link {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   color: var(--primary);
   cursor: pointer;
   text-decoration: none;
+  font-weight: 500;
+  transition: all var(--transition-base);
 }
 
 .citation-link:hover {
-  text-decoration: underline;
+  color: var(--ai-cyan);
+  text-decoration: none;
+}
+
+.citation-link svg {
+  transition: transform var(--transition-base);
+}
+
+.citation-link:hover svg {
+  transform: scale(1.1);
 }
 
 .citation-score {
   font-size: 0.75rem;
-  color: #666;
+  color: var(--text-light);
+  background: var(--bg-light);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  display: inline-block;
+  margin-left: auto;
+}
+
+.citation-snippet {
+  font-size: 0.8rem;
+  color: var(--text-medium);
+  margin-top: var(--space-xs);
+  font-style: italic;
+  line-height: 1.5;
+  padding-left: var(--space-md);
+  border-left: 2px solid var(--ai-cyan);
+  background: rgba(0, 217, 255, 0.03);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .message-feedback {
   display: flex;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
 }
 
 .feedback-btn {
-  padding: 0.25rem 0.5rem;
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: var(--radius-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-white);
+  border: 2px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-md);
   cursor: pointer;
   display: flex;
   align-items: center;
-  transition: all 0.2s;
+  gap: var(--space-xs);
+  transition: all var(--transition-base);
+  font-size: 0.8rem;
+  color: var(--text-medium);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .feedback-btn:hover {
   background: var(--bg-light);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .feedback-btn.active {
-  background: var(--primary);
+  background: var(--gradient-primary);
   color: white;
   border-color: var(--primary);
+  box-shadow: 0 2px 6px rgba(108, 92, 231, 0.3);
 }
 
 .message-warning {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-  padding: 0.5rem;
-  background: #fef3c7;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
   color: #92400e;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-size: 0.85rem;
+  border-left: 3px solid #f59e0b;
+  box-shadow: 0 2px 4px rgba(245, 158, 11, 0.1);
 }
 
 .typing-indicator {
   display: flex;
   gap: 0.5rem;
-  padding: var(--space-lg);
+  padding: var(--space-lg) var(--space-xl);
   align-items: center;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%);
+  border-radius: var(--radius-xl);
+  border-left: 3px solid var(--ai-cyan);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin: 0 var(--space-md) var(--space-xl);
 }
 
 .typing-indicator span {
@@ -1092,7 +1655,7 @@ const formatDate = (dateStr) => {
   border-radius: var(--radius-full);
   background: var(--gradient-cyan-purple);
   animation: typing 1.4s var(--ease-in-out) infinite;
-  box-shadow: 0 0 10px rgba(0, 217, 255, 0.5);
+  box-shadow: 0 0 12px rgba(0, 217, 255, 0.6);
 }
 
 .typing-indicator span:nth-child(2) {
@@ -1106,18 +1669,20 @@ const formatDate = (dateStr) => {
 @keyframes typing {
   0%, 60%, 100% {
     transform: translateY(0) scale(1);
-    opacity: 0.7;
+    opacity: 0.6;
   }
   30% {
-    transform: translateY(-12px) scale(1.2);
+    transform: translateY(-10px) scale(1.15);
     opacity: 1;
   }
 }
 
 .chat-input-area {
-  padding: var(--space-lg);
-  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  padding: var(--space-xl);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
   position: relative;
+  background: linear-gradient(to top, var(--bg-white) 0%, rgba(255, 255, 255, 0.95) 100%);
+  backdrop-filter: blur(10px);
 }
 
 .input-options {
@@ -1130,23 +1695,23 @@ const formatDate = (dateStr) => {
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   background: var(--bg-white);
-  border: 2px solid rgba(0, 0, 0, 0.1);
+  border: 2px solid rgba(0, 217, 255, 0.2);
   border-radius: var(--radius-lg);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 500;
-  color: var(--text-dark);
+  color: var(--primary);
   cursor: pointer;
   text-decoration: none;
   transition: all var(--transition-base);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .btn-link-small:hover {
   background: var(--gradient-ai-soft);
   border-color: var(--ai-cyan);
   color: var(--primary);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 217, 255, 0.2);
 }
 
 .input-group {
@@ -1154,36 +1719,57 @@ const formatDate = (dateStr) => {
   gap: var(--space-md);
   align-items: flex-end;
   position: relative;
+  background: var(--bg-white);
+  border-radius: var(--radius-2xl);
+  padding: var(--space-xs);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  transition: all var(--transition-base);
+}
+
+.input-group:focus-within {
+  box-shadow: 0 6px 20px rgba(0, 217, 255, 0.15), 0 0 0 3px rgba(0, 217, 255, 0.1);
+  border-color: var(--ai-cyan);
 }
 
 .chat-input {
   flex: 1;
-  padding: var(--space-lg);
-  border: 2px solid rgba(0, 0, 0, 0.1);
+  padding: var(--space-lg) var(--space-xl);
+  border: none;
   border-radius: var(--radius-xl);
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-family: inherit;
   resize: none;
-  background: var(--bg-white);
+  background: transparent;
   transition: all var(--transition-base);
-  box-shadow: var(--shadow-sm);
+  line-height: 1.6;
+  min-height: 52px;
+  max-height: 200px;
 }
 
 .chat-input:focus {
   outline: none;
-  border-color: var(--ai-cyan);
-  box-shadow: var(--shadow-md), 0 0 0 3px rgba(0, 217, 255, 0.1);
+}
+
+.chat-input::placeholder {
+  color: var(--text-lighter);
 }
 
 .send-btn {
-  padding: var(--space-lg) var(--space-xl);
+  padding: var(--space-md);
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   overflow: hidden;
-  min-width: 56px;
-  height: 56px;
+  min-width: 52px;
+  height: 52px;
+  border-radius: var(--radius-xl);
+  background: var(--gradient-primary);
+  border: none;
+  color: white;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3);
 }
 
 .send-glow {
@@ -1197,17 +1783,27 @@ const formatDate = (dateStr) => {
   transform: translate(-50%, -50%) scale(0);
   opacity: 0;
   transition: all var(--transition-base);
-  filter: blur(10px);
+  filter: blur(12px);
+}
+
+.send-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(108, 92, 231, 0.4);
 }
 
 .send-btn:hover:not(:disabled) .send-glow {
-  transform: translate(-50%, -50%) scale(1.5);
-  opacity: 0.6;
+  transform: translate(-50%, -50%) scale(1.8);
+  opacity: 0.5;
+}
+
+.send-btn:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .send-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
 }
 
 .handoff-form {

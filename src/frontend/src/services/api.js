@@ -137,7 +137,8 @@ export const chatAPI = {
   session: (sessionId) => api.get(`/chat/session/${sessionId}`),
   feedback: (sessionId, data) => api.post(`/chat/session/${sessionId}/feedback`, data),
   handoff: (sessionId, data) => api.post(`/chat/session/${sessionId}/handoff`, data),
-  sourceAccess: (sessionId, data) => api.post(`/chat/session/${sessionId}/source-access`, data)
+  sourceAccess: (sessionId, data) => api.post(`/chat/session/${sessionId}/source-access`, data),
+  availableDocuments: (params) => api.get('/chat/available-documents', { params })
 }
 
 export const workflowsAPI = {
@@ -187,7 +188,9 @@ export const settingsAPI = {
   },
   chatbot: {
     list: () => api.get('/settings/chatbot'),
-    update: (data) => api.post('/settings/chatbot', data)
+    update: (data) => api.post('/settings/chatbot', data),
+    getPrompts: () => api.get('/settings/chatbot/prompts'),
+    updatePrompts: (data) => api.post('/settings/chatbot/prompts', data)
   },
   llm: {
     get: () => api.get('/settings/llm'),
