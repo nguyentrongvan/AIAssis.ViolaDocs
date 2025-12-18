@@ -2104,10 +2104,7 @@ const saveTagSettings = async () => {
   padding: 0.5rem;
 }
 
-.form-group label input[type="checkbox"] {
-  width: auto;
-  margin-right: 0.5rem;
-}
+/* Checkbox styles moved to theme.css */
 
 .loading {
   text-align: center;
@@ -2475,10 +2472,35 @@ const saveTagSettings = async () => {
 /* Ollama Models Section */
 .ollama-models-section {
   margin-top: 3rem;
-  padding: 1.5rem;
+  padding: 0;
   background: var(--bg-light);
   border-radius: 8px;
   border: 1px solid #eee;
+}
+
+.ollama-models-section > .section-header {
+  padding: 1.5rem 1.5rem 1rem 1.5rem;
+  margin: 0;
+}
+
+.ollama-models-section > div:not(.section-header) {
+  padding: 0 1.5rem 1.5rem 1.5rem;
+}
+
+.ollama-models-section .models-subsection {
+  padding: 0 1.5rem;
+  margin-left: -1.5rem;
+  margin-right: -1.5rem;
+}
+
+.ollama-models-section .subsection-header {
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+.ollama-models-section .models-list {
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
 }
 
 .models-search-container {
@@ -2549,6 +2571,7 @@ const saveTagSettings = async () => {
 
 .models-subsection {
   margin-bottom: 2rem;
+  padding: 0;
 }
 
 .subsection-header {
@@ -2556,8 +2579,8 @@ const saveTagSettings = async () => {
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
-  padding: 0.75rem;
-  margin: -0.75rem -0.75rem 1rem -0.75rem;
+  padding: 0.75rem 0;
+  margin: 0 0 1rem 0;
   border-radius: var(--radius-md);
   transition: background-color var(--transition-base);
   user-select: none;
@@ -2602,6 +2625,8 @@ const saveTagSettings = async () => {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  padding: 0;
+  margin: 0;
 }
 
 .model-item {

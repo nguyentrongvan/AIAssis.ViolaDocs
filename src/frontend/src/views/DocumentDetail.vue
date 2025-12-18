@@ -87,65 +87,275 @@
 
       <!-- Metadata Tab -->
       <div v-if="activeTab === 'metadata'" class="tab-content">
-        <div class="metadata-form">
-          <div class="form-group">
-            <label>Title *</label>
-            <input v-model="metadataForm.title" />
-          </div>
-          <div class="form-group">
-            <label>Folder</label>
-            <select v-model.number="metadataForm.folder_id">
-              <option :value="null">None</option>
-              <option v-for="f in folders" :key="f.id" :value="f.id">
-                {{ f.name }}
-              </option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Retention Policy</label>
-            <select v-model.number="metadataForm.retention_policy_id">
-              <option :value="null">Default</option>
-              <option
-                v-for="p in retentionPolicies"
-                :key="p.id"
-                :value="p.id"
-              >
-                {{ p.name }} ({{ p.duration_days }} days)
-              </option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Tags</label>
-            <input
-              v-model="tagInput"
-              @keyup.enter="addTag"
-              placeholder="Press Enter to add tag"
-            />
-            <div class="tags-list">
-              <span
-                v-for="tag in metadataForm.tags"
-                :key="tag"
-                class="tag-badge"
-              >
-                {{ tag }}
-                <button @click="removeTag(tag)" class="tag-remove">×</button>
-              </span>
+        <!-- Editable Metadata Form -->
+        <div class="metadata-section">
+          <h3>Document Information</h3>
+          <div class="metadata-form">
+            <div class="form-group">
+              <label>Title *</label>
+              <input v-model="metadataForm.title" />
+            </div>
+            <div class="form-group">
+              <label>Folder</label>
+              <select v-model.number="metadataForm.folder_id">
+                <option :value="null">None</option>
+                <option v-for="f in folders" :key="f.id" :value="f.id">
+                  {{ f.name }}
+                </option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Retention Policy</label>
+              <select v-model.number="metadataForm.retention_policy_id">
+                <option :value="null">Default</option>
+                <option
+                  v-for="p in retentionPolicies"
+                  :key="p.id"
+                  :value="p.id"
+                >
+                  {{ p.name }} ({{ p.duration_days }} days)
+                </option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Tags</label>
+              <input
+                v-model="tagInput"
+                @keyup.enter="addTag"
+                placeholder="Press Enter to add tag"
+              />
+              <div class="tags-list">
+                <span
+                  v-for="tag in metadataForm.tags"
+                  :key="tag"
+                  class="tag-badge"
+                >
+                  {{ tag }}
+                  <button @click="removeTag(tag)" class="tag-remove">×</button>
+                </span>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Owner</label>
+              <span>{{ document.owner?.name || 'Unknown' }}</span>
+            </div>
+            <div class="form-group">
+              <label>Created</label>
+              <span>{{ formatDate(document.created_at) }}</span>
+            </div>
+            <div class="form-group">
+              <label>Size</label>
+              <span>{{ formatSize(document.size) }}</span>
+            </div>
+            <div class="form-actions">
+              <button @click="saveMetadata" class="btn-primary">Save Changes</button>
             </div>
           </div>
-          <div class="form-group">
-            <label>Owner</label>
-            <span>{{ document.owner?.name || 'Unknown' }}</span>
-          </div>
-          <div class="form-group">
-            <label>Created</label>
-            <span>{{ formatDate(document.created_at) }}</span>
-          </div>
-          <div class="form-group">
-            <label>Size</label>
-            <span>{{ formatSize(document.size) }}</span>
-          </div>
-          <div class="form-actions">
-            <button @click="saveMetadata" class="btn-primary">Save Changes</button>
+        </div>
+
+        <!-- Extracted File Metadata -->
+        <div v-if="document.metadata" class="metadata-section">
+          <h3>File Metadata</h3>
+          <div class="extracted-metadata">
+            <!-- File System Metadata -->
+            <div v-if="document.metadata.file" class="metadata-group">
+              <h4>File Information</h4>
+              <div class="metadata-grid">
+                <div v-if="document.metadata.file.original_filename" class="metadata-item">
+                  <label>Original Filename:</label>
+                  <span>{{ document.metadata.file.original_filename }}</span>
+                </div>
+                <div v-if="document.metadata.file.size" class="metadata-item">
+                  <label>File Size:</label>
+                  <span>{{ formatSize(document.metadata.file.size) }}</span>
+                </div>
+                <div v-if="document.metadata.file.mime" class="metadata-item">
+                  <label>MIME Type:</label>
+                  <span>{{ document.metadata.file.mime }}</span>
+                </div>
+                <div v-if="document.metadata.file.checksum" class="metadata-item">
+                  <label>Checksum:</label>
+                  <span class="monospace">{{ document.metadata.file.checksum }}</span>
+                </div>
+                <div v-if="document.metadata.file.upload_method" class="metadata-item">
+                  <label>Upload Method:</label>
+                  <span>{{ document.metadata.file.upload_method }}</span>
+                </div>
+                <div v-if="document.metadata.file.upload_timestamp" class="metadata-item">
+                  <label>Upload Time:</label>
+                  <span>{{ formatDate(document.metadata.file.upload_timestamp) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- EXIF Metadata (Images) -->
+            <div v-if="document.metadata.exif" class="metadata-group">
+              <h4>Image EXIF Data</h4>
+              <div class="metadata-grid">
+                <div v-if="document.metadata.exif.camera_make" class="metadata-item">
+                  <label>Camera Make:</label>
+                  <span>{{ document.metadata.exif.camera_make }}</span>
+                </div>
+                <div v-if="document.metadata.exif.camera_model" class="metadata-item">
+                  <label>Camera Model:</label>
+                  <span>{{ document.metadata.exif.camera_model }}</span>
+                </div>
+                <div v-if="document.metadata.exif.date_taken" class="metadata-item">
+                  <label>Date Taken:</label>
+                  <span>{{ document.metadata.exif.date_taken }}</span>
+                </div>
+                <div v-if="document.metadata.exif.resolution" class="metadata-item">
+                  <label>Resolution:</label>
+                  <span>{{ document.metadata.exif.resolution.width }} × {{ document.metadata.exif.resolution.height }}</span>
+                  <span v-if="document.metadata.exif.resolution.dpi_x"> ({{ document.metadata.exif.resolution.dpi_x }} DPI)</span>
+                </div>
+                <div v-if="document.metadata.exif.gps" class="metadata-item">
+                  <label>GPS Location:</label>
+                  <span>{{ document.metadata.exif.gps.lat }}, {{ document.metadata.exif.gps.lon }}</span>
+                </div>
+                <div v-if="document.metadata.exif.software" class="metadata-item">
+                  <label>Software:</label>
+                  <span>{{ document.metadata.exif.software }}</span>
+                </div>
+                <div v-if="document.metadata.exif.copyright" class="metadata-item">
+                  <label>Copyright:</label>
+                  <span>{{ document.metadata.exif.copyright }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- PDF Metadata -->
+            <div v-if="document.metadata.pdf" class="metadata-group">
+              <h4>PDF Properties</h4>
+              <div class="metadata-grid">
+                <div v-if="document.metadata.pdf.title" class="metadata-item">
+                  <label>Title:</label>
+                  <span>{{ document.metadata.pdf.title }}</span>
+                </div>
+                <div v-if="document.metadata.pdf.author" class="metadata-item">
+                  <label>Author:</label>
+                  <span>{{ document.metadata.pdf.author }}</span>
+                </div>
+                <div v-if="document.metadata.pdf.subject" class="metadata-item">
+                  <label>Subject:</label>
+                  <span>{{ document.metadata.pdf.subject }}</span>
+                </div>
+                <div v-if="document.metadata.pdf.keywords" class="metadata-item">
+                  <label>Keywords:</label>
+                  <span>{{ document.metadata.pdf.keywords }}</span>
+                </div>
+                <div v-if="document.metadata.pdf.creator" class="metadata-item">
+                  <label>Creator:</label>
+                  <span>{{ document.metadata.pdf.creator }}</span>
+                </div>
+                <div v-if="document.metadata.pdf.producer" class="metadata-item">
+                  <label>Producer:</label>
+                  <span>{{ document.metadata.pdf.producer }}</span>
+                </div>
+                <div v-if="document.metadata.pdf.page_count" class="metadata-item">
+                  <label>Page Count:</label>
+                  <span>{{ document.metadata.pdf.page_count }}</span>
+                </div>
+                <div v-if="document.metadata.pdf.pdf_version" class="metadata-item">
+                  <label>PDF Version:</label>
+                  <span>{{ document.metadata.pdf.pdf_version }}</span>
+                </div>
+                <div v-if="document.metadata.pdf.is_encrypted !== undefined" class="metadata-item">
+                  <label>Encrypted:</label>
+                  <span>{{ document.metadata.pdf.is_encrypted ? 'Yes' : 'No' }}</span>
+                </div>
+                <div v-if="document.metadata.pdf.creation_date" class="metadata-item">
+                  <label>Creation Date:</label>
+                  <span>{{ document.metadata.pdf.creation_date }}</span>
+                </div>
+                <div v-if="document.metadata.pdf.modification_date" class="metadata-item">
+                  <label>Modification Date:</label>
+                  <span>{{ document.metadata.pdf.modification_date }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Office Document Metadata -->
+            <div v-if="document.metadata.office" class="metadata-group">
+              <h4>Office Document Properties</h4>
+              <div class="metadata-grid">
+                <div v-if="document.metadata.office.title" class="metadata-item">
+                  <label>Title:</label>
+                  <span>{{ document.metadata.office.title }}</span>
+                </div>
+                <div v-if="document.metadata.office.author" class="metadata-item">
+                  <label>Author:</label>
+                  <span>{{ document.metadata.office.author }}</span>
+                </div>
+                <div v-if="document.metadata.office.subject" class="metadata-item">
+                  <label>Subject:</label>
+                  <span>{{ document.metadata.office.subject }}</span>
+                </div>
+                <div v-if="document.metadata.office.keywords" class="metadata-item">
+                  <label>Keywords:</label>
+                  <span>{{ document.metadata.office.keywords }}</span>
+                </div>
+                <div v-if="document.metadata.office.created_date" class="metadata-item">
+                  <label>Created Date:</label>
+                  <span>{{ formatDate(document.metadata.office.created_date) }}</span>
+                </div>
+                <div v-if="document.metadata.office.modified_date" class="metadata-item">
+                  <label>Modified Date:</label>
+                  <span>{{ formatDate(document.metadata.office.modified_date) }}</span>
+                </div>
+                <div v-if="document.metadata.office.last_modified_by" class="metadata-item">
+                  <label>Last Modified By:</label>
+                  <span>{{ document.metadata.office.last_modified_by }}</span>
+                </div>
+                <div v-if="document.metadata.office.application" class="metadata-item">
+                  <label>Application:</label>
+                  <span>{{ document.metadata.office.application }}</span>
+                </div>
+                <div v-if="document.metadata.office.word_count" class="metadata-item">
+                  <label>Word Count:</label>
+                  <span>{{ document.metadata.office.word_count }}</span>
+                </div>
+                <div v-if="document.metadata.office.page_count" class="metadata-item">
+                  <label>Page Count:</label>
+                  <span>{{ document.metadata.office.page_count }}</span>
+                </div>
+                <div v-if="document.metadata.office.sheet_count" class="metadata-item">
+                  <label>Sheet Count:</label>
+                  <span>{{ document.metadata.office.sheet_count }}</span>
+                </div>
+                <div v-if="document.metadata.office.slide_count" class="metadata-item">
+                  <label>Slide Count:</label>
+                  <span>{{ document.metadata.office.slide_count }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Processing Metadata -->
+            <div v-if="latestVersionMetadata?.processing" class="metadata-group">
+              <h4>Processing Information</h4>
+              <div class="metadata-grid">
+                <div v-if="latestVersionMetadata.processing.ocr_provider" class="metadata-item">
+                  <label>OCR Provider:</label>
+                  <span>{{ latestVersionMetadata.processing.ocr_provider }}</span>
+                </div>
+                <div v-if="latestVersionMetadata.processing.ocr_confidence" class="metadata-item">
+                  <label>OCR Confidence:</label>
+                  <span>{{ (latestVersionMetadata.processing.ocr_confidence * 100).toFixed(1) }}%</span>
+                </div>
+                <div v-if="latestVersionMetadata.processing.text_extraction_method" class="metadata-item">
+                  <label>Text Extraction Method:</label>
+                  <span>{{ latestVersionMetadata.processing.text_extraction_method }}</span>
+                </div>
+                <div v-if="latestVersionMetadata.processing.processing_time_ms" class="metadata-item">
+                  <label>Processing Time:</label>
+                  <span>{{ latestVersionMetadata.processing.processing_time_ms }}ms</span>
+                </div>
+                <div v-if="latestVersionMetadata.processing.text_length" class="metadata-item">
+                  <label>Extracted Text Length:</label>
+                  <span>{{ latestVersionMetadata.processing.text_length }} characters</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -490,6 +700,12 @@ const shareForm = ref({
 const latestVersion = computed(() => {
   if (versions.value.length === 0) return 0
   return Math.max(...versions.value.map(v => v.version_no))
+})
+
+const latestVersionMetadata = computed(() => {
+  if (versions.value.length === 0) return null
+  const latest = versions.value.find(v => v.version_no === latestVersion.value)
+  return latest?.metadata_snapshot || null
 })
 
 // Check if file is Office or text file (DOCX, XLSX, CSV, TXT)
@@ -1487,24 +1703,95 @@ const deleteDocument = async () => {
 
 .permissions-checkbox-group {
   display: flex;
-  gap: 1rem;
+  gap: 2rem;
   flex-wrap: wrap;
-  margin-top: 0.5rem;
+  margin-top: 0.75rem;
 }
 
 .checkbox-label {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.875rem;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
+  margin: 0;
+  font-weight: 500;
+  color: var(--text-dark);
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-base);
+  position: relative;
+  user-select: none;
+}
+
+.checkbox-label:hover {
+  background: var(--bg-light);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .checkbox-label input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
   cursor: pointer;
-  accent-color: var(--primary);
+}
+
+.checkbox-label input[type="checkbox"] + span {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding-left: 32px;
+  line-height: 1.5;
+}
+
+.checkbox-label input[type="checkbox"] + span::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  background: var(--bg-white);
+  display: inline-block;
+  transition: all var(--transition-base);
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.checkbox-label:hover input[type="checkbox"] + span::before {
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(108, 92, 231, 0.25);
+  transform: translateY(-50%) scale(1.08);
+}
+
+.checkbox-label input[type="checkbox"]:checked + span::before {
+  background: var(--gradient-cyan-purple);
+  border-color: var(--primary);
+  box-shadow: 0 2px 12px rgba(108, 92, 231, 0.4);
+  transform: translateY(-50%) scale(1);
+}
+
+.checkbox-label input[type="checkbox"]:checked + span::after {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  color: white;
+  font-size: 15px;
+  font-weight: bold;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .hint-text {
@@ -1512,5 +1799,75 @@ const deleteDocument = async () => {
   color: var(--text-secondary);
   margin-top: 0.5rem;
   font-style: italic;
+}
+
+.metadata-section {
+  margin-bottom: 2rem;
+}
+
+.metadata-section h3 {
+  margin: 0 0 1rem 0;
+  color: var(--primary);
+  font-size: 1.25rem;
+  border-bottom: 2px solid var(--primary-light);
+  padding-bottom: 0.5rem;
+}
+
+.extracted-metadata {
+  background: var(--bg-light);
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.metadata-group {
+  margin-bottom: 2rem;
+}
+
+.metadata-group:last-child {
+  margin-bottom: 0;
+}
+
+.metadata-group h4 {
+  margin: 0 0 1rem 0;
+  color: var(--text-dark);
+  font-size: 1rem;
+  font-weight: 600;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.metadata-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.metadata-item label {
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--text-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metadata-item span {
+  color: var(--text-dark);
+  font-size: 0.95rem;
+  word-break: break-word;
+}
+
+.metadata-item .monospace {
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  display: inline-block;
 }
 </style>

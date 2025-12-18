@@ -978,14 +978,7 @@ const formatDate = (dateStr) => {
   font-size: 0.9rem;
 }
 
-.checkbox-label input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  flex-shrink: 0;
-  cursor: pointer;
-  accent-color: var(--primary);
-}
+/* Checkbox styles moved to theme.css */
 
 .checkbox-label span {
   line-height: 1.2;

@@ -485,3 +485,97 @@ body {
   letter-spacing: -0.02em;
 }
 
+/* Global Checkbox Styles */
+.permissions-checkbox-group {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  cursor: pointer;
+  font-size: 1rem;
+  margin: 0;
+  font-weight: 500;
+  color: var(--text-dark);
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-base);
+  position: relative;
+  user-select: none;
+}
+
+.checkbox-label:hover {
+  background: var(--bg-light);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.checkbox-label input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] + span {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding-left: 32px;
+  line-height: 1.5;
+}
+
+.checkbox-label input[type="checkbox"] + span::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  background: var(--bg-white);
+  display: inline-block;
+  transition: all var(--transition-base);
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.checkbox-label:hover input[type="checkbox"] + span::before {
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(108, 92, 231, 0.25);
+  transform: translateY(-50%) scale(1.08);
+}
+
+.checkbox-label input[type="checkbox"]:checked + span::before {
+  background: var(--gradient-cyan-purple);
+  border-color: var(--primary);
+  box-shadow: 0 2px 12px rgba(108, 92, 231, 0.4);
+  transform: translateY(-50%) scale(1);
+}
+
+.checkbox-label input[type="checkbox"]:checked + span::after {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  color: white;
+  font-size: 15px;
+  font-weight: bold;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+

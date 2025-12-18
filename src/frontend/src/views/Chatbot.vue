@@ -110,20 +110,22 @@
                     v-model="selectedDocumentIds"
                     @change="onDocumentSelectionChange"
                   />
-                  <div class="document-info">
-                    <div class="document-title">{{ doc.title }}</div>
-                    <div class="document-meta">
-                      <span class="document-type">{{ doc.mime }}</span>
-                      <span 
-                        v-if="!doc.has_embedding" 
-                        class="no-embedding-badge"
-                        title="Document is not indexed. Vector search will not be used but the document can still be used."
-                      >
-                        <AlertTriangle :size="12" />
-                        Not indexed
-                      </span>
+                  <span>
+                    <div class="document-info">
+                      <div class="document-title">{{ doc.title }}</div>
+                      <div class="document-meta">
+                        <span class="document-type">{{ doc.mime }}</span>
+                        <span 
+                          v-if="!doc.has_embedding" 
+                          class="no-embedding-badge"
+                          title="Document is not indexed. Vector search will not be used but the document can still be used."
+                        >
+                          <AlertTriangle :size="12" />
+                          Not indexed
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  </span>
                 </label>
               </div>
             </div>
@@ -1114,27 +1116,7 @@ const formatResponseTime = (timeInSeconds) => {
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-.checkbox-label {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-sm);
-  cursor: pointer;
-  padding: var(--space-sm);
-  border-radius: var(--radius-md);
-  transition: background-color var(--transition-base);
-}
-
-.checkbox-label:hover {
-  background-color: var(--bg-light);
-}
-
-.checkbox-label input[type="checkbox"] {
-  margin-top: 0.25rem;
-  cursor: pointer;
-  width: 18px;
-  height: 18px;
-  accent-color: var(--primary);
-}
+/* Checkbox styles moved to theme.css - using global styles */
 
 .source-documents-list {
   display: flex;
@@ -1148,6 +1130,14 @@ const formatResponseTime = (timeInSeconds) => {
 
 .source-document-item .checkbox-label {
   width: 100%;
+  align-items: flex-start;
+}
+
+.source-document-item .checkbox-label input[type="checkbox"] + span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-left: 32px;
 }
 
 .document-info {
