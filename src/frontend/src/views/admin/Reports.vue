@@ -23,32 +23,92 @@
           <label>Date To</label>
           <input v-model="filters.date_to" type="date" />
         </div>
-        <div v-if="activeTab === 'audit'" class="filter-group">
-          <label>Actor</label>
-          <select v-model.number="filters.actor_id">
-            <option :value="null">All Users</option>
-            <option v-for="user in users" :key="user.id" :value="user.id">
-              {{ user.name }}
-            </option>
-          </select>
-        </div>
-        <div v-if="activeTab === 'audit'" class="filter-group">
-          <label>Action</label>
-          <select v-model="filters.action">
-            <option value="">All Actions</option>
-            <option value="create">Create</option>
-            <option value="update">Update</option>
-            <option value="delete">Delete</option>
-            <option value="share">Share</option>
-            <option value="view">View</option>
-          </select>
-        </div>
+        
+        <!-- Audit-specific filters -->
+        <template v-if="activeTab === 'audit'">
+          <div class="filter-group">
+            <label>Actor</label>
+            <select v-model.number="filters.actor_id">
+              <option :value="null">All Users</option>
+              <option v-for="user in users" :key="user.id" :value="user.id">
+                {{ user.name }}
+              </option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Action</label>
+            <select v-model="filters.action">
+              <option value="">All Actions</option>
+              <option value="create">Create</option>
+              <option value="update">Update</option>
+              <option value="delete">Delete</option>
+              <option value="share">Share</option>
+              <option value="view">View</option>
+              <option value="search">Search</option>
+              <option value="vector_search">Vector Search</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Page Size</label>
+            <select v-model.number="filters.page_size">
+              <option :value="25">25</option>
+              <option :value="50">50</option>
+              <option :value="100">100</option>
+            </select>
+          </div>
+        </template>
+
+        <!-- Usage-specific filters -->
+        <template v-if="activeTab === 'usage'">
+          <div class="filter-group">
+            <label>Rollup</label>
+            <select v-model="filters.rollup">
+              <option value="hour">Hour</option>
+              <option value="day">Day</option>
+              <option value="week">Week</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Top N</label>
+            <select v-model.number="filters.top_n">
+              <option :value="5">Top 5</option>
+              <option :value="10">Top 10</option>
+              <option :value="20">Top 20</option>
+            </select>
+          </div>
+        </template>
+
+        <!-- Workflow-specific filters -->
+        <template v-if="activeTab === 'workflow'">
+          <div class="filter-group">
+            <label>Template</label>
+            <input v-model="filters.template" type="text" placeholder="Filter by template" />
+          </div>
+          <div class="filter-group">
+            <label>Assignee</label>
+            <select v-model.number="filters.assignee_id">
+              <option :value="null">All Assignees</option>
+              <option v-for="user in users" :key="user.id" :value="user.id">
+                {{ user.name }}
+              </option>
+            </select>
+          </div>
+        </template>
+
         <div class="filter-actions">
+          <button @click="applyDatePreset('today')" class="btn-secondary btn-sm">Today</button>
+          <button @click="applyDatePreset('7d')" class="btn-secondary btn-sm">Last 7 Days</button>
+          <button @click="applyDatePreset('30d')" class="btn-secondary btn-sm">Last 30 Days</button>
           <button @click="generateReport" class="btn-primary" :disabled="loading">
             <RefreshCw v-if="loading" :size="16" class="spinning" />
             Generate
           </button>
-          <button @click="exportReport" class="btn-secondary" :disabled="!reportData">
+          <button 
+            v-if="activeTab === 'audit' && reportData" 
+            @click="exportReport" 
+            class="btn-secondary"
+            :disabled="!reportData"
+          >
             <Download :size="16" />
             Export
           </button>
@@ -73,7 +133,41 @@
             <div class="summary-label">Unique Documents</div>
             <div class="summary-value">{{ reportData.unique_documents || 0 }}</div>
           </div>
+          <div class="summary-card">
+            <div class="summary-label">Action Types</div>
+            <div class="summary-value">{{ Object.keys(reportData.action_counts || {}).length }}</div>
+          </div>
         </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+          <div class="chart-card">
+            <h3>Events Timeline</h3>
+            <LineChart 
+              v-if="auditTimelineData" 
+              :data="auditTimelineData" 
+              :options="timelineChartOptions"
+            />
+          </div>
+          <div class="chart-card">
+            <h3>Action Distribution</h3>
+            <PieChart 
+              v-if="auditActionData" 
+              :data="auditActionData" 
+              :options="pieChartOptions"
+            />
+          </div>
+          <div class="chart-card">
+            <h3>Top Actors</h3>
+            <BarChart 
+              v-if="auditTopActorsData" 
+              :data="auditTopActorsData" 
+              :options="barChartOptions"
+            />
+          </div>
+        </div>
+
+        <!-- Table with pagination -->
         <div class="report-table-container">
           <table class="report-table">
             <thead>
@@ -81,20 +175,42 @@
                 <th>Timestamp</th>
                 <th>Actor</th>
                 <th>Action</th>
-                <th>Resource</th>
-                <th>Details</th>
+                <th>Resource Type</th>
+                <th>Resource ID</th>
+                <th>Document</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="item in reportData.items" :key="item.id">
-                <td>{{ formatDate(item.created_at) }}</td>
-                <td>{{ item.actor?.name || 'Unknown' }}</td>
+                <td>{{ formatDate(item.timestamp) }}</td>
+                <td>{{ item.actor_name || 'Unknown' }}</td>
                 <td><StatusBadge :status="item.action" /></td>
-                <td>{{ item.resource_type }} #{{ item.resource_id }}</td>
-                <td>{{ item.details || '-' }}</td>
+                <td>{{ item.subject_type }}</td>
+                <td>{{ item.subject_id || '-' }}</td>
+                <td>{{ item.document_title || '-' }}</td>
               </tr>
             </tbody>
           </table>
+          <div v-if="reportData.pagination" class="pagination-controls">
+            <button 
+              @click="changePage(reportData.pagination.page - 1)"
+              :disabled="reportData.pagination.page <= 1"
+              class="btn-secondary"
+            >
+              Previous
+            </button>
+            <span class="page-info">
+              Page {{ reportData.pagination.page }} of {{ reportData.pagination.total_pages }}
+              ({{ reportData.pagination.total }} total)
+            </span>
+            <button 
+              @click="changePage(reportData.pagination.page + 1)"
+              :disabled="reportData.pagination.page >= reportData.pagination.total_pages"
+              class="btn-secondary"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
 
@@ -118,21 +234,132 @@
             <div class="summary-value">{{ reportData.search_queries || 0 }}</div>
           </div>
           <div class="summary-card">
+            <div class="summary-label">Vector Queries</div>
+            <div class="summary-value">{{ reportData.vector_queries || 0 }}</div>
+          </div>
+          <div class="summary-card">
             <div class="summary-label">Chatbot Sessions</div>
             <div class="summary-value">{{ reportData.chatbot_sessions || 0 }}</div>
           </div>
+          <div class="summary-card">
+            <div class="summary-label">Queue Depth</div>
+            <div class="summary-value">{{ reportData.queue_depth || 0 }}</div>
+          </div>
         </div>
-        <div v-if="reportData.breakdown" class="breakdown-section">
-          <h3>Breakdown by Folder</h3>
-          <div class="breakdown-list">
-            <div
-              v-for="item in reportData.breakdown.folders"
-              :key="item.folder_id"
-              class="breakdown-item"
-            >
-              <span class="breakdown-label">{{ item.folder_name || 'Root' }}</span>
-              <span class="breakdown-value">{{ item.count }} documents</span>
-            </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+          <div class="chart-card">
+            <h3>Uploads Over Time</h3>
+            <LineChart 
+              v-if="usageUploadsData" 
+              :data="usageUploadsData" 
+              :options="timelineChartOptions"
+            />
+          </div>
+          <div class="chart-card">
+            <h3>Storage by Folder</h3>
+            <BarChart 
+              v-if="usageFoldersData" 
+              :data="usageFoldersData" 
+              :options="barChartOptions"
+            />
+          </div>
+          <div class="chart-card">
+            <h3>Storage by Tag</h3>
+            <PieChart 
+              v-if="usageTagsData" 
+              :data="usageTagsData" 
+              :options="pieChartOptions"
+            />
+          </div>
+          <div class="chart-card">
+            <h3>Search vs Vector Queries</h3>
+            <DualLineChart 
+              v-if="usageSearchData" 
+              :data="usageSearchData" 
+              :options="dualLineChartOptions"
+            />
+          </div>
+        </div>
+
+        <!-- Breakdown Tables -->
+        <div class="breakdown-grid">
+          <div class="breakdown-section">
+            <h3>Top Folders</h3>
+            <table class="breakdown-table">
+              <thead>
+                <tr>
+                  <th>Folder</th>
+                  <th>Documents</th>
+                  <th>Size</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in reportData.breakdown?.folders || []" :key="item.folder_id">
+                  <td>{{ item.name || 'Root' }}</td>
+                  <td>{{ item.count }}</td>
+                  <td>{{ formatSize(item.size) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="breakdown-section">
+            <h3>Top Tags</h3>
+            <table class="breakdown-table">
+              <thead>
+                <tr>
+                  <th>Tag</th>
+                  <th>Documents</th>
+                  <th>Size</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in reportData.breakdown?.tags || []" :key="item.tag_id">
+                  <td>{{ item.name }}</td>
+                  <td>{{ item.count }}</td>
+                  <td>{{ formatSize(item.size) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="breakdown-section">
+            <h3>Top Groups</h3>
+            <table class="breakdown-table">
+              <thead>
+                <tr>
+                  <th>Group</th>
+                  <th>Documents</th>
+                  <th>Size</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in reportData.breakdown?.groups || []" :key="item.group_id">
+                  <td>{{ item.name }}</td>
+                  <td>{{ item.count }}</td>
+                  <td>{{ formatSize(item.size) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="breakdown-section">
+            <h3>Top Users</h3>
+            <table class="breakdown-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Uploads</th>
+                  <th>Size</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in reportData.breakdown?.users || []" :key="item.user_id">
+                  <td>{{ item.name }}</td>
+                  <td>{{ item.uploads }}</td>
+                  <td>{{ formatSize(item.size) }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -141,39 +368,88 @@
       <div v-if="activeTab === 'workflow'" class="report-section">
         <div class="report-summary">
           <div class="summary-card">
-            <div class="summary-label">Total Tasks</div>
-            <div class="summary-value">{{ reportData.total_tasks || 0 }}</div>
+            <div class="summary-label">Total Workflows</div>
+            <div class="summary-value">{{ reportData.total_workflows || 0 }}</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Completed</div>
+            <div class="summary-value">{{ reportData.completed || 0 }}</div>
           </div>
           <div class="summary-card">
             <div class="summary-label">Pending</div>
-            <div class="summary-value">{{ reportData.pending_tasks || 0 }}</div>
+            <div class="summary-value">{{ reportData.pending || 0 }}</div>
           </div>
           <div class="summary-card">
             <div class="summary-label">Overdue</div>
-            <div class="summary-value">{{ reportData.overdue_tasks || 0 }}</div>
+            <div class="summary-value">{{ reportData.overdue || 0 }}</div>
           </div>
           <div class="summary-card">
             <div class="summary-label">Avg Duration</div>
-            <div class="summary-value">{{ reportData.avg_duration || 'N/A' }}</div>
+            <div class="summary-value">{{ reportData.avg_duration_hours?.toFixed(1) || '0' }}h</div>
           </div>
         </div>
-        <div v-if="reportData.approval_rates" class="approval-section">
-          <h3>Approval Rates</h3>
-          <div class="approval-list">
-            <div
-              v-for="(rate, template) in reportData.approval_rates"
-              :key="template"
-              class="approval-item"
-            >
-              <span class="approval-label">{{ template }}</span>
-              <div class="approval-bar">
-                <div
-                  class="approval-fill"
-                  :style="{ width: (rate * 100) + '%' }"
-                ></div>
-                <span class="approval-value">{{ (rate * 100).toFixed(1) }}%</span>
-              </div>
-            </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+          <div class="chart-card">
+            <h3>Approval Rates by Template</h3>
+            <BarChart 
+              v-if="workflowTemplateData" 
+              :data="workflowTemplateData" 
+              :options="barChartOptions"
+            />
+          </div>
+          <div class="chart-card">
+            <h3>Approval Rates by Assignee</h3>
+            <BarChart 
+              v-if="workflowAssigneeData" 
+              :data="workflowAssigneeData" 
+              :options="barChartOptions"
+            />
+          </div>
+          <div class="chart-card">
+            <h3>Workflow State Distribution</h3>
+            <PieChart 
+              v-if="workflowStateData" 
+              :data="workflowStateData" 
+              :options="pieChartOptions"
+            />
+          </div>
+          <div class="chart-card">
+            <h3>Duration Distribution</h3>
+            <BarChart 
+              v-if="workflowDurationData" 
+              :data="workflowDurationData" 
+              :options="barChartOptions"
+            />
+          </div>
+        </div>
+
+        <!-- Tables -->
+        <div class="breakdown-grid">
+          <div class="breakdown-section">
+            <h3>Overdue Tasks</h3>
+            <table class="breakdown-table">
+              <thead>
+                <tr>
+                  <th>Assignee</th>
+                  <th>Template</th>
+                  <th>Due Date</th>
+                  <th>Days Overdue</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="task in reportData.overdue_tasks || []" :key="task.task_id">
+                  <td>{{ task.assignee_name }}</td>
+                  <td>{{ task.template || 'N/A' }}</td>
+                  <td>{{ formatDate(task.due_at) }}</td>
+                  <td>{{ task.days_overdue }}</td>
+                </tr>
+                <tr v-if="!reportData.overdue_tasks || reportData.overdue_tasks.length === 0">
+                  <td colspan="4" class="text-center">No overdue tasks</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -182,12 +458,20 @@
       <div v-if="activeTab === 'quality'" class="report-section">
         <div class="report-summary">
           <div class="summary-card">
-            <div class="summary-label">Failed Jobs</div>
-            <div class="summary-value">{{ reportData.failed_jobs || 0 }}</div>
+            <div class="summary-label">Index Failures</div>
+            <div class="summary-value">{{ reportData.index_failures || 0 }}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Stale Index Count</div>
-            <div class="summary-value">{{ reportData.stale_index_count || 0 }}</div>
+            <div class="summary-label">Embedding Failures</div>
+            <div class="summary-value">{{ reportData.embedding_failures || 0 }}</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">OCR Failures</div>
+            <div class="summary-value">{{ reportData.ocr_failures || 0 }}</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Stale Documents</div>
+            <div class="summary-value">{{ reportData.stale_documents || 0 }}</div>
           </div>
           <div class="summary-card">
             <div class="summary-label">Purge Backlog</div>
@@ -198,21 +482,59 @@
             <div class="summary-value">{{ reportData.virus_scan_failures || 0 }}</div>
           </div>
         </div>
-        <div v-if="reportData.job_failures" class="failures-section">
-          <h3>Recent Job Failures</h3>
-          <div class="failures-list">
-            <div
-              v-for="failure in reportData.job_failures"
-              :key="failure.id"
-              class="failure-item"
-            >
-              <div class="failure-header">
-                <span class="failure-type">{{ failure.job_type }}</span>
-                <span class="failure-date">{{ formatDate(failure.created_at) }}</span>
-              </div>
-              <div class="failure-error">{{ failure.error }}</div>
-            </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+          <div class="chart-card">
+            <h3>Failure Types Distribution</h3>
+            <PieChart 
+              v-if="qualityFailureTypesData" 
+              :data="qualityFailureTypesData" 
+              :options="pieChartOptions"
+            />
           </div>
+          <div class="chart-card">
+            <h3>Failures Over Time</h3>
+            <LineChart 
+              v-if="qualityFailureTimelineData" 
+              :data="qualityFailureTimelineData" 
+              :options="timelineChartOptions"
+            />
+          </div>
+          <div class="chart-card">
+            <h3>Job Status Breakdown</h3>
+            <PieChart 
+              v-if="qualityJobStatusData" 
+              :data="qualityJobStatusData" 
+              :options="pieChartOptions"
+            />
+          </div>
+        </div>
+
+        <!-- Recent Failures Table -->
+        <div class="failures-section">
+          <h3>Recent Failures</h3>
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>Job Type</th>
+                <th>Document ID</th>
+                <th>Error</th>
+                <th>Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="failure in reportData.recent_failures || []" :key="failure.id">
+                <td>{{ failure.job_type }}</td>
+                <td>{{ failure.document_id || '-' }}</td>
+                <td class="error-text">{{ failure.error }}</td>
+                <td>{{ formatDate(failure.created_at) }}</td>
+              </tr>
+              <tr v-if="!reportData.recent_failures || reportData.recent_failures.length === 0">
+                <td colspan="4" class="text-center">No recent failures</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -223,15 +545,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { reportsAPI, usersAPI } from '../../services/api'
-import { StatusBadge } from '../../components'
+import { StatusBadge, LineChart, BarChart, PieChart, DualLineChart } from '../../components'
 import { RefreshCw, Download } from 'lucide-vue-next'
 
 const activeTab = ref('audit')
 const loading = ref(false)
 const reportData = ref(null)
 const users = ref([])
+const currentPage = ref(1)
 
 const tabs = [
   { id: 'audit', label: 'Audit Log' },
@@ -244,8 +567,264 @@ const filters = ref({
   date_from: null,
   date_to: null,
   actor_id: null,
-  action: ''
+  action: '',
+  page_size: 50,
+  rollup: 'day',
+  top_n: 10,
+  template: '',
+  assignee_id: null
 })
+
+// Chart data computed properties
+const auditTimelineData = computed(() => {
+  if (!reportData.value?.timeline_data) return null
+  return {
+    labels: reportData.value.timeline_data.map(d => d.date),
+    datasets: [{
+      label: 'Events',
+      data: reportData.value.timeline_data.map(d => d.count),
+      borderColor: 'rgb(75, 192, 192)',
+      backgroundColor: 'rgba(75, 192, 192, 0.2)',
+      tension: 0.1
+    }]
+  }
+})
+
+const auditActionData = computed(() => {
+  if (!reportData.value?.action_counts) return null
+  const counts = reportData.value.action_counts
+  return {
+    labels: Object.keys(counts),
+    datasets: [{
+      data: Object.values(counts),
+      backgroundColor: [
+        'rgba(255, 99, 132, 0.6)',
+        'rgba(54, 162, 235, 0.6)',
+        'rgba(255, 206, 86, 0.6)',
+        'rgba(75, 192, 192, 0.6)',
+        'rgba(153, 102, 255, 0.6)',
+        'rgba(255, 159, 64, 0.6)'
+      ]
+    }]
+  }
+})
+
+const auditTopActorsData = computed(() => {
+  if (!reportData.value?.top_actors) return null
+  return {
+    labels: reportData.value.top_actors.map(a => a.name),
+    datasets: [{
+      label: 'Events',
+      data: reportData.value.top_actors.map(a => a.count),
+      backgroundColor: 'rgba(54, 162, 235, 0.6)'
+    }]
+  }
+})
+
+const usageUploadsData = computed(() => {
+  if (!reportData.value?.time_series) return null
+  return {
+    labels: reportData.value.time_series.map(d => d.date),
+    datasets: [{
+      label: 'Uploads',
+      data: reportData.value.time_series.map(d => d.uploads),
+      borderColor: 'rgb(75, 192, 192)',
+      backgroundColor: 'rgba(75, 192, 192, 0.2)',
+      tension: 0.1
+    }]
+  }
+})
+
+const usageFoldersData = computed(() => {
+  if (!reportData.value?.breakdown?.folders) return null
+  const folders = reportData.value.breakdown.folders.slice(0, 10)
+  return {
+    labels: folders.map(f => f.name || 'Root'),
+    datasets: [{
+      label: 'Size (bytes)',
+      data: folders.map(f => f.size),
+      backgroundColor: 'rgba(54, 162, 235, 0.6)'
+    }]
+  }
+})
+
+const usageTagsData = computed(() => {
+  if (!reportData.value?.breakdown?.tags) return null
+  return {
+    labels: reportData.value.breakdown.tags.map(t => t.name),
+    datasets: [{
+      data: reportData.value.breakdown.tags.map(t => t.size),
+      backgroundColor: [
+        'rgba(255, 99, 132, 0.6)',
+        'rgba(54, 162, 235, 0.6)',
+        'rgba(255, 206, 86, 0.6)',
+        'rgba(75, 192, 192, 0.6)',
+        'rgba(153, 102, 255, 0.6)'
+      ]
+    }]
+  }
+})
+
+const usageSearchData = computed(() => {
+  // This would need to be calculated from time series if available
+  // For now, return null as we don't have search query time series
+  return null
+})
+
+const workflowTemplateData = computed(() => {
+  if (!reportData.value?.approval_rates?.by_template) return null
+  return {
+    labels: reportData.value.approval_rates.by_template.map(t => t.template),
+    datasets: [{
+      label: 'Approval Rate',
+      data: reportData.value.approval_rates.by_template.map(t => (t.rate * 100).toFixed(1)),
+      backgroundColor: 'rgba(75, 192, 192, 0.6)'
+    }]
+  }
+})
+
+const workflowAssigneeData = computed(() => {
+  if (!reportData.value?.approval_rates?.by_assignee) return null
+  return {
+    labels: reportData.value.approval_rates.by_assignee.map(a => a.name),
+    datasets: [{
+      label: 'Approval Rate',
+      data: reportData.value.approval_rates.by_assignee.map(a => (a.rate * 100).toFixed(1)),
+      backgroundColor: 'rgba(54, 162, 235, 0.6)'
+    }]
+  }
+})
+
+const workflowStateData = computed(() => {
+  if (!reportData.value) return null
+  return {
+    labels: ['Completed', 'Pending', 'Rejected'],
+    datasets: [{
+      data: [
+        reportData.value.completed || 0,
+        reportData.value.pending || 0,
+        reportData.value.rejected || 0
+      ],
+      backgroundColor: [
+        'rgba(75, 192, 192, 0.6)',
+        'rgba(255, 206, 86, 0.6)',
+        'rgba(255, 99, 132, 0.6)'
+      ]
+    }]
+  }
+})
+
+const workflowDurationData = computed(() => {
+  if (!reportData.value?.duration_distribution) return null
+  return {
+    labels: reportData.value.duration_distribution.map(d => d.range),
+    datasets: [{
+      label: 'Count',
+      data: reportData.value.duration_distribution.map(d => d.count),
+      backgroundColor: 'rgba(153, 102, 255, 0.6)'
+    }]
+  }
+})
+
+const qualityFailureTypesData = computed(() => {
+  if (!reportData.value) return null
+  return {
+    labels: ['Embedding', 'OCR', 'Virus Scan'],
+    datasets: [{
+      data: [
+        reportData.value.embedding_failures || 0,
+        reportData.value.ocr_failures || 0,
+        reportData.value.virus_scan_failures || 0
+      ],
+      backgroundColor: [
+        'rgba(255, 99, 132, 0.6)',
+        'rgba(54, 162, 235, 0.6)',
+        'rgba(255, 206, 86, 0.6)'
+      ]
+    }]
+  }
+})
+
+const qualityFailureTimelineData = computed(() => {
+  if (!reportData.value?.failure_timeline) return null
+  // Group by date
+  const grouped = {}
+  reportData.value.failure_timeline.forEach(item => {
+    if (!grouped[item.date]) {
+      grouped[item.date] = 0
+    }
+    grouped[item.date] += item.count
+  })
+  return {
+    labels: Object.keys(grouped),
+    datasets: [{
+      label: 'Failures',
+      data: Object.values(grouped),
+      borderColor: 'rgb(255, 99, 132)',
+      backgroundColor: 'rgba(255, 99, 132, 0.2)',
+      tension: 0.1
+    }]
+  }
+})
+
+const qualityJobStatusData = computed(() => {
+  if (!reportData.value?.job_status_breakdown) return null
+  return {
+    labels: Object.keys(reportData.value.job_status_breakdown),
+    datasets: [{
+      data: Object.values(reportData.value.job_status_breakdown),
+      backgroundColor: [
+        'rgba(75, 192, 192, 0.6)',
+        'rgba(255, 206, 86, 0.6)',
+        'rgba(255, 99, 132, 0.6)',
+        'rgba(153, 102, 255, 0.6)'
+      ]
+    }]
+  }
+})
+
+// Chart options
+const timelineChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: true }
+  },
+  scales: {
+    y: { beginAtZero: true }
+  }
+}
+
+const barChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false }
+  },
+  scales: {
+    y: { beginAtZero: true }
+  }
+}
+
+const pieChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { position: 'right' }
+  }
+}
+
+const dualLineChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: true }
+  },
+  scales: {
+    y: { position: 'left', beginAtZero: true },
+    y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false } }
+  }
+}
 
 onMounted(async () => {
   await loadUsers()
@@ -262,6 +841,35 @@ const loadUsers = async () => {
   }
 }
 
+const applyDatePreset = (preset) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  
+  switch (preset) {
+    case 'today':
+      filters.value.date_from = today.toISOString().split('T')[0]
+      filters.value.date_to = today.toISOString().split('T')[0]
+      break
+    case '7d':
+      const sevenDaysAgo = new Date(today)
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+      filters.value.date_from = sevenDaysAgo.toISOString().split('T')[0]
+      filters.value.date_to = today.toISOString().split('T')[0]
+      break
+    case '30d':
+      const thirtyDaysAgo = new Date(today)
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      filters.value.date_from = thirtyDaysAgo.toISOString().split('T')[0]
+      filters.value.date_to = today.toISOString().split('T')[0]
+      break
+  }
+}
+
+const changePage = (page) => {
+  currentPage.value = page
+  generateReport()
+}
+
 const generateReport = async () => {
   loading.value = true
   reportData.value = null
@@ -273,11 +881,22 @@ const generateReport = async () => {
     if (filters.value.date_to) {
       params.to_date = filters.value.date_to
     }
-    if (filters.value.actor_id) {
-      params.actor_id = filters.value.actor_id
-    }
-    if (filters.value.action) {
-      params.action = filters.value.action
+
+    switch (activeTab.value) {
+      case 'audit':
+        if (filters.value.actor_id) params.actor_id = filters.value.actor_id
+        if (filters.value.action) params.action = filters.value.action
+        params.page = currentPage.value
+        params.size = filters.value.page_size
+        break
+      case 'usage':
+        params.rollup = filters.value.rollup
+        params.top_n = filters.value.top_n
+        break
+      case 'workflow':
+        if (filters.value.template) params.template = filters.value.template
+        if (filters.value.assignee_id) params.assignee_id = filters.value.assignee_id
+        break
     }
 
     let res
@@ -310,35 +929,27 @@ const generateReport = async () => {
 }
 
 const exportReport = async () => {
-  if (!reportData.value) return
+  if (!reportData.value || activeTab.value !== 'audit') return
   try {
     const params = {
       from_date: filters.value.date_from,
       to_date: filters.value.date_to,
       actor_id: filters.value.actor_id,
-      action: filters.value.action
+      action: filters.value.action,
+      format: 'csv'
     }
 
-    let res
-    switch (activeTab.value) {
-      case 'audit':
-        res = await reportsAPI.exportAudit(params)
-        break
-      default:
-        if (window.$toast) {
-          window.$toast.show('Export not available for this report type', 'info')
-        }
-        return
-    }
-
+    const res = await reportsAPI.exportAudit(params)
+    
     const url = window.URL.createObjectURL(new Blob([res]))
     const link = document.createElement('a')
     link.href = url
-    link.setAttribute('download', `report_${activeTab.value}_${Date.now()}.csv`)
+    link.setAttribute('download', `audit_report_${Date.now()}.csv`)
     document.body.appendChild(link)
     link.click()
     link.remove()
     window.URL.revokeObjectURL(url)
+    
     if (window.$toast) {
       window.$toast.show('Report exported', 'success')
     }
@@ -362,6 +973,12 @@ const formatSize = (bytes) => {
   if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB'
   return (bytes / 1024 / 1024 / 1024).toFixed(1) + ' GB'
 }
+
+// Reset page when tab changes
+watch(activeTab, () => {
+  currentPage.value = 1
+  reportData.value = null
+})
 </script>
 
 <style scoped>
@@ -436,27 +1053,6 @@ const formatSize = (bytes) => {
   box-shadow: var(--shadow-sm);
 }
 
-.filter-group input[type="date"] {
-  padding-right: var(--space-xl);
-  cursor: pointer;
-  position: relative;
-}
-
-.filter-group input[type="date"]::-webkit-calendar-picker-indicator {
-  cursor: pointer;
-  opacity: 0.6;
-  filter: grayscale(1);
-  transition: all var(--transition-base);
-  padding: var(--space-xs);
-  border-radius: var(--radius-sm);
-}
-
-.filter-group input[type="date"]::-webkit-calendar-picker-indicator:hover {
-  opacity: 1;
-  filter: grayscale(0);
-  background: var(--gradient-ai-soft);
-}
-
 .filter-group input:focus,
 .filter-group select:focus {
   outline: none;
@@ -464,14 +1060,15 @@ const formatSize = (bytes) => {
   box-shadow: var(--shadow-md), 0 0 0 3px rgba(0, 217, 255, 0.1);
 }
 
-.filter-group input[type="date"]:focus::-webkit-calendar-picker-indicator {
-  opacity: 1;
-  filter: grayscale(0);
-}
-
 .filter-actions {
   display: flex;
   gap: 0.5rem;
+  align-items: center;
+}
+
+.btn-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
 }
 
 .spinning {
@@ -518,8 +1115,29 @@ const formatSize = (bytes) => {
   color: var(--primary);
 }
 
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 1.5rem;
+}
+
+.chart-card {
+  background: var(--bg-light);
+  padding: 1.5rem;
+  border-radius: 8px;
+}
+
+.chart-card h3 {
+  margin: 0 0 1rem 0;
+  color: var(--primary);
+  font-size: 1.1rem;
+}
+
 .report-table-container {
   overflow-x: auto;
+  background: var(--bg-light);
+  padding: 1.5rem;
+  border-radius: 8px;
 }
 
 .report-table {
@@ -547,117 +1165,80 @@ const formatSize = (bytes) => {
   background: var(--bg-light);
 }
 
-.breakdown-section,
-.approval-section,
+.pagination-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.page-info {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.breakdown-section {
+  background: var(--bg-light);
+  padding: 1.5rem;
+  border-radius: 8px;
+}
+
+.breakdown-section h3 {
+  margin: 0 0 1rem 0;
+  color: var(--primary);
+}
+
+.breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.breakdown-table th,
+.breakdown-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  font-size: 0.9rem;
+}
+
+.breakdown-table th {
+  background: var(--bg-light);
+  font-weight: 600;
+  color: var(--primary);
+}
+
 .failures-section {
   background: var(--bg-light);
   padding: 1.5rem;
   border-radius: 8px;
 }
 
-.breakdown-section h3,
-.approval-section h3,
 .failures-section h3 {
   margin: 0 0 1rem 0;
   color: var(--primary);
 }
 
-.breakdown-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.breakdown-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.75rem;
-  background: white;
-  border-radius: 6px;
-}
-
-.breakdown-label {
-  font-weight: 500;
-}
-
-.breakdown-value {
-  color: #666;
-}
-
-.approval-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.approval-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.approval-label {
-  font-weight: 500;
-}
-
-.approval-bar {
-  position: relative;
-  height: 24px;
-  background: white;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.approval-fill {
-  height: 100%;
-  background: var(--primary);
-  transition: width 0.3s;
-}
-
-.approval-value {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: white;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-.failures-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.failure-item {
-  background: white;
-  padding: 1rem;
-  border-radius: 6px;
-  border-left: 4px solid #ef4444;
-}
-
-.failure-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-}
-
-.failure-type {
-  font-weight: 600;
-  color: #ef4444;
-}
-
-.failure-date {
-  font-size: 0.85rem;
-  color: #666;
-}
-
-.failure-error {
-  font-size: 0.9rem;
-  color: #666;
+.error-text {
   font-family: monospace;
+  font-size: 0.85rem;
+  color: #ef4444;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.text-center {
+  text-align: center;
 }
 
 .loading,

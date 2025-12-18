@@ -230,7 +230,7 @@ export const reportsAPI = {
   usage: (params) => api.get('/reports/usage', { params }),
   workflow: (params) => api.get('/reports/workflow', { params }),
   quality: (params) => api.get('/reports/quality', { params }),
-  exportAudit: (params) => api.post('/audit/export', params, { responseType: 'blob' })
+  exportAudit: (params) => api.post('/reports/audit/export', params, { responseType: 'blob' })
 }
 
 export const auditAPI = {

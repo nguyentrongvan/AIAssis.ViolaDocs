@@ -5,4 +5,8 @@ export { default as FolderTree } from './FolderTree.vue'
 export { default as Pagination } from './Pagination.vue'
 export { default as VersionCompare } from './VersionCompare.vue'
 export { default as LoadingSpinner } from './LoadingSpinner.vue'
+export { default as LineChart } from './charts/LineChart.vue'
+export { default as BarChart } from './charts/BarChart.vue'
+export { default as PieChart } from './charts/PieChart.vue'
+export { default as DualLineChart } from './charts/DualLineChart.vue'
 

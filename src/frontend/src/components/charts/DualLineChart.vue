@@ -1,0 +1,138 @@
+<template>
+  <div class="chart-container">
+    <canvas ref="chartCanvas"></canvas>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, onUnmounted, watch } from 'vue'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  LineController,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+} from 'chart.js'
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  LineController,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+)
+
+const props = defineProps({
+  data: {
+    type: Object,
+    required: true
+  },
+  options: {
+    type: Object,
+    default: () => ({})
+  }
+})
+
+const chartCanvas = ref(null)
+let chartInstance = null
+
+const defaultOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  interaction: {
+    mode: 'index',
+    intersect: false
+  },
+  plugins: {
+    legend: {
+      display: true,
+      position: 'top'
+    },
+    tooltip: {
+      mode: 'index',
+      intersect: false
+    }
+  },
+  scales: {
+    x: {
+      display: true,
+      grid: {
+        display: false
+      }
+    },
+    y: {
+      type: 'linear',
+      display: true,
+      position: 'left',
+      beginAtZero: true
+    },
+    y1: {
+      type: 'linear',
+      display: true,
+      position: 'right',
+      beginAtZero: true,
+      grid: {
+        drawOnChartArea: false
+      }
+    }
+  }
+}
+
+const createChart = () => {
+  if (!chartCanvas.value) return
+
+  const config = {
+    type: 'line',
+    data: props.data,
+    options: { ...defaultOptions, ...props.options }
+  }
+
+  if (chartInstance) {
+    chartInstance.destroy()
+  }
+
+  chartInstance = new ChartJS(chartCanvas.value, config)
+}
+
+onMounted(() => {
+  createChart()
+})
+
+onUnmounted(() => {
+  if (chartInstance) {
+    chartInstance.destroy()
+  }
+})
+
+watch(() => props.data, () => {
+  if (chartInstance) {
+    chartInstance.data = props.data
+    chartInstance.update()
+  }
+}, { deep: true })
+
+watch(() => props.options, () => {
+  if (chartInstance) {
+    chartInstance.options = { ...defaultOptions, ...props.options }
+    chartInstance.update()
+  }
+}, { deep: true })
+</script>
+
+<style scoped>
+.chart-container {
+  position: relative;
+  height: 300px;
+  width: 100%;
+}
+</style>
+
