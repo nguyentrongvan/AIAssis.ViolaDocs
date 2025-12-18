@@ -391,6 +391,7 @@ const selectedDocumentIds = ref([])
 const selectAllDocuments = ref(true)
 const loadingDocuments = ref(false)
 const documentSearchTerm = ref('')
+let documentsRefreshInterval = null
 
 const filters = ref({
   tags: [],
@@ -443,8 +444,13 @@ onMounted(async () => {
 
 // Cleanup interval on unmount
 onUnmounted(() => {
-  if (documentsRefreshInterval) {
-    clearInterval(documentsRefreshInterval)
+  try {
+    if (documentsRefreshInterval) {
+      clearInterval(documentsRefreshInterval)
+      documentsRefreshInterval = null
+    }
+  } catch (error) {
+    console.error('Error cleaning up documents refresh interval:', error)
   }
 })
 

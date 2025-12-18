@@ -228,6 +228,49 @@ const deleteRole = async (role) => {
 .role-actions {
   display: flex;
   gap: 0.5rem;
+  align-items: center;
+}
+
+.btn-small {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-white);
+  border: 2px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-dark);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.btn-small:hover {
+  background: var(--gradient-ai-soft);
+  border-color: var(--ai-cyan);
+  color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 217, 255, 0.15);
+}
+
+.btn-small:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.btn-small.btn-danger {
+  background: var(--bg-white);
+  border-color: rgba(231, 76, 60, 0.3);
+  color: var(--error);
+}
+
+.btn-small.btn-danger:hover {
+  background: var(--error-light);
+  border-color: var(--error);
+  color: var(--error);
+  box-shadow: 0 2px 6px rgba(231, 76, 60, 0.2);
 }
 
 .role-permissions {
