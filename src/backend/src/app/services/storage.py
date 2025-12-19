@@ -30,6 +30,8 @@ def get_minio_client() -> Minio:
 
 
 def generate_presigned_upload_url(object_name: str, expires: timedelta = timedelta(hours=1)) -> str:
+    # Note: In dev mode, uploads should use proxy endpoint instead of presigned URL
+    # This function is kept for production mode only
     client = get_minio_client()
     url = client.presigned_put_object(
         settings.minio_bucket,
@@ -40,6 +42,8 @@ def generate_presigned_upload_url(object_name: str, expires: timedelta = timedel
 
 
 def generate_presigned_download_url(object_name: str, expires: timedelta = timedelta(hours=1)) -> str:
+    # Note: In dev mode, downloads should use proxy endpoint instead of presigned URL
+    # This function is kept for production mode only
     client = get_minio_client()
     url = client.presigned_get_object(
         settings.minio_bucket,
@@ -97,4 +101,44 @@ async def get_file_bytes_from_minio(object_name: str) -> Optional[bytes]:
     except Exception as e:
         print(f"Error reading file from MinIO: {e}")
         return None
+
+
+def get_proxy_download_url(object_name: str, doc_id: int, request_base_url, token: Optional[str] = None) -> str:
+    """Generate proxy download URL for dev mode (for thumbnails, etc.)."""
+    base_url = str(request_base_url).rstrip('/')
+    # URL encode object_name for path safety
+    from urllib.parse import quote
+    encoded_name = quote(object_name, safe='')
+    url = f"{base_url}/api/v1/documents/{doc_id}/preview/{encoded_name}"
+    # Add token to query parameter for browser direct access (img/iframe tags)
+    if token:
+        from urllib.parse import urlencode
+        url = f"{url}?{urlencode({'token': token})}"
+    return url
+
+
+def get_proxy_download_url_for_doc(object_name: str, doc_id: int, request_base_url, token: Optional[str] = None) -> str:
+    """Generate proxy download URL for document file in dev mode (for download)."""
+    base_url = str(request_base_url).rstrip('/')
+    url = f"{base_url}/api/v1/documents/{doc_id}/download"
+    # Add token to query parameter for browser direct access
+    if token:
+        from urllib.parse import urlencode
+        url = f"{url}?{urlencode({'token': token})}"
+    return url
+
+
+def get_proxy_preview_url_for_doc(doc_id: int, request_base_url, token: Optional[str] = None, version_id: Optional[int] = None) -> str:
+    """Generate proxy preview URL for document file in dev mode (for inline preview in browser)."""
+    base_url = str(request_base_url).rstrip('/')
+    url = f"{base_url}/api/v1/documents/{doc_id}/preview"
+    params = {}
+    if token:
+        params['token'] = token
+    if version_id:
+        params['version_id'] = version_id
+    if params:
+        from urllib.parse import urlencode
+        url = f"{url}?{urlencode(params)}"
+    return url
 

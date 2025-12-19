@@ -2,17 +2,18 @@ import uuid
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Response
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
 
 from ..db import get_session
-from ..dependencies import get_current_user, get_current_admin_user
+from ..dependencies import get_current_user, get_current_admin_user, security
 from ..models.users import User
 from ..models.documents import Document, DocumentVersion, Tag, DocumentTag, Share, Comment
-from ..services.storage import generate_presigned_download_url
+from ..services.storage import generate_presigned_download_url, get_file_bytes_from_minio, get_proxy_download_url, get_proxy_download_url_for_doc, get_proxy_preview_url_for_doc
 from ..services.permission_service import get_user_accessible_documents_query, check_document_access
 from ..utils.response import success_response, error_response
 from ..config import settings
@@ -146,6 +147,7 @@ async def list_documents(
     limit: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
     folder_id: Optional[int] = Query(None),
+    http_request: Request = None,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
@@ -176,7 +178,7 @@ async def list_documents(
     result = await session.execute(query)
     documents = result.scalars().all()
     
-    from ..services.storage import generate_presigned_download_url
+    from ..services.storage import generate_presigned_download_url, get_proxy_download_url
     
     items = []
     for doc in documents:
@@ -211,7 +213,16 @@ async def list_documents(
                 if thumb_uri.startswith(f"minio://{settings.minio_bucket}/"):
                     thumb_uri = thumb_uri.replace(f"minio://{settings.minio_bucket}/", "")
                 try:
-                    item["thumbnail_url"] = generate_presigned_download_url(thumb_uri, expires=timedelta(hours=1))
+                    # In dev mode, use proxy endpoint
+                    if settings.debug and http_request:
+                        # Extract token from Authorization header
+                        token = None
+                        auth_header = http_request.headers.get("Authorization", "")
+                        if auth_header.startswith("Bearer "):
+                            token = auth_header.replace("Bearer ", "")
+                        item["thumbnail_url"] = get_proxy_download_url(thumb_uri, doc.id, http_request.base_url, token)
+                    else:
+                        item["thumbnail_url"] = generate_presigned_download_url(thumb_uri, expires=timedelta(hours=1))
                 except Exception:
                     pass  # Skip if thumbnail generation fails
         
@@ -226,6 +237,7 @@ async def list_documents(
 @router.get("/{doc_id}")
 async def get_document(
     doc_id: int,
+    http_request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
@@ -250,7 +262,13 @@ async def get_document(
     if not has_access:
         return error_response(reason or "Access denied", status_code=status.HTTP_403_FORBIDDEN)
     
-    from ..services.storage import generate_presigned_download_url
+    from ..services.storage import generate_presigned_download_url, get_proxy_download_url, get_proxy_preview_url_for_doc
+    
+    # Extract token from Authorization header for proxy URLs
+    token = None
+    auth_header = http_request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header.replace("Bearer ", "")
     
     # Get latest version for preview URL
     latest_version = max(doc.versions, key=lambda v: v.version_no) if doc.versions else None
@@ -259,7 +277,11 @@ async def get_document(
         blob_uri = latest_version.blob_uri
         if blob_uri.startswith(f"minio://{settings.minio_bucket}/"):
             blob_uri = blob_uri.replace(f"minio://{settings.minio_bucket}/", "")
-        preview_url = generate_presigned_download_url(blob_uri, expires=timedelta(hours=1))
+        # In dev mode, use proxy preview endpoint (inline) for browser preview
+        if settings.debug:
+            preview_url = get_proxy_preview_url_for_doc(doc_id, http_request.base_url, token)
+        else:
+            preview_url = generate_presigned_download_url(blob_uri, expires=timedelta(hours=1))
     
     versions = []
     for v in doc.versions:
@@ -280,12 +302,20 @@ async def get_document(
             thumb_uri = v.thumbnail_uri
             if thumb_uri.startswith(f"minio://{settings.minio_bucket}/"):
                 thumb_uri = thumb_uri.replace(f"minio://{settings.minio_bucket}/", "")
-            renditions["thumbnail"] = generate_presigned_download_url(thumb_uri, expires=timedelta(hours=1))
+            # In dev mode, use proxy endpoint
+            if settings.debug:
+                renditions["thumbnail"] = get_proxy_download_url(thumb_uri, doc_id, http_request.base_url, token)
+            else:
+                renditions["thumbnail"] = generate_presigned_download_url(thumb_uri, expires=timedelta(hours=1))
         if v.blob_uri:
             blob_uri = v.blob_uri
             if blob_uri.startswith(f"minio://{settings.minio_bucket}/"):
                 blob_uri = blob_uri.replace(f"minio://{settings.minio_bucket}/", "")
-            renditions["preview"] = generate_presigned_download_url(blob_uri, expires=timedelta(hours=1))
+            # In dev mode, use proxy preview endpoint (inline) for browser preview
+            if settings.debug:
+                renditions["preview"] = get_proxy_preview_url_for_doc(doc_id, http_request.base_url, token, v.id)
+            else:
+                renditions["preview"] = generate_presigned_download_url(blob_uri, expires=timedelta(hours=1))
         if renditions:
             version_data["renditions"] = renditions
         versions.append(version_data)
@@ -1068,9 +1098,368 @@ async def delete_comment(
     return success_response({"id": comment_id, "deleted": True})
 
 
+@router.get("/{doc_id}/preview")
+async def preview_document(
+    doc_id: int,
+    version_id: Optional[int] = Query(None, description="Specific version ID (defaults to latest)"),
+    token: Optional[str] = Query(None, description="Authentication token (for browser direct access)"),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    session: AsyncSession = Depends(get_session)
+):
+    """Preview document file in browser (proxy endpoint for dev mode). Uses inline Content-Disposition."""
+    # Authenticate user - support both Authorization header and token query parameter
+    current_user = None
+    if credentials:
+        try:
+            current_user = await get_current_user(credentials=credentials, session=session)
+        except HTTPException:
+            pass
+    elif token:
+        # Try to authenticate with token from query parameter
+        from ..services.auth import decode_token, get_user_by_id
+        payload = decode_token(token)
+        if payload:
+            user_id = payload.get("sub")
+            if user_id:
+                current_user = await get_user_by_id(session, int(user_id))
+    
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
+    
+    # Get document
+    result = await session.execute(
+        select(Document)
+        .options(selectinload(Document.versions))
+        .where(
+            and_(
+                Document.id == doc_id,
+                Document.deleted_at.is_(None)
+            )
+        )
+    )
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Check access
+    has_access, _, reason = await check_document_access(session, current_user, doc, "view")
+    if not has_access:
+        return error_response(reason or "Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    
+    # Get version
+    if version_id:
+        version_result = await session.execute(
+            select(DocumentVersion).where(
+                and_(
+                    DocumentVersion.document_id == doc_id,
+                    DocumentVersion.id == version_id
+                )
+            )
+        )
+        version = version_result.scalar_one_or_none()
+    else:
+        # Get latest version
+        version = max(doc.versions, key=lambda v: v.version_no) if doc.versions else None
+    
+    if not version or not version.blob_uri:
+        return error_response("File not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Extract object name from blob_uri
+    blob_uri = version.blob_uri
+    if blob_uri.startswith(f"minio://{settings.minio_bucket}/"):
+        blob_uri = blob_uri.replace(f"minio://{settings.minio_bucket}/", "")
+    
+    # Get file from MinIO
+    file_bytes = await get_file_bytes_from_minio(blob_uri)
+    if not file_bytes:
+        return error_response("Failed to retrieve file", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    # Return file with inline Content-Disposition for browser preview
+    # Headers must be latin-1 compatible, so we need to sanitize Unicode filenames
+    import re
+    # Remove or replace non-ASCII characters
+    filename_safe = re.sub(r'[^\x00-\x7F]+', '_', doc.title)
+    # Remove any remaining problematic characters
+    filename_safe = re.sub(r'[<>:"/\\|?*]', '_', filename_safe)
+    # Limit length
+    if len(filename_safe) > 200:
+        filename_safe = filename_safe[:200]
+    
+    # Get file extension from mime type or filename
+    file_ext = ""
+    if doc.mime:
+        mime_to_ext = {
+            "application/pdf": ".pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/tiff": ".tiff",
+            "text/plain": ".txt",
+            "text/csv": ".csv"
+        }
+        file_ext = mime_to_ext.get(doc.mime, "")
+    
+    if not file_ext and filename_safe:
+        # Try to extract extension from original filename (sanitize extension too)
+        if '.' in doc.title:
+            ext_part = doc.title.rsplit('.', 1)[-1]
+            # Sanitize extension to ASCII only
+            ext_safe = ext_part.encode('ascii', 'ignore').decode('ascii')
+            if ext_safe:
+                file_ext = '.' + ext_safe
+    
+    filename_with_ext = filename_safe + file_ext if file_ext else filename_safe
+    
+    # Ensure filename is pure ASCII (double-check) - test latin-1 encoding
+    # Headers must be latin-1 compatible
+    try:
+        # Test if it can be encoded to latin-1
+        filename_final_bytes = filename_with_ext.encode('latin-1')
+        filename_final = filename_final_bytes.decode('latin-1')
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        # If encoding fails, force ASCII only
+        filename_final = filename_with_ext.encode('ascii', 'ignore').decode('ascii')
+        if not filename_final:
+            filename_final = "document" + (file_ext if file_ext else ".pdf")
+    
+    # Build headers dict with inline Content-Disposition for browser preview
+    headers_dict = {
+        "Content-Disposition": f'inline; filename="{filename_final}"',  # inline instead of attachment
+        "Content-Length": str(len(file_bytes))
+    }
+    
+    return Response(
+        content=file_bytes,
+        media_type=doc.mime or "application/octet-stream",
+        headers=headers_dict
+    )
+
+
+@router.get("/{doc_id}/download")
+async def download_document(
+    doc_id: int,
+    version_id: Optional[int] = Query(None, description="Specific version ID (defaults to latest)"),
+    token: Optional[str] = Query(None, description="Authentication token (for browser direct access)"),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    session: AsyncSession = Depends(get_session)
+):
+    """Download document file (proxy endpoint for dev mode). Uses attachment Content-Disposition."""
+    # Authenticate user - support both Authorization header and token query parameter
+    current_user = None
+    if credentials:
+        try:
+            current_user = await get_current_user(credentials=credentials, session=session)
+        except HTTPException:
+            pass
+    elif token:
+        # Try to authenticate with token from query parameter
+        from ..services.auth import decode_token, get_user_by_id
+        payload = decode_token(token)
+        if payload:
+            user_id = payload.get("sub")
+            if user_id:
+                current_user = await get_user_by_id(session, int(user_id))
+    
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
+    
+    # Get document
+    result = await session.execute(
+        select(Document)
+        .options(selectinload(Document.versions))
+        .where(
+            and_(
+                Document.id == doc_id,
+                Document.deleted_at.is_(None)
+            )
+        )
+    )
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Check access
+    has_access, _, reason = await check_document_access(session, current_user, doc, "view")
+    if not has_access:
+        return error_response(reason or "Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    
+    # Get version
+    if version_id:
+        version_result = await session.execute(
+            select(DocumentVersion).where(
+                and_(
+                    DocumentVersion.document_id == doc_id,
+                    DocumentVersion.id == version_id
+                )
+            )
+        )
+        version = version_result.scalar_one_or_none()
+    else:
+        # Get latest version
+        version = max(doc.versions, key=lambda v: v.version_no) if doc.versions else None
+    
+    if not version or not version.blob_uri:
+        return error_response("File not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Extract object name from blob_uri
+    blob_uri = version.blob_uri
+    if blob_uri.startswith(f"minio://{settings.minio_bucket}/"):
+        blob_uri = blob_uri.replace(f"minio://{settings.minio_bucket}/", "")
+    
+    # Get file from MinIO
+    file_bytes = await get_file_bytes_from_minio(blob_uri)
+    if not file_bytes:
+        return error_response("Failed to retrieve file", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    # Return file with appropriate headers
+    # Headers must be latin-1 compatible, so we need to sanitize Unicode filenames
+    # Use only ASCII characters in filename to avoid encoding issues
+    import re
+    # Remove or replace non-ASCII characters
+    filename_safe = re.sub(r'[^\x00-\x7F]+', '_', doc.title)
+    # Remove any remaining problematic characters
+    filename_safe = re.sub(r'[<>:"/\\|?*]', '_', filename_safe)
+    # Limit length
+    if len(filename_safe) > 200:
+        filename_safe = filename_safe[:200]
+    
+    # Get file extension from mime type or filename
+    file_ext = ""
+    if doc.mime:
+        mime_to_ext = {
+            "application/pdf": ".pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/tiff": ".tiff",
+            "text/plain": ".txt",
+            "text/csv": ".csv"
+        }
+        file_ext = mime_to_ext.get(doc.mime, "")
+    
+    if not file_ext and filename_safe:
+        # Try to extract extension from original filename (sanitize extension too)
+        if '.' in doc.title:
+            ext_part = doc.title.rsplit('.', 1)[-1]
+            # Sanitize extension to ASCII only
+            ext_safe = ext_part.encode('ascii', 'ignore').decode('ascii')
+            if ext_safe:
+                file_ext = '.' + ext_safe
+    
+    filename_with_ext = filename_safe + file_ext if file_ext else filename_safe
+    
+    # Ensure filename is pure ASCII (double-check) - test latin-1 encoding
+    # Headers must be latin-1 compatible
+    try:
+        # Test if it can be encoded to latin-1
+        filename_final_bytes = filename_with_ext.encode('latin-1')
+        filename_final = filename_final_bytes.decode('latin-1')
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        # If encoding fails, force ASCII only
+        filename_final = filename_with_ext.encode('ascii', 'ignore').decode('ascii')
+        if not filename_final:
+            filename_final = "document" + (file_ext if file_ext else ".pdf")
+    
+    # Build headers dict with only ASCII-safe values
+    headers_dict = {
+        "Content-Disposition": f'attachment; filename="{filename_final}"',
+        "Content-Length": str(len(file_bytes))
+    }
+    
+    return Response(
+        content=file_bytes,
+        media_type=doc.mime or "application/octet-stream",
+        headers=headers_dict
+    )
+
+
+@router.get("/{doc_id}/preview/{object_name:path}")
+async def preview_object(
+    doc_id: int,
+    object_name: str,
+    token: Optional[str] = Query(None, description="Authentication token (for browser direct access)"),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    session: AsyncSession = Depends(get_session)
+):
+    """Proxy endpoint for previewing objects (thumbnails, etc.) in dev mode."""
+    # Authenticate user - support both Authorization header and token query parameter
+    current_user = None
+    if credentials:
+        try:
+            current_user = await get_current_user(credentials=credentials, session=session)
+        except HTTPException:
+            pass
+    elif token:
+        # Try to authenticate with token from query parameter
+        from ..services.auth import decode_token, get_user_by_id
+        payload = decode_token(token)
+        if payload:
+            user_id = payload.get("sub")
+            if user_id:
+                current_user = await get_user_by_id(session, int(user_id))
+    
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
+    
+    # Get document
+    result = await session.execute(
+        select(Document).where(
+            and_(
+                Document.id == doc_id,
+                Document.deleted_at.is_(None)
+            )
+        )
+    )
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Check access
+    has_access, _, reason = await check_document_access(session, current_user, doc, "view")
+    if not has_access:
+        return error_response(reason or "Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    
+    # Get file from MinIO
+    file_bytes = await get_file_bytes_from_minio(object_name)
+    if not file_bytes:
+        return error_response("File not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Determine content type
+    content_type = "image/png"  # Default for thumbnails
+    if object_name.endswith('.jpg') or object_name.endswith('.jpeg'):
+        content_type = "image/jpeg"
+    elif object_name.endswith('.pdf'):
+        content_type = "application/pdf"
+    
+    # Use inline Content-Disposition for browser preview
+    return Response(
+        content=file_bytes,
+        media_type=content_type,
+        headers={
+            "Content-Disposition": "inline",  # inline for browser preview
+            "Content-Length": str(len(file_bytes))
+        }
+    )
+
+
 @router.get("/shared/{share_token}")
 async def get_shared_document(
     share_token: str,
+    http_request: Request,
     session: AsyncSession = Depends(get_session)
 ):
     """Access document via share link (no authentication required)."""
@@ -1106,15 +1495,23 @@ async def get_shared_document(
         return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
     
     # Get latest version for preview URL
-    from ..services.storage import generate_presigned_download_url
+    from ..services.storage import generate_presigned_download_url, get_proxy_download_url_for_doc
+    from fastapi import Request as FastAPIRequest
     
+    # Get request from context (for share links, we don't have http_request parameter)
+    # In dev mode, we'll use a fallback URL
     latest_version = max(doc.versions, key=lambda v: v.version_no) if doc.versions else None
     preview_url = None
     if latest_version and latest_version.blob_uri:
         blob_uri = latest_version.blob_uri
         if blob_uri.startswith(f"minio://{settings.minio_bucket}/"):
             blob_uri = blob_uri.replace(f"minio://{settings.minio_bucket}/", "")
-        preview_url = generate_presigned_download_url(blob_uri, expires=timedelta(hours=1))
+        # In dev mode, use proxy endpoint (fallback to localhost:8000 if no request)
+        if settings.debug:
+            base_url = str(http_request.base_url).rstrip('/') if http_request else "http://localhost:8000"
+            preview_url = get_proxy_download_url_for_doc(blob_uri, doc.id, base_url)
+        else:
+            preview_url = generate_presigned_download_url(blob_uri, expires=timedelta(hours=1))
     
     # Return document info (read-only access via share link)
     share_permissions = share.permissions

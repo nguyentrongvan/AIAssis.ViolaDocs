@@ -34,7 +34,7 @@
         <label>{{ $t('admin.aiJobs.filters.provider') }}</label>
         <select v-model="filters.provider">
           <option value="">{{ $t('admin.aiJobs.filterOptions.allProviders') }}</option>
-          <option value="paddle">{{ $t('admin.aiJobs.filterOptions.paddle') }}</option>
+          <option value="tesseract">{{ $t('admin.aiJobs.filterOptions.tesseract') }}</option>
           <option value="ollama">{{ $t('admin.aiJobs.filterOptions.ollama') }}</option>
         </select>
       </div>

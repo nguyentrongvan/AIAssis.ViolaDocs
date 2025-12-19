@@ -325,7 +325,52 @@ class QdrantVectorStore:
                 else:
                     print(f"[QdrantVectorStore] ✓ Success: Collection count increased by {collection_count_after - collection_count_before}")
             except Exception as e:
-                print(f"[QdrantVectorStore] Warning: Could not verify upsert success (count check failed): {e}")
+                error_msg = str(e).lower()
+                error_type = type(e).__name__
+                
+                # Check if it's a validation error (collection exists but config has pydantic issues)
+                is_validation_error = (
+                    "validation" in error_msg or 
+                    "pydantic" in error_msg or 
+                    error_type == "ValidationError" or
+                    "max_optimization_threads" in error_msg
+                )
+                
+                if is_validation_error:
+                    # Collection exists but has validation error - use HTTP API bypass to get count
+                    print(f"[QdrantVectorStore] Warning: Could not verify upsert success via get_collection (validation error), using HTTP API bypass: {e}")
+                    try:
+                        # Get collection count via raw HTTP API
+                        import urllib.request
+                        import json as json_lib
+                        base_url = None
+                        if hasattr(self.client, 'http') and hasattr(self.client.http, 'base_url'):
+                            base_url = str(self.client.http.base_url).rstrip('/')
+                        elif hasattr(self.client, '_client') and hasattr(self.client._client, 'base_url'):
+                            base_url = str(self.client._client.base_url).rstrip('/')
+                        else:
+                            scheme = "http"
+                            host = self.host if self.host != "localhost" else "localhost"
+                            base_url = f"{scheme}://{host}:{self.port}"
+                        
+                        url = f"{base_url}/collections/{self.collection_name}"
+                        req = urllib.request.Request(url)
+                        req.add_header('Content-Type', 'application/json')
+                        with urllib.request.urlopen(req, timeout=5) as response:
+                            data = json_lib.loads(response.read().decode('utf-8'))
+                            if "result" in data and isinstance(data["result"], dict):
+                                collection_count_after = data["result"].get("points_count", 0)
+                                print(f"[QdrantVectorStore] ✓ Got collection count via HTTP API: {collection_count_after}")
+                                
+                                if collection_count_after <= collection_count_before:
+                                    print(f"[QdrantVectorStore] WARNING: Collection count did not increase! Before: {collection_count_before}, After: {collection_count_after}")
+                                else:
+                                    print(f"[QdrantVectorStore] ✓ Success: Collection count increased by {collection_count_after - collection_count_before}")
+                    except Exception as http_error:
+                        print(f"[QdrantVectorStore] Warning: Could not verify upsert success (HTTP API also failed): {http_error}")
+                        print(f"[QdrantVectorStore] Upsert operation completed, but count verification unavailable due to collection config validation issue")
+                else:
+                    print(f"[QdrantVectorStore] Warning: Could not verify upsert success (count check failed): {e}")
         except Exception as e:
             error_msg = str(e)
             import traceback

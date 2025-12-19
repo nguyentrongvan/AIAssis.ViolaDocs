@@ -13,19 +13,16 @@ bcrypt==4.0.1
 python-multipart==0.0.6
 minio==7.2.0
 redis==5.0.1
-# AI/OCR dependencies - numpy must be <2.0 for PaddleOCR compatibility
-numpy<2.0
-paddleocr==2.7.0
-paddlepaddle==2.6.2
-PyMuPDF<1.21.0
+# AI/OCR dependencies
+numpy>=1.24.0
+PyMuPDF>=1.23.0
 Pillow==11.0.0
 pgvector==0.2.4
 openai==1.6.0
 qdrant-client==1.7.0
 tiktoken>=0.5.0
-# OCR providers
+# OCR provider - only Tesseract is supported
 pytesseract==0.3.10
-easyocr==1.7.0
 # Text extraction for office files
 python-docx==1.1.0
 openpyxl==3.1.2

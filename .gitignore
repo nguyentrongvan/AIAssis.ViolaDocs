@@ -120,8 +120,15 @@ secrets/
 *.key
 *.cert
 
+# Old dev/prod specific scripts (use scripts/dev or scripts/prod instead)
+start-dev.sh
+start-dev.bat
+start-prod.sh
+start-prod.bat
+stop-dev.sh
+stop-dev.bat
+stop-prod.sh
+stop-prod.bat
 
-
-
-
-
+# Old docker-compose files (deprecated - use docker/ folder instead)
+# Note: start.sh, start.bat, stop.sh, stop.bat are kept at root for convenience

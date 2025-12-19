@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+# Get script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
+cd "$PROJECT_ROOT"
+
 echo "=========================================="
 echo "ViolaDocs Platform - Stop Script"
 echo "=========================================="
@@ -13,16 +18,33 @@ else
 fi
 
 echo ""
-echo "🛑 Stopping ViolaDocs Platform..."
+echo "[STOP] Stopping ViolaDocs Platform..."
 echo ""
+echo "Select mode to stop:"
+echo "  1) Development"
+echo "  2) Production"
+echo "  3) Both (all running containers)"
+echo ""
+read -p "Enter choice [1-3] (default: 3): " mode
+mode=${mode:-3}
 
-# Stop all services
-$DOCKER_COMPOSE down
+if [ "$mode" = "1" ]; then
+    echo "Stopping Development mode..."
+    $DOCKER_COMPOSE -f docker/docker-compose.base.yml -f docker/dev/docker-compose.yml down
+elif [ "$mode" = "2" ]; then
+    echo "Stopping Production mode..."
+    $DOCKER_COMPOSE -f docker/docker-compose.base.yml -f docker/prod/docker-compose.yml down
+else
+    echo "Stopping all containers..."
+    $DOCKER_COMPOSE -f docker/docker-compose.base.yml -f docker/dev/docker-compose.yml down 2>/dev/null || true
+    $DOCKER_COMPOSE -f docker/docker-compose.base.yml -f docker/prod/docker-compose.yml down 2>/dev/null || true
+fi
 
 echo ""
-echo "✅ All services stopped!"
+echo "[OK] All services stopped!"
 echo ""
-echo "💡 To remove volumes (data will be lost):"
-echo "   docker-compose down -v"
+echo "[TIP] To remove volumes (data will be lost):"
+echo "   docker-compose -f docker/docker-compose.base.yml -f docker/dev/docker-compose.yml down -v"
+echo "   docker-compose -f docker/docker-compose.base.yml -f docker/prod/docker-compose.yml down -v"
 echo ""
 

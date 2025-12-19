@@ -218,6 +218,7 @@ class LLMService:
         """Get default LLM provider (Ollama only)"""
         if settings.ollama_base_url:
             try:
+                # Use config default model - will be updated from DB in async methods (like generate_tags_async)
                 return OllamaLLMProvider(
                     base_url=settings.ollama_base_url,
                     api_key=settings.ollama_api_key if settings.ollama_api_key else None,
@@ -463,6 +464,16 @@ class LLMService:
         if not self.provider:
             return []
         
+        # Load model from database settings (LLM settings for chat) before generating tags
+        if isinstance(self.provider, OllamaLLMProvider) and session:
+            try:
+                db_model = await get_ollama_llm_model_from_db()
+                if db_model and db_model != self.provider.model:
+                    print(f"[LLM Service] Updating model from '{self.provider.model}' to '{db_model}' for tag generation")
+                    self.provider.model = db_model
+            except Exception as e:
+                print(f"[LLM Service] Warning: Failed to load LLM model from DB, using current model '{self.provider.model}': {e}")
+        
         tags = []
         
         # Generate 1 tag from filename if provided using LLM to generalize
@@ -482,6 +493,11 @@ class LLMService:
                     prompt,
                     system_prompt=None
                 )
+                
+                # Check if response is an error message (starts with "Error")
+                if response_text and response_text.strip().startswith("Error"):
+                    print(f"[LLM Service] LLM returned error for filename '{filename}': {response_text}")
+                    raise Exception(f"LLM error: {response_text}")
                 
                 if response_text:
                     # Clean up the response: remove quotes, trim whitespace
@@ -565,12 +581,20 @@ class LLMService:
                     system_prompt=None
                 )
                 
+                # Check if response is an error message (starts with "Error")
+                if response_text and response_text.strip().startswith("Error"):
+                    print(f"[LLM Service] LLM returned error for content: {response_text}")
+                    raise Exception(f"LLM error: {response_text}")
+                
                 if response_text:
                     # Parse response: split by comma, trim, filter empty
                     content_tags = []
                     for tag in response_text.split(','):
                         tag = tag.strip()
                         if tag:
+                            # Skip error messages
+                            if tag.startswith("Error"):
+                                continue
                             # Remove any leading/trailing quotes or special characters
                             tag = tag.strip('"\'`.,;:!?')
                             if tag:

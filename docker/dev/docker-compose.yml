@@ -1,0 +1,33 @@
+# Development mode configuration
+# Extends docker-compose.base.yml with dev-specific overrides
+
+services:
+  backend:
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      DEBUG: "true"
+      LOG_LEVEL: "DEBUG"
+    # Remove nginx dependency for dev mode
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      ollama:
+        condition: service_started
+
+  frontend:
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    build:
+      args:
+        # In dev mode, use absolute URL for API to call backend directly
+        VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8000/api/v1}
+    environment:
+      - VITE_API_BASE=${VITE_API_BASE:-http://localhost:8000/api/v1}
+

@@ -108,13 +108,10 @@
           <div class="form-section">
             <div class="form-group">
               <label for="ocr_provider">{{ $t('admin.settings.ocrProvider') }} *</label>
-              <select id="ocr_provider" v-model="ocrForm.provider">
-                <option value="paddle">{{ $t('admin.settings.ocrProviderPaddle') }}</option>
+              <select id="ocr_provider" v-model="ocrForm.provider" disabled>
                 <option value="tesseract">{{ $t('admin.settings.ocrProviderTesseract') }}</option>
-                <option value="easyocr">{{ $t('admin.settings.ocrProviderEasyocr') }}</option>
-                <option value="auto">{{ $t('admin.settings.autoTryAll') }}</option>
               </select>
-              <small>{{ $t('admin.settings.selectOCRProvider') }}</small>
+              <small>{{ $t('admin.settings.selectOCRProvider') }} (Only Tesseract is supported)</small>
             </div>
             
             <div class="form-group">
@@ -150,7 +147,7 @@
             <h3>{{ $t('admin.settings.ocrProvidersSection') }}</h3>
             <div class="provider-list">
               <div
-                v-for="provider in providers.ocr || []"
+                v-for="provider in (providers.ocr || []).filter(p => p.name === 'tesseract')"
                 :key="provider.name"
                 class="provider-item"
                 :class="{ 'provider-error': provider.health === 'error' || provider.health === 'system_not_found' }"
@@ -165,21 +162,13 @@
                 </div>
                 <div class="provider-config">
                   <label>
-                    <input type="checkbox" v-model="provider.enabled" />
-                    {{ $t('admin.settings.enabled') }}
+                    <input type="checkbox" v-model="provider.enabled" disabled />
+                    {{ $t('admin.settings.enabled') }} (Always enabled)
                   </label>
                   <div v-if="provider.quota" class="quota-info">
                     {{ $t('admin.settings.quota') }}: {{ provider.quota.used }} / {{ provider.quota.limit }}
                   </div>
                   <div v-if="provider.health === 'error' || provider.health === 'system_not_found'" class="provider-actions">
-                    <button 
-                      v-if="provider.can_auto_fix" 
-                      @click="fixProvider(provider.name)" 
-                      class="btn-small btn-primary"
-                      :disabled="fixingProvider === provider.name"
-                    >
-                      {{ fixingProvider === provider.name ? $t('admin.settings.fixing') : $t('admin.settings.autoFix') }}
-                    </button>
                     <button 
                       @click="showFixGuide(provider)" 
                       class="btn-small btn-secondary"
@@ -1110,7 +1099,7 @@ const clearSearch = () => {
 const ocrSettings = ref(null)
 
 const ocrForm = ref({
-  provider: 'paddle',
+  provider: 'tesseract',
   languages: ['en', 'vi']
 })
 const savingOCR = ref(false)
@@ -1530,13 +1519,13 @@ const loadOCRSettings = async () => {
     ocrSettings.value = settingsStore.ocrSettings
     if (ocrSettings.value) {
       ocrForm.value = {
-        provider: ocrSettings.value.provider || 'paddle',
+        provider: ocrSettings.value.provider || 'tesseract',
         languages: ocrSettings.value.languages || ['en', 'vi']
       }
     } else {
       // Initialize with defaults if no settings in DB
       ocrForm.value = {
-        provider: 'paddle',
+        provider: 'tesseract',
         languages: ['en', 'vi']
       }
     }
@@ -1544,7 +1533,7 @@ const loadOCRSettings = async () => {
     console.error('Failed to load OCR settings', e)
     // Initialize with defaults on error
     ocrForm.value = {
-      provider: 'paddle',
+      provider: 'tesseract',
       languages: ['en', 'vi']
     }
     if (window.$toast) {
@@ -1556,8 +1545,9 @@ const loadOCRSettings = async () => {
 const saveOCRSettings = async () => {
   savingOCR.value = true
   try {
+    // Force provider to tesseract - only supported provider
     const payload = {
-      provider: ocrForm.value.provider,
+      provider: 'tesseract',
       languages: ocrForm.value.languages
     }
     

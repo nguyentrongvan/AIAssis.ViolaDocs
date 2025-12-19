@@ -117,3 +117,4 @@ Open browser to: http://localhost:6333/dashboard
 - **Indexing**: Qdrant uses HNSW algorithm for fast approximate nearest neighbor search
 - **Filtering**: Metadata filtering happens before vector search for better performance
 
+

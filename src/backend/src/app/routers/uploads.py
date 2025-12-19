@@ -51,6 +51,7 @@ class UploadFinalizeRequest(BaseModel):
 @router.post("/init")
 async def init_upload(
     request: UploadInitRequest,
+    http_request: Request,
     current_user: User = Depends(require_permission("upload")),
     session: AsyncSession = Depends(get_session)
 ):
@@ -79,7 +80,13 @@ async def init_upload(
         "object_name": object_name
     }
     
-    upload_url = generate_presigned_upload_url(object_name, expires=timedelta(hours=1))
+    # In dev mode, use proxy endpoint instead of presigned URL to avoid hostname/CORS issues
+    if settings.debug:
+        # Return full proxy endpoint URL using request base URL
+        base_url = str(http_request.base_url).rstrip('/')
+        upload_url = f"{base_url}/api/v1/uploads/{upload_id}/proxy"
+    else:
+        upload_url = generate_presigned_upload_url(object_name, expires=timedelta(hours=1))
     
     return success_response({
         "upload_id": upload_id,
@@ -378,6 +385,52 @@ async def upload_chunk(
         "upload_id": upload_id,
         "chunk_number": chunk_number,
         "status": "received"
+    })
+
+
+@router.put("/{upload_id}/proxy")
+async def proxy_upload(
+    upload_id: str,
+    request: Request,
+    current_user: User = Depends(require_permission("upload")),
+    session: AsyncSession = Depends(get_session)
+):
+    """Proxy upload endpoint for dev mode - uploads file through backend to MinIO."""
+    # Check if upload exists
+    metadata = _upload_metadata.get(upload_id)
+    if not metadata:
+        return error_response(
+            "Upload not found or expired",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Verify user owns this upload
+    if metadata["user_id"] != current_user.id:
+        return error_response(
+            "Unauthorized",
+            status_code=status.HTTP_403_FORBIDDEN
+        )
+    
+    # Read file data from request
+    file_data = await request.body()
+    
+    # Upload to MinIO via backend
+    from ..services.storage import upload_file_to_minio
+    success = await upload_file_to_minio(
+        file_data=file_data,
+        object_name=metadata["object_name"],
+        content_type=metadata["mime"]
+    )
+    
+    if not success:
+        return error_response(
+            "Failed to upload file to storage",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    
+    return success_response({
+        "upload_id": upload_id,
+        "status": "uploaded"
     })
 
 

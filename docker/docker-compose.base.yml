@@ -1,0 +1,274 @@
+networks:
+  violadocs_network:
+    driver: bridge
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: violadocs_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-viadocs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-viadocs_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-viadocs_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - violadocs_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-viadocs}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: violadocs_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin123}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - violadocs_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    container_name: violadocs_redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - violadocs_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: violadocs_qdrant
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"  # HTTP API and Web UI
+      - "${QDRANT_GRPC_PORT:-6334}:6334"  # gRPC API
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    networks:
+      - violadocs_network
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: violadocs_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - violadocs_network
+    # No healthcheck - ollama just needs to start
+
+  backend:
+    build:
+      context: ../src/backend
+      dockerfile: Dockerfile
+    container_name: violadocs_backend
+    volumes:
+      - backend_data:/app/data
+    environment:
+      # Database
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-viadocs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-viadocs_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-viadocs_db}
+      # MinIO
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      MINIO_BUCKET: ${MINIO_BUCKET:-documents}
+      # Redis
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+      # Qdrant
+      QDRANT_HOST: ${QDRANT_HOST:-qdrant}
+      QDRANT_PORT: ${QDRANT_PORT:-6333}
+      QDRANT_GRPC_PORT: ${QDRANT_GRPC_PORT:-6334}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-embeddings}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      # Ollama
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-llama3.2}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text:latest}
+      # JWT
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your-secret-key-here-change-in-production-min-32-chars}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      # Root User
+      ROOT_USER_EMAIL: ${ROOT_USER_EMAIL:-admin@example.com}
+      ROOT_USER_PASSWORD: ${ROOT_USER_PASSWORD:-admin123}
+      ROOT_USER_NAME: ${ROOT_USER_NAME:-Admin}
+      # OCR
+      OCR_PROVIDER: ${OCR_PROVIDER:-paddle}
+      OCR_LANGUAGES: ${OCR_LANGUAGES:-en,vi}
+      # App Settings
+      API_V1_PREFIX: ${API_V1_PREFIX:-/api/v1}
+      DEBUG: ${DEBUG:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Retention & Purge
+      DEFAULT_RETENTION_DAYS: ${DEFAULT_RETENTION_DAYS:-365}
+      PURGE_GRACE_PERIOD_DAYS: ${PURGE_GRACE_PERIOD_DAYS:-30}
+      # File Upload
+      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-100}
+      ALLOWED_MIME_TYPES: ${ALLOWED_MIME_TYPES:-application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/jpeg,image/png,image/tiff,text/csv,application/csv,text/plain}
+      # Worker Config
+      ENABLE_IN_PROCESS_WORKER: ${ENABLE_IN_PROCESS_WORKER:-false}
+      MAX_CONCURRENT_OCR_JOBS: ${MAX_CONCURRENT_OCR_JOBS:-5}
+      MAX_CONCURRENT_EMBED_JOBS: ${MAX_CONCURRENT_EMBED_JOBS:-3}
+      WORKER_BATCH_SIZE: ${WORKER_BATCH_SIZE:-10}
+    networks:
+      - violadocs_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+    entrypoint: ["/bin/bash", "/app/docker/backend_entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+  frontend:
+    build:
+      context: ../src/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-/api/v1}
+    container_name: violadocs_frontend
+    networks:
+      - violadocs_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+  ocr-worker:
+    build:
+      context: ../src/backend
+      dockerfile: docker/Dockerfile.worker
+    container_name: violadocs_ocr_worker
+    environment:
+      # Database
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-viadocs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-viadocs_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-viadocs_db}
+      # MinIO
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      MINIO_BUCKET: ${MINIO_BUCKET:-documents}
+      # Ollama - Use Docker service name
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text:latest}
+      # Qdrant - Use Docker service name for HTTP client
+      QDRANT_HOST: ${QDRANT_HOST:-qdrant}
+      QDRANT_PORT: ${QDRANT_PORT:-6333}
+      QDRANT_GRPC_PORT: ${QDRANT_GRPC_PORT:-6334}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-embeddings}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      # Worker config
+      OCR_WORKER_POLL_INTERVAL: ${OCR_WORKER_POLL_INTERVAL:-2}
+      OCR_WORKER_MAX_CONCURRENT: ${OCR_WORKER_MAX_CONCURRENT:-2}
+      OCR_WORKER_HEARTBEAT_INTERVAL: ${OCR_WORKER_HEARTBEAT_INTERVAL:-30}
+      OCR_WORKER_STUCK_TIMEOUT: ${OCR_WORKER_STUCK_TIMEOUT:-10}
+    networks:
+      - violadocs_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
+
+  purge-worker:
+    build:
+      context: ../src/backend
+      dockerfile: docker/Dockerfile.purge-worker
+    container_name: violadocs_purge_worker
+    environment:
+      # Database
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-viadocs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-viadocs_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-viadocs_db}
+      # MinIO
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      MINIO_BUCKET: ${MINIO_BUCKET:-documents}
+      # Qdrant - Use Docker service name for HTTP client
+      QDRANT_HOST: ${QDRANT_HOST:-qdrant}
+      QDRANT_PORT: ${QDRANT_PORT:-6333}
+      QDRANT_GRPC_PORT: ${QDRANT_GRPC_PORT:-6334}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-embeddings}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      # Worker config
+      PURGE_WORKER_POLL_INTERVAL: ${PURGE_WORKER_POLL_INTERVAL:-3600}
+      PURGE_WORKER_BATCH_SIZE: ${PURGE_WORKER_BATCH_SIZE:-100}
+      PURGE_WORKER_DRY_RUN: ${PURGE_WORKER_DRY_RUN:-false}
+    networks:
+      - violadocs_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  minio_data:
+  redis_data:
+  qdrant_data:
+  ollama_data:
+  backend_data:
+

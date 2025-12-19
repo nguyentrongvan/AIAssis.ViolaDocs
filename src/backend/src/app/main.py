@@ -172,15 +172,34 @@ def create_app() -> FastAPI:
     )
     
     # Configure CORS
-    # Allow common development origins
-    cors_origins = [
-        "http://localhost:3000",
-        "http://localhost:5173",  # Vite default port
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-        "http://localhost:8080",
-        "http://127.0.0.1:8080",
-    ]
+    # In dev mode (DEBUG=true), allow common development origins
+    # In production, only allow specific origins
+    if settings.debug:
+        # Development mode - allow common development origins for Docker and local development
+        cors_origins = [
+            "http://localhost:3000",
+            "http://localhost:5173",  # Vite default port
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "http://frontend:80",  # Docker internal frontend
+            "http://frontend:3000",  # Docker internal frontend (if different port)
+        ]
+    else:
+        # Production mode - allow specific origins
+        cors_origins = [
+            "http://localhost:3000",
+            "http://localhost:5173",  # Vite default port
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+        ]
+        # Add FRONTEND_URL if configured via environment variable
+        frontend_url = os.getenv("FRONTEND_URL")
+        if frontend_url:
+            cors_origins.append(frontend_url)
     
     app.add_middleware(
         CORSMiddleware,

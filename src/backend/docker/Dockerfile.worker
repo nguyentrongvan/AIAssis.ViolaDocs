@@ -33,19 +33,15 @@ WORKDIR /app
 # Upgrade pip, setuptools and wheel first (required for building wheels)
 RUN pip install --upgrade pip setuptools wheel
 
-# Install PyTorch CPU version first from PyTorch index (pre-built wheels, much faster)
-# This avoids building torch from source which takes a very long time
-RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio
-
-# Install PyMuPDF separately with version compatible with paddleocr (<1.21.0)
+# Install PyMuPDF separately
 # Try to use pre-built wheels first, fallback to prefer-binary
-RUN pip install --no-cache-dir --only-binary :all: "PyMuPDF<1.21.0" || \
-    pip install --no-cache-dir --prefer-binary "PyMuPDF<1.21.0"
+RUN pip install --no-cache-dir --only-binary :all: "PyMuPDF>=1.23.0" || \
+    pip install --no-cache-dir --prefer-binary "PyMuPDF>=1.23.0"
 
 # Copy requirements first for better caching
 COPY requirements-ocr.txt .
 
-# Install Python dependencies (torch and PyMuPDF already installed, so pip will skip them)
+# Install Python dependencies (PyMuPDF already installed, so pip will skip it)
 RUN pip install --no-cache-dir -r requirements-ocr.txt
 
 # Copy application code
@@ -66,4 +62,5 @@ ENV OCR_WORKER_STUCK_TIMEOUT=10
 
 # Run migrations and start worker
 CMD ["./worker_entrypoint.sh"]
+
 

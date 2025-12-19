@@ -288,29 +288,12 @@ class OCRWorkerService:
                         raise ValueError(f"Document {version.document_id} not found")
                     mime = document.mime
                     
-                    # Initialize OCR service with settings from DB
-                    from ..services.ai.ocr_service import OcrService, PaddleOcrProvider, TesseractOcrProvider, EasyOcrProvider
+                    # Initialize OCR service - only Tesseract is supported
+                    from ..services.ai.ocr_service import OcrService, TesseractOcrProvider
                     
-                    ocr_provider = None
-                    if provider_name == "paddle":
-                        ocr_provider = PaddleOcrProvider()
-                    elif provider_name == "tesseract":
-                        ocr_provider = TesseractOcrProvider()
-                    elif provider_name == "easyocr":
-                        ocr_provider = EasyOcrProvider()
-                    elif provider_name == "auto":
-                        # Try providers in order
-                        for pname, pclass in [("paddle", PaddleOcrProvider), ("easyocr", EasyOcrProvider), ("tesseract", TesseractOcrProvider)]:
-                            try:
-                                ocr_provider = pclass()
-                                if (hasattr(ocr_provider, 'ocr') and ocr_provider.ocr is not None) or \
-                                   (hasattr(ocr_provider, 'reader') and ocr_provider.reader is not None):
-                                    break
-                            except:
-                                continue
-                    
-                    if not ocr_provider:
-                        raise ValueError(f"OCR provider '{provider_name}' not available")
+                    ocr_provider = TesseractOcrProvider()
+                    if ocr_provider.ocr is None:
+                        raise ValueError("Tesseract OCR not available. Please install Tesseract OCR engine.")
                     
                     ocr_service = OcrService(provider=ocr_provider)
                     

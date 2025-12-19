@@ -545,7 +545,17 @@ const uploadFile = (file, url, onProgress) => {
       reject(new Error('Upload aborted'))
     })
     
-    xhr.open('PUT', url)
+    // If URL is relative (starts with /), prepend API base URL
+    const fullUrl = url.startsWith('/') ? (import.meta.env.VITE_API_BASE || 'http://localhost:8000/api/v1') + url : url
+    
+    xhr.open('PUT', fullUrl)
+    
+    // Add authorization header if available (for proxy endpoint)
+    const token = localStorage.getItem('access_token')
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    }
+    
     xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
     xhr.send(file)
   })

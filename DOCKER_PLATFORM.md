@@ -82,32 +82,86 @@ cp .env.example .env
 
 ### 3. Start Platform
 
+ViolaDocs supports two modes: **Development** and **Production**.
+
+#### Development Mode
+
+For local development and testing:
+
+**Linux/Mac:**
+```bash
+chmod +x start-dev.sh
+./start-dev.sh
+```
+
+**Windows:**
+```cmd
+start-dev.bat
+```
+
+**Or use Docker Compose directly:**
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
+**Access:**
+- **Frontend**: http://localhost:3000 (direct access)
+- **Backend API**: http://localhost:8000 (direct access)
+- **API Documentation**: http://localhost:8000/api/v1/docs
+
+**Features:**
+- Direct port access for easy debugging
+- No Nginx reverse proxy
+- DEBUG mode enabled
+- Hot reload support
+
+#### Production Mode
+
+For production deployment:
+
+**Linux/Mac:**
+```bash
+chmod +x start-prod.sh
+./start-prod.sh
+```
+
+**Windows:**
+```cmd
+start-prod.bat
+```
+
+**Or use Docker Compose directly:**
+```bash
+docker-compose --profile production up -d --build
+```
+
+**Access:**
+- **Frontend**: http://localhost (via Nginx)
+- **Backend API**: http://localhost/api/v1 (via Nginx)
+- **API Documentation**: http://localhost/api/v1/docs
+
+**Features:**
+- Nginx reverse proxy
+- SSL/HTTPS support
+- Production-ready configuration
+- Internal service communication only
+
+#### Interactive Mode Selection
+
 **Linux/Mac:**
 ```bash
 chmod +x start.sh
 ./start.sh
+# Will prompt for mode selection
 ```
 
 **Windows:**
 ```cmd
 start.bat
+# Will prompt for mode selection
 ```
 
-**Or use Docker Compose directly:**
-```bash
-docker-compose up -d --build
-```
-
-### 4. Access Application
-
-After services have started (approximately 1-2 minutes):
-
-- **Frontend**: http://localhost
-- **Backend API**: http://localhost/api/v1
-- **API Documentation**: http://localhost/api/v1/docs
-- **MinIO Console**: http://localhost:9001 (minioadmin / minioadmin123)
-
-### 5. First Login
+### 4. First Login
 
 Root user is automatically created with information from `.env`:
 - Email: `ROOT_USER_EMAIL` (default: admin@example.com)

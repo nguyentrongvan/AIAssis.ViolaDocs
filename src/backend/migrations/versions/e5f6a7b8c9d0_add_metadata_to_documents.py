@@ -27,3 +27,4 @@ def downgrade() -> None:
     # Remove metadata column from documents table
     op.drop_column('documents', 'metadata')
 
+

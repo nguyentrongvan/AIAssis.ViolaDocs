@@ -55,13 +55,13 @@ class Settings(BaseSettings):
     # Ollama - Local LLM with OpenAI-compatible API
     ollama_base_url: str = "http://localhost:11434"  # Default to localhost, use http://ollama:11434 in docker
     ollama_api_key: str = ""  # Optional API key for OpenAI-compatible endpoints
-    ollama_llm_model: str = "llama3.2"  # Default LLM model for chat
+    ollama_llm_model: str = "llama3.2:1b"  # Default LLM model for chat
     ollama_embedding_model: str = "nomic-embed-text:latest"  # Default embedding model
 
     # OCR
-    # Options: "paddle" (default, best for Vietnamese), "tesseract", "easyocr", "auto" (try all in order)
+    # Only Tesseract is supported now
     # Supported languages: en (English), vi (Vietnamese), ja (Japanese), ko (Korean), zh (Chinese)
-    ocr_provider: str = "paddle"
+    ocr_provider: str = "tesseract"
     ocr_languages: str = "en,vi"  # Default: English and Vietnamese. Can add: ja,ko,zh
     
     # Qdrant vector store config

@@ -21,3 +21,4 @@ qdrant-client==1.7.0
 # Redis (optional, for caching/settings)
 redis==5.0.1
 
+
