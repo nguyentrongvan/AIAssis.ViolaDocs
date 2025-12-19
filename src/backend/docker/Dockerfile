@@ -1,18 +1,8 @@
 # Multi-stage build for ViolaDocs Backend with Tesseract OCR
-FROM python:3.11-slim as base
+FROM python:3.10-slim as base
 
 # Install system dependencies including Tesseract OCR
 RUN apt-get update && apt-get install -y \
-    # Tesseract OCR and language data
-    tesseract-ocr \
-    tesseract-ocr-eng \
-    tesseract-ocr-vie \
-    tesseract-ocr-jpn \
-    tesseract-ocr-kor \
-    tesseract-ocr-chi-sim \
-    tesseract-ocr-fra \
-    tesseract-ocr-deu \
-    tesseract-ocr-spa \
     # Build dependencies for Python packages
     build-essential \
     # Image processing libraries

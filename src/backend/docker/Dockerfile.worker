@@ -43,10 +43,10 @@ RUN pip install --no-cache-dir --only-binary :all: "PyMuPDF<1.21.0" || \
     pip install --no-cache-dir --prefer-binary "PyMuPDF<1.21.0"
 
 # Copy requirements first for better caching
-COPY requirements.txt .
+COPY requirements-ocr.txt .
 
 # Install Python dependencies (torch and PyMuPDF already installed, so pip will skip them)
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements-ocr.txt
 
 # Copy application code
 COPY src/ ./src/
