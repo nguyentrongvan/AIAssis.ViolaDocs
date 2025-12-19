@@ -28,6 +28,8 @@
     "back": "Back",
     "next": "Next",
     "previous": "Previous",
+    "tourGuide": "Tour Guide",
+    "restartTour": "Restart Tour Guide",
     "refresh": "Refresh",
     "retry": "Retry",
     "error": "Error",
@@ -1169,6 +1171,76 @@
   "footer": {
     "copyright": "© {year} ViolaDocs. All rights reserved.",
     "version": "Version"
+  },
+  "onboarding": {
+    "title": "Welcome to ViolaDocs",
+    "welcome": "Welcome! Let's take a quick tour to help you get started.",
+    "skip": "Skip Tour",
+    "next": "Next",
+    "previous": "Previous",
+    "finish": "Finish",
+    "steps": {
+      "welcome": {
+        "title": "Welcome to ViolaDocs",
+        "description": "ViolaDocs is an AI-powered document intelligence platform. This tour will help you navigate the main features."
+      },
+      "sidebar": {
+        "title": "Sidebar Navigation",
+        "description": "Use the sidebar to navigate between different sections. The menu adapts based on your permissions."
+      },
+      "llmSetup": {
+        "title": "⚠️ IMPORTANT: Setup LLM Settings First",
+        "description": "Before using AI features (chatbot, search, auto-tagging), you MUST configure LLM and Embedding models in Settings. Go to Settings → LLM Settings tab, configure Ollama Base URL, and select/download LLM and Embedding models. The system requires these models to function properly."
+      },
+      "library": {
+        "title": "Library",
+        "description": "Your main dashboard showing an overview of all your documents and quick access to key features."
+      },
+      "documents": {
+        "title": "Documents",
+        "description": "View and manage all your documents. Browse, filter, and organize your document collection."
+      },
+      "upload": {
+        "title": "Upload Documents",
+        "description": "Upload new documents to your library. Supports PDF, DOCX, XLSX, CSV, TXT, and image files."
+      },
+      "scan": {
+        "title": "Scan Inbox",
+        "description": "Manage documents scanned from physical scanners. Process and organize scanned documents here."
+      },
+      "folders": {
+        "title": "Folders",
+        "description": "Organize your documents into folders for better structure and easier management."
+      },
+      "search": {
+        "title": "Search",
+        "description": "Search through your documents using keyword, semantic, or hybrid search. Find what you need quickly."
+      },
+      "recycleBin": {
+        "title": "Recycle Bin",
+        "description": "View and restore deleted documents. Documents are permanently deleted after the retention period."
+      },
+      "tasks": {
+        "title": "Tasks",
+        "description": "Manage your workflow tasks. View pending, completed, and overdue tasks assigned to you."
+      },
+      "chatbot": {
+        "title": "AI Chatbot",
+        "description": "Ask questions about your documents using AI. The chatbot understands your document content and provides intelligent answers."
+      },
+      "admin": {
+        "title": "Admin Section",
+        "description": "Administrative functions including user management, device configuration, groups, settings, reports, roles, and AI job monitoring."
+      },
+      "maintainer": {
+        "title": "System Config",
+        "description": "System configuration settings. Only available to maintainers for advanced system management."
+      },
+      "finish": {
+        "title": "You're All Set!",
+        "description": "You've completed the tour. Start exploring ViolaDocs and make the most of its powerful features!"
+      }
+    }
   }
 }
 

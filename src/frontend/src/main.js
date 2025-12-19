@@ -5,6 +5,8 @@ import router from './router'
 import Toast from './components/Toast.vue'
 import i18n from './i18n'
 import './theme.css'
+import 'driver.js/dist/driver.min.css'
+import './driver-custom.css'
 
 const app = createApp(App)
 const pinia = createPinia()

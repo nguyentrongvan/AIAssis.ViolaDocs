@@ -49,13 +49,18 @@ async def login(
     if not user:
         return error_response("Invalid email or password", status_code=status.HTTP_401_UNAUTHORIZED)
     
+    # Update last_login_at
+    user.last_login_at = datetime.utcnow()
+    await session.commit()
+    
     access_token = create_access_token(data={"sub": str(user.id), "email": user.email})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
     
     return success_response({
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
+        "has_completed_onboarding": user.has_completed_onboarding
     })
 
 
@@ -125,7 +130,24 @@ async def get_me(
         "role": current_user.role,
         "status": current_user.status,
         "expires_at": current_user.expires_at.isoformat() if current_user.expires_at else None,
-        "permissions": permissions
+        "permissions": permissions,
+        "has_completed_onboarding": current_user.has_completed_onboarding,
+        "is_maintainer": current_user.is_maintainer
+    })
+
+
+@router.post("/complete-onboarding")
+async def complete_onboarding(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Mark onboarding as completed for the current user."""
+    current_user.has_completed_onboarding = True
+    await session.commit()
+    
+    return success_response({
+        "has_completed_onboarding": True,
+        "message": "Onboarding completed successfully"
     })
 
 

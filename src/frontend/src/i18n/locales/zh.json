@@ -28,6 +28,8 @@
     "back": "返回",
     "next": "下一步",
     "previous": "上一步",
+    "tourGuide": "导览",
+    "restartTour": "重新开始导览",
     "refresh": "刷新",
     "retry": "重试",
     "error": "错误",
@@ -1166,6 +1168,76 @@
   "footer": {
     "copyright": "© {year} ViolaDocs. 保留所有权利。",
     "version": "版本"
+  },
+  "onboarding": {
+    "title": "欢迎使用ViolaDocs",
+    "welcome": "欢迎！让我们快速浏览一下，帮助您开始使用。",
+    "skip": "跳过导览",
+    "next": "下一步",
+    "previous": "上一步",
+    "finish": "完成",
+    "steps": {
+      "welcome": {
+        "title": "欢迎使用ViolaDocs",
+        "description": "ViolaDocs是一个AI驱动的文档智能平台。此导览将帮助您浏览主要功能。"
+      },
+      "sidebar": {
+        "title": "侧边栏导航",
+        "description": "使用侧边栏在不同部分之间导航。菜单会根据您的权限进行调整。"
+      },
+      "llmSetup": {
+        "title": "⚠️ 重要：首先设置LLM设置",
+        "description": "在使用AI功能（聊天机器人、搜索、自动标记）之前，您必须在设置中配置LLM和嵌入模型。转到设置 → LLM设置标签页，配置Ollama基础URL，并选择/下载LLM和嵌入模型。系统需要这些模型才能正常工作。"
+      },
+      "library": {
+        "title": "库",
+        "description": "您的主仪表板，显示所有文档的概览和快速访问主要功能。"
+      },
+      "documents": {
+        "title": "文档",
+        "description": "查看和管理所有文档。浏览、筛选和组织您的文档集合。"
+      },
+      "upload": {
+        "title": "上传文档",
+        "description": "将新文档上传到您的库。支持PDF、DOCX、XLSX、CSV、TXT和图像文件。"
+      },
+      "scan": {
+        "title": "扫描收件箱",
+        "description": "管理从物理扫描仪扫描的文档。在此处处理和整理扫描的文档。"
+      },
+      "folders": {
+        "title": "文件夹",
+        "description": "将文档组织到文件夹中，以获得更好的结构和更轻松的管理。"
+      },
+      "search": {
+        "title": "搜索",
+        "description": "使用关键词、语义或混合搜索在文档中搜索。快速找到您需要的内容。"
+      },
+      "recycleBin": {
+        "title": "回收站",
+        "description": "查看和恢复已删除的文档。文档在保留期后将被永久删除。"
+      },
+      "tasks": {
+        "title": "任务",
+        "description": "管理工作流任务。查看分配给您的待处理、已完成和逾期任务。"
+      },
+      "chatbot": {
+        "title": "AI聊天机器人",
+        "description": "使用AI询问有关文档的问题。聊天机器人理解您的文档内容并提供智能答案。"
+      },
+      "admin": {
+        "title": "管理部分",
+        "description": "管理功能，包括用户管理、设备配置、组、设置、报告、角色和AI作业监控。"
+      },
+      "maintainer": {
+        "title": "系统配置",
+        "description": "系统配置设置。仅适用于维护人员进行高级系统管理。"
+      },
+      "finish": {
+        "title": "您已准备就绪！",
+        "description": "您已完成导览。开始探索ViolaDocs并充分利用其强大功能！"
+      }
+    }
   }
 }
 

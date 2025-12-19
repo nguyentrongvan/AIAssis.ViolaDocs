@@ -34,7 +34,8 @@ export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
   refresh: (refreshToken) => api.post('/auth/refresh', { refresh_token: refreshToken }),
   me: () => api.get('/auth/me'),
-  deviceLogin: (deviceKey, deviceId) => api.post('/auth/device/login', { device_key: deviceKey, device_id: deviceId })
+  deviceLogin: (deviceKey, deviceId) => api.post('/auth/device/login', { device_key: deviceKey, device_id: deviceId }),
+  completeOnboarding: () => api.post('/auth/complete-onboarding')
 }
 
 export const usersAPI = {

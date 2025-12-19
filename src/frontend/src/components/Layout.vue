@@ -9,6 +9,12 @@
         <div class="logo-tagline">{{ $t('common.tagline') }}</div>
       </div>
       <LanguageSelector />
+      <div class="tour-guide-container">
+        <button @click="handleRestartTour" class="tour-guide-btn-top" :title="$t('common.restartTour')">
+          <HelpCircle class="tour-icon-top" />
+          <span>{{ $t('common.tourGuide') }}</span>
+        </button>
+      </div>
       <nav>
         <router-link to="/" :class="['nav-item', { 'router-link-active': isActiveRoute('/') }]" active-class="" exact-active-class="">
           <Library class="nav-icon" />
@@ -94,7 +100,7 @@
             <span class="user-name">{{ authStore.user?.name || $t('common.user') }}</span>
             <span class="user-role">{{ authStore.user?.role || 'user' }}</span>
           </div>
-          <button @click="handleLogout" class="btn-link">
+          <button @click="handleLogout" class="btn-link logout-btn">
             <LogOut class="logout-icon" />
             <span>{{ $t('common.logout') }}</span>
           </button>
@@ -110,15 +116,17 @@
       </div>
       <Footer />
     </main>
+    <OnboardingTour ref="onboardingTourRef" />
   </div>
 </template>
 
 <script setup>
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 import LanguageSelector from './LanguageSelector.vue'
 import Footer from './Footer.vue'
+import OnboardingTour from './OnboardingTour.vue'
 import {
   Library,
   Upload,
@@ -136,12 +144,14 @@ import {
   Shield,
   Activity,
   FileText,
-  Trash2
+  Trash2,
+  HelpCircle
 } from 'lucide-vue-next'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const onboardingTourRef = ref(null)
 
 const isActiveRoute = (path) => {
   const currentPath = route.path
@@ -170,6 +180,12 @@ onMounted(async () => {
 const handleLogout = () => {
   authStore.logout()
   router.push('/login')
+}
+
+const handleRestartTour = () => {
+  if (onboardingTourRef.value && onboardingTourRef.value.restartTour) {
+    onboardingTourRef.value.restartTour()
+  }
 }
 
 const getUserRoleColor = computed(() => {
@@ -517,8 +533,12 @@ nav {
   border-radius: var(--radius-md);
   transition: all var(--transition-base);
   font-weight: 500;
-  flex-shrink: 0; /* Prevent logout button from shrinking */
+  flex-shrink: 0; /* Prevent button from shrinking */
   white-space: nowrap; /* Prevent text wrapping */
+}
+
+.logout-btn {
+  order: 2;
   margin-left: auto; /* Push logout button to the right */
 }
 
@@ -538,6 +558,53 @@ nav {
 
 .btn-link:hover .logout-icon {
   transform: translateX(2px);
+}
+
+.tour-guide-container {
+  padding: var(--space-md);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tour-guide-btn-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  width: 100%;
+  background: rgba(0, 217, 255, 0.1);
+  border: 1px solid rgba(0, 217, 255, 0.3);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-base);
+  font-weight: 500;
+  font-family: var(--font-sans);
+}
+
+.tour-guide-btn-top:hover {
+  background: rgba(0, 217, 255, 0.2);
+  color: #00D9FF;
+  box-shadow: 0 0 15px rgba(0, 217, 255, 0.4);
+  border-color: rgba(0, 217, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+.tour-guide-btn-top:active {
+  transform: translateY(0);
+}
+
+.tour-icon-top {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  stroke-width: 2;
+  transition: transform var(--transition-base);
+}
+
+.tour-guide-btn-top:hover .tour-icon-top {
+  transform: scale(1.15) rotate(10deg);
 }
 
 .main-content {

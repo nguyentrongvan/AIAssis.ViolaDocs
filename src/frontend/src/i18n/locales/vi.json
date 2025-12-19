@@ -28,6 +28,8 @@
     "back": "Quay lại",
     "next": "Tiếp theo",
     "previous": "Trước",
+    "tourGuide": "Hướng dẫn",
+    "restartTour": "Chạy lại hướng dẫn",
     "refresh": "Làm mới",
     "retry": "Thử lại",
     "error": "Lỗi",
@@ -1168,6 +1170,76 @@
   "footer": {
     "copyright": "© {year} ViolaDocs. Bảo lưu mọi quyền.",
     "version": "Phiên bản"
+  },
+  "onboarding": {
+    "title": "Chào mừng đến với ViolaDocs",
+    "welcome": "Chào mừng! Hãy cùng tham quan nhanh để giúp bạn bắt đầu.",
+    "skip": "Bỏ qua Tour",
+    "next": "Tiếp theo",
+    "previous": "Trước",
+    "finish": "Hoàn thành",
+    "steps": {
+      "welcome": {
+        "title": "Chào mừng đến với ViolaDocs",
+        "description": "ViolaDocs là nền tảng trí tuệ tài liệu được hỗ trợ bởi AI. Tour này sẽ giúp bạn điều hướng các tính năng chính."
+      },
+      "sidebar": {
+        "title": "Điều hướng Sidebar",
+        "description": "Sử dụng sidebar để điều hướng giữa các phần khác nhau. Menu sẽ thay đổi dựa trên quyền của bạn."
+      },
+      "llmSetup": {
+        "title": "⚠️ QUAN TRỌNG: Thiết lập LLM Settings Trước",
+        "description": "Trước khi sử dụng các tính năng AI (chatbot, tìm kiếm, auto-tagging), bạn PHẢI cấu hình LLM và Embedding models trong Settings. Vào Settings → tab LLM Settings, cấu hình Ollama Base URL, và chọn/tải LLM và Embedding models. Hệ thống cần các models này để hoạt động đúng."
+      },
+      "library": {
+        "title": "Thư viện",
+        "description": "Bảng điều khiển chính của bạn hiển thị tổng quan về tất cả tài liệu và truy cập nhanh đến các tính năng chính."
+      },
+      "documents": {
+        "title": "Tài liệu",
+        "description": "Xem và quản lý tất cả tài liệu của bạn. Duyệt, lọc và tổ chức bộ sưu tập tài liệu của bạn."
+      },
+      "upload": {
+        "title": "Tải lên Tài liệu",
+        "description": "Tải lên tài liệu mới vào thư viện của bạn. Hỗ trợ PDF, DOCX, XLSX, CSV, TXT và các tệp hình ảnh."
+      },
+      "scan": {
+        "title": "Hộp thư Quét",
+        "description": "Quản lý tài liệu được quét từ máy quét vật lý. Xử lý và tổ chức tài liệu đã quét tại đây."
+      },
+      "folders": {
+        "title": "Thư mục",
+        "description": "Tổ chức tài liệu của bạn vào các thư mục để có cấu trúc tốt hơn và quản lý dễ dàng hơn."
+      },
+      "search": {
+        "title": "Tìm kiếm",
+        "description": "Tìm kiếm trong tài liệu của bạn bằng từ khóa, ngữ nghĩa hoặc tìm kiếm kết hợp. Tìm thấy những gì bạn cần một cách nhanh chóng."
+      },
+      "recycleBin": {
+        "title": "Thùng rác",
+        "description": "Xem và khôi phục tài liệu đã xóa. Tài liệu sẽ bị xóa vĩnh viễn sau thời gian lưu trữ."
+      },
+      "tasks": {
+        "title": "Nhiệm vụ",
+        "description": "Quản lý các nhiệm vụ quy trình làm việc của bạn. Xem các nhiệm vụ đang chờ, đã hoàn thành và quá hạn được giao cho bạn."
+      },
+      "chatbot": {
+        "title": "Chatbot AI",
+        "description": "Đặt câu hỏi về tài liệu của bạn bằng AI. Chatbot hiểu nội dung tài liệu của bạn và cung cấp câu trả lời thông minh."
+      },
+      "admin": {
+        "title": "Phần Quản trị",
+        "description": "Các chức năng quản trị bao gồm quản lý người dùng, cấu hình thiết bị, nhóm, cài đặt, báo cáo, vai trò và giám sát công việc AI."
+      },
+      "maintainer": {
+        "title": "Cấu hình Hệ thống",
+        "description": "Cài đặt cấu hình hệ thống. Chỉ dành cho người bảo trì để quản lý hệ thống nâng cao."
+      },
+      "finish": {
+        "title": "Bạn đã sẵn sàng!",
+        "description": "Bạn đã hoàn thành tour. Bắt đầu khám phá ViolaDocs và tận dụng tối đa các tính năng mạnh mẽ của nó!"
+      }
+    }
   }
 }
 

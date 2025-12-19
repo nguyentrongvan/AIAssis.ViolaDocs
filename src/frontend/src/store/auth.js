@@ -1,10 +1,12 @@
 import { defineStore } from 'pinia'
 import api from '../services/api'
+import { authAPI } from '../services/api'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null,
-    token: localStorage.getItem('access_token') || null
+    token: localStorage.getItem('access_token') || null,
+    has_completed_onboarding: false
   }),
   getters: {
     isAuthenticated: (state) => !!state.token,
@@ -35,11 +37,15 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     async login(email, password) {
       try {
-        const res = await api.post('/auth/login', { email, password })
+        const res = await authAPI.login(email, password)
         if (res.is_success && res.data) {
           this.token = res.data.access_token
           localStorage.setItem('access_token', res.data.access_token)
           localStorage.setItem('refresh_token', res.data.refresh_token)
+          // Set onboarding status from login response if available
+          if (res.data.has_completed_onboarding !== undefined) {
+            this.has_completed_onboarding = res.data.has_completed_onboarding
+          }
           await this.fetchMe()
           return true
         }
@@ -61,6 +67,7 @@ export const useAuthStore = defineStore('auth', {
         const res = await api.get('/auth/me')
         if (res.is_success) {
           this.user = res.data
+          this.has_completed_onboarding = res.data.has_completed_onboarding || false
         }
       } catch (e) {
         console.error('Failed to fetch user', e)
@@ -68,6 +75,20 @@ export const useAuthStore = defineStore('auth', {
         if (e.response?.status === 401) {
           this.logout()
         }
+      }
+    },
+    async completeOnboarding() {
+      try {
+        const res = await authAPI.completeOnboarding()
+        if (res.is_success) {
+          this.has_completed_onboarding = true
+          if (this.user) {
+            this.user.has_completed_onboarding = true
+          }
+        }
+      } catch (e) {
+        console.error('Failed to complete onboarding', e)
+        throw e
       }
     },
     logout() {

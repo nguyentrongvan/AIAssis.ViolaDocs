@@ -109,12 +109,23 @@ TRANSLATE_PROMPT = """Translate the following text from {source_lang} to {target
 Translation:"""
 
 # Auto tag generation prompt
-GENERATE_TAGS_PROMPT = """Based on the following document content, generate {max_tags} relevant tags.
-Each tag should be maximum {max_length} characters.
-Return only the tags, separated by commas.
+GENERATE_TAGS_PROMPT = """Act as a professional librarian and content classifier. Your goal is to analyze the provided document content and extract the most meaningful entities and themes for document organization.
 
-Document content:
+[TASKS]
+1. Synthesize the core subject matter.
+2. Generate exactly {max_tags} tags that represent the main topics, entities, or categories.
+3. Ensure each tag is concise (max {max_length} chars).
+
+[CONSTRAINTS]
+- Prioritize: Specificity over generic terms (e.g., "Convolutional Neural Networks" instead of just "Tech").
+- Consistency: Use Title Case for all tags.
+- Output Format: Return ONLY a single string of tags separated by commas. No intro, no numbering, no period at the end.
+
+[DOCUMENT CONTENT]
 {content}
+
+[CRITICAL OUTPUT]
+Return only the comma-separated tags here: <tag1>,<tag2>,<tag3>,...<tagN>
 
 Tags:"""
 

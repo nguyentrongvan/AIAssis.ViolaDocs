@@ -18,6 +18,8 @@ class User(BaseModel):
     locale = Column(String(10), nullable=True)  # e.g., "en", "vi"
     time_zone = Column(String(50), nullable=True)  # e.g., "Asia/Ho_Chi_Minh"
     is_maintainer = Column(Boolean, default=False, nullable=False)  # Root admin/maintainer flag for system config access
+    has_completed_onboarding = Column(Boolean, default=False, nullable=False)  # Track if user has completed onboarding tour
+    last_login_at = Column(DateTime, nullable=True)  # Track last login time
     
     # Many-to-many relationship with Role
     roles = relationship("Role", secondary="user_roles", back_populates="users")
