@@ -564,46 +564,25 @@ const startTour = async () => {
       const isMidCenter = currentStep?.popover?.position === 'mid-center'
       const popover = document.getElementById('driver-popover-item')
       const popoverDisplay = popover ? window.getComputedStyle(popover).display : 'none'
-      const overlayAtStart = document.getElementById('driver-page-overlay')
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:559',message:'onHighlighted called',data:{currentIndex,totalSteps,overlayExists:!!overlayAtStart,popoverExists:!!popover},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-      // #endregion
       
       // Add overlay click listener to close tour when clicking outside
       // Use a global handler to avoid duplicate listeners
       setTimeout(() => {
         const overlay = document.getElementById('driver-page-overlay')
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:571',message:'Checking for overlay in onHighlighted',data:{overlayExists:!!overlay,currentIndex,hasHandler:!!window._tourOverlayHandler},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-        // #endregion
         if (overlay) {
           // Create global handler if not exists
           if (!window._tourOverlayHandler) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:574',message:'Creating new overlay handler',data:{currentIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-            // #endregion
             window._tourOverlayHandler = (e) => {
               const target = e.target
               const overlayElement = document.getElementById('driver-page-overlay')
-              if (!overlayElement) {
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:578',message:'Overlay handler: overlay element not found',data:{targetTag:target?.tagName,targetId:target?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-                // #endregion
-                return
-              }
+              if (!overlayElement) return
               
               // Check if clicking on overlay itself (not on children like popover or highlighted element)
               const isOverlay = target === overlayElement || target.id === 'driver-page-overlay'
               const isPopover = target.closest('#driver-popover-item')
               const isHighlighted = target.closest('#driver-highlighted-element-stage')
-              // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:585',message:'Overlay click detected',data:{isOverlay,targetTag:target?.tagName,targetId:target?.id,isPopover:!!isPopover,isHighlighted:!!isHighlighted,overlayId:overlayElement.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
-              // #endregion
               // Only close if clicking directly on overlay (not on popover or highlighted element)
               if (isOverlay && !isPopover && !isHighlighted) {
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:590',message:'Overlay clicked, closing tour',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
-                // #endregion
                 e.preventDefault()
                 e.stopPropagation()
                 e.stopImmediatePropagation()
@@ -615,10 +594,6 @@ const startTour = async () => {
                   forceCloseTour()
                 })
                 return false
-              } else {
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:603',message:'Overlay click ignored - not valid overlay click',data:{isOverlay,isPopover:!!isPopover,isHighlighted:!!isHighlighted,targetTag:target?.tagName,targetId:target?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-                // #endregion
               }
             }
           }
@@ -626,13 +601,6 @@ const startTour = async () => {
           // Remove old listener if exists, then add new one (to handle overlay recreation)
           overlay.removeEventListener('click', window._tourOverlayHandler, { capture: true })
           overlay.addEventListener('click', window._tourOverlayHandler, { capture: true, passive: false })
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:609',message:'Overlay listener attached',data:{currentIndex,overlayId:overlay.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-          // #endregion
-        } else {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:612',message:'Overlay not found in setTimeout',data:{currentIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-          // #endregion
         }
       }, 100)
       
@@ -653,15 +621,9 @@ const startTour = async () => {
         }
         setupCloseButtonListener()
         const overlay = document.getElementById('driver-page-overlay')
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:655',message:'Checking overlay at 300ms',data:{overlayExists:!!overlay,currentIndex,hasHandler:!!window._tourOverlayHandler},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-        // #endregion
         if (overlay && window._tourOverlayHandler) {
           overlay.removeEventListener('click', window._tourOverlayHandler, { capture: true })
           overlay.addEventListener('click', window._tourOverlayHandler, { capture: true, passive: false })
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:662',message:'Overlay listener re-attached at 300ms',data:{currentIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-          // #endregion
         }
       }, 300)
       setTimeout(() => {
@@ -671,21 +633,30 @@ const startTour = async () => {
         }
         setupCloseButtonListener()
         const overlay = document.getElementById('driver-page-overlay')
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:670',message:'Checking overlay at 500ms',data:{overlayExists:!!overlay,currentIndex,hasHandler:!!window._tourOverlayHandler},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-        // #endregion
         if (overlay && window._tourOverlayHandler) {
           overlay.removeEventListener('click', window._tourOverlayHandler, { capture: true })
           overlay.addEventListener('click', window._tourOverlayHandler, { capture: true, passive: false })
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:677',message:'Overlay listener re-attached at 500ms',data:{currentIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-          // #endregion
         }
       }, 500)
       
-      // Fix highlight box alignment
-      setTimeout(() => {
-        const highlightedElement = element?.node
+      // Fix highlight box alignment - with retry logic for Settings and Library
+      const fixAlignment = () => {
+        // Try to get element from element.node (Driver.js wrapped) or element directly
+        let highlightedElement = element?.node
+        // If element.node doesn't exist, try to get from current step
+        if (!highlightedElement) {
+          const currentStep = driverObj?.getSteps?.()?.[currentIndex]
+          if (currentStep?.element) {
+            // If element is a selector string, query it
+            if (typeof currentStep.element === 'string') {
+              highlightedElement = document.querySelector(currentStep.element)
+            } else if (currentStep.element instanceof HTMLElement) {
+              // If element is a DOM element directly, use it
+              highlightedElement = currentStep.element
+            }
+          }
+        }
+        
         const highlightStage = document.getElementById('driver-highlighted-element-stage')
         
         if (highlightedElement && highlightStage) {
@@ -705,10 +676,6 @@ const startTour = async () => {
           const widthDiff = Math.abs(stageRect.width - correctWidth)
           const heightDiff = Math.abs(stageRect.height - correctHeight)
           
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:505',message:'Highlight box alignment check',data:{currentIndex,elementTag:highlightedElement.tagName,elementClass:highlightedElement.className,elementRect:{left:elementRect.left,top:elementRect.top,width:elementRect.width,height:elementRect.height},stageRect:{left:stageRect.left,top:stageRect.top,width:stageRect.width,height:stageRect.height},leftDiff,topDiff,widthDiff,heightDiff,needsFix:leftDiff>1||topDiff>1||widthDiff>1||heightDiff>1},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
-          // #endregion
-          
           // Fix alignment if needed (tolerance of 1px for subpixel rendering)
           if (leftDiff > 1 || topDiff > 1 || widthDiff > 1 || heightDiff > 1) {
             // Force correct position and size
@@ -716,13 +683,15 @@ const startTour = async () => {
             highlightStage.style.top = `${correctTop}px`
             highlightStage.style.width = `${correctWidth}px`
             highlightStage.style.height = `${correctHeight}px`
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/6006ef1e-a69d-4b1d-b684-212f0849099c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingTour.vue:530',message:'Fixed highlight box alignment',data:{correctLeft,correctTop,correctWidth,correctHeight,oldLeft:stageRect.left,oldTop:stageRect.top,oldWidth:stageRect.width,oldHeight:stageRect.height},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
-            // #endregion
           }
         }
-      }, 100)
+      }
+      
+      // Try alignment fix at multiple intervals to catch timing issues
+      setTimeout(fixAlignment, 100)
+      setTimeout(fixAlignment, 200)
+      setTimeout(fixAlignment, 350)
+      setTimeout(fixAlignment, 500)
       
       // Immediately add force-visible class to ensure popover stays visible
       // This class has !important in CSS and will persist even if Driver.js removes inline styles
@@ -795,7 +764,41 @@ const startTour = async () => {
             }
           }
         }
+        
+        // Update Next/Done button text
+        const nextBtn = document.querySelector('.driver-next-btn')
+        if (nextBtn) {
+          const isLast = !driverObj?.hasNextStep?.() ?? false
+          const expectedText = isLast ? t('onboarding.finish') : t('onboarding.next')
+          const btnText = nextBtn.textContent?.trim() || ''
+          const innerHTML = nextBtn.innerHTML?.trim() || ''
+          
+          // Update if text doesn't match expected translation
+          if (btnText !== expectedText && !innerHTML.includes(expectedText)) {
+            // Check if it's showing default English text
+            if (btnText === 'Next' || btnText === 'Next →' || btnText === 'Done' || innerHTML.includes('Next') || innerHTML.includes('Done')) {
+              nextBtn.textContent = expectedText
+            }
+          }
+        }
       }, 100)
+      
+      // Retry button text update after a delay (Driver.js may recreate buttons)
+      setTimeout(() => {
+        const nextBtn = document.querySelector('.driver-next-btn')
+        if (nextBtn) {
+          const isLast = !driverObj?.hasNextStep?.() ?? false
+          const expectedText = isLast ? t('onboarding.finish') : t('onboarding.next')
+          const btnText = nextBtn.textContent?.trim() || ''
+          const innerHTML = nextBtn.innerHTML?.trim() || ''
+          
+          if (btnText !== expectedText && !innerHTML.includes(expectedText)) {
+            if (btnText === 'Next' || btnText === 'Next →' || btnText === 'Done' || innerHTML.includes('Next') || innerHTML.includes('Done')) {
+              nextBtn.textContent = expectedText
+            }
+          }
+        }
+      }, 300)
       
       // Ensure element is scrolled into view, especially for sidebar items
       if (element && element.node) {
