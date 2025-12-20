@@ -99,15 +99,91 @@ This project serves as a **practice implementation** demonstrating modern develo
 
 ## 🚀 Quick Start
 
-For detailed setup instructions, see [SETUP.md](SETUP.md)
+Get ViolaDocs up and running in minutes with our automated startup script!
 
-**Quick overview:**
-1. Start infrastructure: `docker-compose up -d`
-2. Setup backend: Configure `.env`, run migrations, start server
-3. Setup frontend: Install dependencies, start dev server
-4. Create admin user via API
+### Prerequisites
 
-See [SETUP.md](SETUP.md) for complete installation guide.
+- Docker and Docker Compose installed
+- Git (to clone the repository)
+
+### Quick Start Steps
+
+1. **Clone the repository** (if you haven't already):
+   ```bash
+   git clone https://github.com/nguyentrongvan/AIAssis.ViolaDocs.git
+   cd AIAssis.ViolaDocs
+   ```
+
+2. **Run the startup script**:
+   
+   **On Linux/Mac:**
+   ```bash
+   chmod +x start.sh
+   ./start.sh
+   ```
+   
+   **On Windows:**
+   ```cmd
+   start.bat
+   ```
+
+3. **Select Development Mode**:
+   When prompted, choose option `1` for Development mode:
+   ```
+   Select mode:
+     1) Development (direct ports, no nginx)
+     2) Production (nginx reverse proxy)
+   
+   Enter choice [1-2] (default: 2): 1
+   ```
+
+4. **Access the application**:
+   - **Frontend**: http://localhost:3000
+   - **Backend API**: http://localhost:8000
+   - **API Documentation**: http://localhost:8000/api/v1/docs
+
+5. **Default Admin User**:
+   The system automatically creates a root admin user on first startup:
+   - Email: `admin@example.com` (configurable via `ROOT_USER_EMAIL` in `.env`)
+   - Password: `admin123` (configurable via `ROOT_USER_PASSWORD` in `.env`)
+
+### What the Script Does
+
+The `start.sh` script automatically:
+- ✅ Checks for Docker installation
+- ✅ Creates `.env` file from `.env.example` if needed
+- ✅ Starts all required services (PostgreSQL, MinIO, Redis, Qdrant, Ollama, Backend, Frontend, Workers)
+- ✅ Builds Docker images if needed
+- ✅ Waits for services to be healthy
+- ✅ Shows service status and access URLs
+
+### Stop the Services
+
+**On Linux/Mac:**
+```bash
+./stop.sh
+```
+
+**On Windows:**
+```cmd
+stop.bat
+```
+
+Or manually:
+```bash
+docker-compose -f docker/docker-compose.base.yml -f docker/dev/docker-compose.yml down
+```
+
+### View Logs
+
+To view service logs:
+```bash
+docker-compose -f docker/docker-compose.base.yml -f docker/dev/docker-compose.yml logs -f
+```
+
+### Advanced Setup
+
+For detailed setup instructions, custom configurations, and troubleshooting, see [SETUP.md](SETUP.md).
 
 > 💡 **New to ViolaDocs?** Check out our [interactive showcase](docs/showcase.html) to explore features before installation.
 
@@ -216,7 +292,7 @@ Part of the **AIAssis** ecosystem - exploring AI integration in software develop
 
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
-**Copyright (c) 2024 nguyentrongvan**
+**Copyright (c) 2025 nguyentrongvan**
 
 The MIT License allows you to:
 - ✅ Use the software commercially
