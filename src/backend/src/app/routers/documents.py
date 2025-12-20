@@ -193,7 +193,8 @@ async def list_documents(
             "deleted_at": doc.deleted_at.isoformat() if doc.deleted_at else None,
             "purge_at": doc.purge_at.isoformat() if doc.purge_at else None,
             "document_type": doc.mime.split('/')[0] if '/' in doc.mime else doc.mime,  # e.g., "application" -> "PDF", "image" -> "Image"
-            "file_extension": _get_file_extension_from_mime(doc.mime)  # Extract short extension from MIME type
+            "file_extension": _get_file_extension_from_mime(doc.mime),  # Extract short extension from MIME type
+            "summary": doc.summary  # Include document summary
         }
         
         # Get tags from DocumentTag join
@@ -342,8 +343,106 @@ async def get_document(
         "preview_url": preview_url,
         "tags": list(tags) if tags else [],
         "versions": versions,
-        "metadata": doc.file_metadata  # Include comprehensive metadata
+        "metadata": doc.file_metadata,  # Include comprehensive metadata
+        "summary": doc.summary  # Include document summary
     })
+
+
+@router.post("/{doc_id}/regenerate-summary")
+async def regenerate_document_summary(
+    doc_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Regenerate document summary from latest version text content"""
+    # Get document
+    result = await session.execute(
+        select(Document)
+        .options(selectinload(Document.versions))
+        .where(
+            and_(
+                Document.id == doc_id,
+                Document.deleted_at.is_(None)
+            )
+        )
+    )
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Check access
+    has_access, _, reason = await check_document_access(session, current_user, doc, "read")
+    if not has_access:
+        return error_response(reason or "Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    
+    # Get latest version
+    if not doc.versions:
+        return error_response("No versions found for this document", status_code=status.HTTP_404_NOT_FOUND)
+    
+    latest_version = max(doc.versions, key=lambda v: v.version_no)
+    
+    # Get text content from version
+    text_uri = latest_version.text_uri or latest_version.ocr_uri
+    if not text_uri:
+        return error_response("No text content available for this document", status_code=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        # Download text from MinIO
+        from ..services.storage import get_minio_client
+        from ..config import settings
+        
+        minio_client = get_minio_client()
+        object_name = text_uri
+        if object_name.startswith(f"minio://{settings.minio_bucket}/"):
+            object_name = object_name.replace(f"minio://{settings.minio_bucket}/", "")
+        
+        file_data = minio_client.get_object(settings.minio_bucket, object_name)
+        text_content = file_data.read().decode('utf-8')
+        file_data.close()
+        file_data.release_conn()
+        
+        # Get summary max_length setting
+        from ..services.settings_service import SettingsService
+        max_length = await SettingsService.get_setting(
+            "document_summary.max_length",
+            default=300,
+            session=session
+        )
+        
+        # Generate summary using LLM service
+        from ..services.ai import get_llm_service
+        llm_service = get_llm_service()
+        
+        if not llm_service:
+            return error_response("LLM service not available", status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
+        
+        summary = await llm_service.generate_summary_async(
+            content=text_content,
+            max_length=max_length,
+            session=session
+        )
+        
+        # Check if summary generation failed
+        if summary is None:
+            # LLM not available or error occurred
+            return error_response(
+                "Failed to generate summary: LLM service is not available or returned an error. Please check LLM settings and try again.",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        
+        # Update document summary
+        doc.summary = summary
+        await session.commit()
+        
+        return success_response({
+            "summary": summary,
+            "message": "Summary regenerated successfully"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error regenerating summary for document {doc_id}: {e}", exc_info=True)
+        return error_response(f"Failed to regenerate summary: {str(e)}", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @router.patch("/{doc_id}")

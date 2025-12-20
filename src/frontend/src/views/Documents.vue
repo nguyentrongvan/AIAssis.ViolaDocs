@@ -82,7 +82,14 @@
           :key="doc.id"
           class="document-card"
           @click="$router.push(`/documents/${doc.id}`)"
+          :title="doc.summary || ''"
         >
+          <div v-if="doc.summary" class="summary-tooltip">
+            <div class="summary-tooltip-content">
+              <div class="summary-tooltip-title">{{ $t('documentDetail.summary') }}</div>
+              <div class="summary-tooltip-text">{{ doc.summary }}</div>
+            </div>
+          </div>
           <div class="card-thumbnail" v-if="doc.thumbnail_url">
             <img :src="doc.thumbnail_url" :alt="doc.title" />
           </div>
@@ -169,9 +176,16 @@
               v-for="doc in documents"
               :key="doc.id"
               @click="$router.push(`/documents/${doc.id}`)"
-              class="table-row"
+              class="table-row summary-tooltip-wrapper"
+              :title="doc.summary || ''"
             >
-              <td>
+              <td style="position: relative;">
+                <div v-if="doc.summary" class="summary-tooltip">
+                  <div class="summary-tooltip-content">
+                    <div class="summary-tooltip-title">{{ $t('documentDetail.summary') }}</div>
+                    <div class="summary-tooltip-text">{{ doc.summary }}</div>
+                  </div>
+                </div>
                 <div class="table-title">
                   <FileText :size="16" />
                   <div class="table-title-content">
@@ -1167,6 +1181,78 @@ onMounted(async () => {
   text-align: center;
   padding: var(--space-3xl);
   color: var(--text-medium);
+}
+
+.summary-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: var(--space-xs);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: all var(--transition-base);
+  z-index: var(--z-tooltip, 1000);
+  max-width: 400px;
+  width: max-content;
+}
+
+.document-card:hover .summary-tooltip,
+.table-row:hover .summary-tooltip {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+.summary-tooltip-content {
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  border: 1px solid rgba(108, 92, 231, 0.2);
+  min-width: 250px;
+  max-width: 400px;
+}
+
+.summary-tooltip-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-medium);
+  margin-bottom: var(--space-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.summary-tooltip-text {
+  font-size: 0.875rem;
+  color: var(--text-dark);
+  line-height: 1.5;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.summary-tooltip::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid var(--bg-white);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.document-card {
+  position: relative;
+}
+
+.summary-tooltip-wrapper {
+  position: relative;
 }
 </style>
 

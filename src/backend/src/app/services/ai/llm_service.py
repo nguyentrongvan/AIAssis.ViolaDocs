@@ -80,7 +80,7 @@ class OllamaLLMProvider(LLMProvider):
         if self.base_url not in OllamaLLMProvider._async_clients:
             try:
                 OllamaLLMProvider._async_clients[self.base_url] = httpx.AsyncClient(
-                    timeout=30.0,  # Reduced timeout for faster responses
+                    timeout=60.0,  # Increased timeout for summary generation (can be slow on CPU)
                     base_url=self.base_url,
                     limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
                     http2=True  # Enable HTTP/2 for better performance
@@ -712,9 +712,10 @@ class LLMService:
                 # Check if response is an error message (starts with "Error")
                 if response_text and response_text.strip().startswith("Error"):
                     logger.error(f"[LLM Service] LLM returned error for content: {response_text}")
-                    raise Exception(f"LLM error: {response_text}")
-                
-                if response_text:
+                    # Don't raise exception - just log and skip tag generation for this content
+                    # This allows the job to continue even if LLM is unavailable
+                    # Skip processing this response - tags list will only contain document type tag if available
+                elif response_text:
                     # Clean response: remove common prefixes/phrases that LLM might add
                     response_text = response_text.strip()
                     
@@ -760,6 +761,81 @@ class LLMService:
                 logger.error(f"[LLM Service] Error generating tags from content: {e}", exc_info=True)
         
         return tags
+    
+    async def generate_summary_async(
+        self,
+        content: str,
+        max_length: int = 300,
+        session=None
+    ) -> Optional[str]:
+        """
+        Generate document summary using LLM.
+        Returns summary text (truncated to max_length) or None if LLM not available.
+        Summary will be in the same language as the document content.
+        """
+        # Check if LLM provider is available
+        if not self.provider:
+            logger.debug("[LLM Service] LLM provider not available, skipping summary generation")
+            return None
+        
+        # Load model from database settings before generating summary
+        if isinstance(self.provider, OllamaLLMProvider) and session:
+            try:
+                db_model = await get_ollama_llm_model_from_db()
+                if db_model and db_model != self.provider.model:
+                    logger.debug(f"[LLM Service] Updating model from '{self.provider.model}' to '{db_model}' for summary generation")
+                    self.provider.model = db_model
+            except Exception as e:
+                logger.warning(f"[LLM Service] Failed to load LLM model from DB, using current model '{self.provider.model}': {e}", exc_info=True)
+        
+        try:
+            # Truncate content if too long (avoid Ollama timeout)
+            # Llama3.2:1b has 4096 context limit and is slow on CPU
+            # Limit to ~1500 chars (~1000 tokens) to avoid timeout (30s)
+            MAX_CONTENT_LENGTH = 1500
+            truncated_content = content
+            if len(content) > MAX_CONTENT_LENGTH:
+                truncated_content = content[:MAX_CONTENT_LENGTH] + "\n...[nội dung còn lại đã được cắt bớt]"
+                logger.info(f"[LLM Service] Truncated content from {len(content)} to {len(truncated_content)} chars for summary generation")
+            
+            # Format prompt with content and max_length
+            prompt = SUMMARIZE_DOCUMENT_PROMPT.format(
+                document_content=truncated_content,
+                max_length=max_length
+            )
+            
+            # Call LLM async
+            response_text, _ = await self.provider.generate_response_with_usage_async(
+                prompt,
+                system_prompt=None
+            )
+            
+            # Check if response is an error message
+            if not response_text or response_text.strip().startswith("Error"):
+                logger.error(f"[LLM Service] LLM returned error for summary: {response_text}")
+                return None
+            
+            # Clean and truncate summary
+            summary = response_text.strip()
+            
+            # Remove common prefixes that LLM might add
+            unwanted_prefixes = [
+                "summary:",
+                "tóm tắt:",
+                "summary",
+                "tóm tắt",
+            ]
+            for prefix in unwanted_prefixes:
+                if summary.lower().startswith(prefix.lower()):
+                    summary = summary[len(prefix):].strip()
+            
+            # No truncation - use full response from model for complete summary
+            logger.info(f"[LLM Service] Generated summary: {len(summary)} characters (no truncation applied)")
+            return summary
+            
+        except Exception as e:
+            logger.error(f"[LLM Service] Error generating summary: {e}", exc_info=True)
+            return None
     
     def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """Generic response generation"""

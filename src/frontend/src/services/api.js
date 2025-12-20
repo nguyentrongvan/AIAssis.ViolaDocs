@@ -86,7 +86,8 @@ export const documentsAPI = {
   updateComment: (id, commentId, data) => api.patch(`/documents/${id}/comments/${commentId}`, data),
   deleteComment: (id, commentId) => api.delete(`/documents/${id}/comments/${commentId}`),
   download: (id) => api.get(`/documents/${id}/download`, { responseType: 'blob' }),
-  rendition: (id, type, params) => api.get(`/documents/${id}/renditions/${type}`, { params })
+  rendition: (id, type, params) => api.get(`/documents/${id}/renditions/${type}`, { params }),
+  regenerateSummary: (id) => api.post(`/documents/${id}/regenerate-summary`)
 }
 
 export const groupsAPI = {

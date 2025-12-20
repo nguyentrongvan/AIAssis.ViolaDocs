@@ -149,11 +149,26 @@ Common document types include (but not limited to):
 Document type:"""
 
 # Document summarization prompts
-SUMMARIZE_DOCUMENT_PROMPT = """Summarize the following document in 3-5 sentences:
+SUMMARIZE_DOCUMENT_PROMPT = """You are ViolaDocs AI Assistant. Generate a document summary.
 
+STRICT OUTPUT FORMAT - Output ONLY the summary, nothing else:
+- Start directly with what the document is about (e.g., "This document discusses...", "Tài liệu này trình bày về...", "本文書は...")
+- NO greetings, NO "I agree", NO "Sure", NO explanations
+- NO prefixes like "Summary:", "Tóm tắt:"
+- MUST be a COMPLETE paragraph ending with a period, NOT cut off mid-sentence
+- Maximum {max_length} characters
+
+CONTENT REQUIREMENTS:
+- What type of document is this? (report, guide, research paper, manual, etc.)
+- What is the main topic/subject?
+- What are the key points or conclusions?
+
+LANGUAGE: Write in the SAME language as the document content.
+
+Document:
 {document_content}
 
-Summary:"""
+Output:"""
 
 # Entity extraction prompts
 EXTRACT_ENTITIES_PROMPT = """Extract key entities from the following document:

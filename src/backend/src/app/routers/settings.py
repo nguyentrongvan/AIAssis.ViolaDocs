@@ -241,6 +241,60 @@ async def update_ocr_settings(
     })
 
 
+# Document Summary Settings Models
+class DocumentSummarySettingsUpdate(BaseModel):
+    max_length: Optional[int] = None
+
+
+@router.get("/document_summary")
+async def get_document_summary_settings(
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get document summary settings (max_length)"""
+    max_length = await SettingsService.get_setting(
+        "document_summary.max_length",
+        default=300,
+        session=session
+    )
+    
+    return success_response({
+        "max_length": max_length
+    })
+
+
+@router.post("/document_summary")
+async def update_document_summary_settings(
+    payload: DocumentSummarySettingsUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update document summary settings"""
+    updated_keys = []
+    
+    if payload.max_length is not None:
+        if payload.max_length < 50 or payload.max_length > 2000:
+            return error_response(
+                "max_length must be between 50 and 2000 characters",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        await SettingsService.set_setting(
+            "document_summary.max_length",
+            payload.max_length,
+            "document_summary",
+            "Maximum length for document summary",
+            False,
+            current_user.id,
+            session
+        )
+        updated_keys.append("max_length")
+    
+    return success_response({
+        "message": "Document summary settings updated",
+        "updated_keys": updated_keys
+    })
+
+
 @router.get("/providers")
 async def get_provider_settings(
     current_user: User = Depends(get_current_admin_user),

@@ -48,6 +48,27 @@
             </select>
           </div>
         </div>
+        
+        <!-- Document Summary Section -->
+        <div class="summary-section">
+          <div class="summary-header">
+            <h3>{{ $t('documentDetail.summary') }}</h3>
+            <button
+              @click="regenerateSummary"
+              :disabled="regeneratingSummary"
+              class="btn-small btn-secondary"
+            >
+              <RefreshCw v-if="!regeneratingSummary" :size="14" />
+              <Loader v-else :size="14" class="spinning" />
+              {{ regeneratingSummary ? $t('documentDetail.regeneratingSummary') : $t('documentDetail.regenerateSummary') }}
+            </button>
+          </div>
+          <div class="summary-content">
+            <p v-if="document?.summary">{{ document.summary }}</p>
+            <p v-else class="summary-empty">{{ $t('documentDetail.summaryNotAvailable') }}</p>
+          </div>
+        </div>
+        
         <div class="preview-area">
           <!-- For PDF and Images: use iframe -->
           <iframe 
@@ -638,7 +659,9 @@ import {
   Clock,
   MessageSquare,
   Copy,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw,
+  Loader
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -668,6 +691,7 @@ const compareV1 = ref(null)
 const compareV2 = ref(null)
 const showDeleteModal = ref(false)
 const purgeGracePeriodDays = ref(1)
+const regeneratingSummary = ref(false)
 
 const tabs = computed(() => {
   const { t } = useI18n()
@@ -840,6 +864,35 @@ const copyOcrText = async () => {
     if (window.$toast) {
       window.$toast.show(t('documents.failedToCopyText'), 'error')
     }
+  }
+}
+
+const regenerateSummary = async () => {
+  if (!document.value) return
+  
+  regeneratingSummary.value = true
+  try {
+    const res = await documentsAPI.regenerateSummary(document.value.id)
+    if (res.is_success) {
+      // Update document summary
+      if (document.value) {
+        document.value.summary = res.data?.summary || null
+      }
+      if (window.$toast) {
+        window.$toast.show(t('documentDetail.summaryRegenerated'), 'success')
+      }
+    } else {
+      if (window.$toast) {
+        window.$toast.show(res.message || t('documentDetail.failedToRegenerateSummary'), 'error')
+      }
+    }
+  } catch (e) {
+    console.error('Failed to regenerate summary', e)
+    if (window.$toast) {
+      window.$toast.show(t('documentDetail.failedToRegenerateSummary'), 'error')
+    }
+  } finally {
+    regeneratingSummary.value = false
   }
 }
 
@@ -1874,5 +1927,61 @@ const deleteDocument = async () => {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   display: inline-block;
+}
+
+.summary-section {
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+}
+
+.summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.summary-header h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.summary-content {
+  color: var(--text-medium);
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+.summary-content p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.summary-empty {
+  color: var(--text-light);
+  font-style: italic;
+  margin: 0;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

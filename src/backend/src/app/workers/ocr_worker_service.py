@@ -459,6 +459,52 @@ class OCRWorkerService:
                         # Log error but don't fail OCR job
                         logger.error(f"[OCR Worker Service] Error generating auto AI tags: {e}", exc_info=True)
                     
+                    # Refresh document to ensure it's still in session after tag commit
+                    await session.refresh(document)
+                    
+                    # Generate document summary if enabled
+                    try:
+                        # Get summary max_length setting (default: 300)
+                        max_length = await SettingsService.get_setting(
+                            "document_summary.max_length",
+                            default=300,
+                            session=session
+                        )
+                        
+                        # Get LLM service
+                        from ..services.ai import get_llm_service
+                        llm_service = get_llm_service()
+                        
+                        if llm_service:
+                            logger.debug(f"[OCR Worker Service] Generating summary for document {document.id} (max_length={max_length})")
+                            summary = await llm_service.generate_summary_async(
+                                content=extracted_text,
+                                max_length=max_length,
+                                session=session
+                            )
+                            
+                            if summary:
+                                document.summary = summary
+                                logger.info(f"[OCR Worker Service] Successfully generated summary for document {document.id}: {len(summary)} characters")
+                            else:
+                                document.summary = None
+                                logger.debug(f"[OCR Worker Service] No summary generated (LLM not available or error)")
+                            
+                            # Commit summary (whether it's None or has value)
+                            await session.commit()
+                        else:
+                            document.summary = None
+                            await session.commit()
+                            logger.debug(f"[OCR Worker Service] LLM service not available, skipping summary generation")
+                    except Exception as e:
+                        # Log error but don't fail OCR job
+                        logger.error(f"[OCR Worker Service] Error generating summary: {e}", exc_info=True)
+                        try:
+                            document.summary = None
+                            await session.commit()
+                        except Exception as commit_error:
+                            logger.error(f"[OCR Worker Service] Failed to commit summary=None after error: {commit_error}", exc_info=True)
+                    
                     # Trigger embedding job
                     try:
                         embed_job = AIJob(
@@ -709,6 +755,52 @@ class OCRWorkerService:
                     except Exception as e:
                         # Log error but don't fail text extraction job
                         logger.error(f"[OCR Worker Service] Error generating auto AI tags: {e}", exc_info=True)
+                    
+                    # Refresh document to ensure it's still in session after tag commit
+                    await session.refresh(document)
+                    
+                    # Generate document summary if enabled
+                    try:
+                        # Get summary max_length setting (default: 300)
+                        max_length = await SettingsService.get_setting(
+                            "document_summary.max_length",
+                            default=300,
+                            session=session
+                        )
+                        
+                        # Get LLM service
+                        from ..services.ai import get_llm_service
+                        llm_service = get_llm_service()
+                        
+                        if llm_service:
+                            logger.debug(f"[OCR Worker Service] Generating summary for document {document.id} (text extract, max_length={max_length})")
+                            summary = await llm_service.generate_summary_async(
+                                content=extracted_text,
+                                max_length=max_length,
+                                session=session
+                            )
+                            
+                            if summary:
+                                document.summary = summary
+                                logger.info(f"[OCR Worker Service] Successfully generated summary for document {document.id}: {len(summary)} characters")
+                            else:
+                                document.summary = None
+                                logger.debug(f"[OCR Worker Service] No summary generated (LLM not available or error)")
+                            
+                            # Commit summary (whether it's None or has value)
+                            await session.commit()
+                        else:
+                            document.summary = None
+                            await session.commit()
+                            logger.debug(f"[OCR Worker Service] LLM service not available, skipping summary generation")
+                    except Exception as e:
+                        # Log error but don't fail text extraction job
+                        logger.error(f"[OCR Worker Service] Error generating summary: {e}", exc_info=True)
+                        try:
+                            document.summary = None
+                            await session.commit()
+                        except Exception as commit_error:
+                            logger.error(f"[OCR Worker Service] Failed to commit summary=None after error: {commit_error}", exc_info=True)
                     
                     # Trigger embedding job
                     try:
