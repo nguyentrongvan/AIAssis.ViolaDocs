@@ -13,6 +13,10 @@ src_dir = backend_dir / "src"
 sys.path.insert(0, str(src_dir))
 
 if __name__ == "__main__":
+    # Setup logging before importing app
+    from app.utils.logging_config import setup_logging
+    setup_logging()
+    
     import uvicorn
     from app.main import app
     

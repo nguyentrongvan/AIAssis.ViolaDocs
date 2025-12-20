@@ -1,10 +1,13 @@
 from typing import Optional, List
 import io
+import logging
 from PIL import Image
 import fitz  # PyMuPDF
 
 from ...config import settings, get_ocr_provider_from_db, get_ocr_languages_from_db
 from ...prompts import *
+
+logger = logging.getLogger(__name__)
 
 
 class OcrProvider:
@@ -35,11 +38,11 @@ class TesseractOcrProvider(OcrProvider):
                 pytesseract.get_tesseract_version()
                 self.ocr = pytesseract
             except Exception as e:
-                print(f"Tesseract not found in system: {e}")
-                print("Install Tesseract: https://github.com/tesseract-ocr/tesseract")
+                logger.warning(f"Tesseract not found in system: {e}")
+                logger.warning("Install Tesseract: https://github.com/tesseract-ocr/tesseract")
                 self.ocr = None
         except ImportError:
-            print("pytesseract not installed. Install with: pip install pytesseract")
+            logger.warning("pytesseract not installed. Install with: pip install pytesseract")
             self.ocr = None
     
     def _get_lang_code(self, languages: List[str]) -> str:

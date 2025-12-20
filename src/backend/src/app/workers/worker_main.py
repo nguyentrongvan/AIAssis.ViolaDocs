@@ -9,60 +9,68 @@ import sys
 import os
 import signal
 import traceback
+import logging
 from pathlib import Path
 
-print("=== OCR Worker Main Starting ===")
-print(f"Python version: {sys.version}")
-print(f"Python executable: {sys.executable}")
-print(f"Current working directory: {os.getcwd()}")
-print(f"Python path: {sys.path}")
+# Setup basic logging early (before imports that might need it)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+logger.info("=== OCR Worker Main Starting ===")
+logger.info(f"Python version: {sys.version}")
+logger.info(f"Python executable: {sys.executable}")
+logger.info(f"Current working directory: {os.getcwd()}")
+logger.info(f"Python path: {sys.path}")
 
 # Add src directory to Python path
 try:
     backend_dir = Path(__file__).parent.parent.parent.parent
     src_dir = backend_dir / "src"
-    print(f"Backend dir: {backend_dir}")
-    print(f"Source dir: {src_dir}")
-    print(f"Source dir exists: {src_dir.exists()}")
+    logger.debug(f"Backend dir: {backend_dir}")
+    logger.debug(f"Source dir: {src_dir}")
+    logger.debug(f"Source dir exists: {src_dir.exists()}")
     
     if src_dir.exists():
         sys.path.insert(0, str(src_dir))
-        print(f"Added {src_dir} to Python path")
+        logger.debug(f"Added {src_dir} to Python path")
     else:
         # Try alternative path (if running from /app)
         alt_src_dir = Path("/app/src")
         if alt_src_dir.exists():
             sys.path.insert(0, str(alt_src_dir))
-            print(f"Added {alt_src_dir} to Python path (alternative)")
+            logger.debug(f"Added {alt_src_dir} to Python path (alternative)")
         else:
-            print(f"WARNING: Source directory not found at {src_dir} or {alt_src_dir}")
+            logger.warning(f"Source directory not found at {src_dir} or {alt_src_dir}")
 except Exception as e:
-    print(f"ERROR: Failed to setup Python path: {e}")
-    traceback.print_exc()
+    logger.error(f"Failed to setup Python path: {e}", exc_info=True)
     sys.exit(1)
 
 # Import with error handling
 try:
-    print("Importing OCRWorkerService...")
+    logger.info("Importing OCRWorkerService...")
     from app.workers.ocr_worker_service import OCRWorkerService
-    print("OCRWorkerService imported successfully")
+    logger.info("OCRWorkerService imported successfully")
 except ImportError as e:
-    print(f"ERROR: Failed to import OCRWorkerService: {e}")
-    print(f"Python path: {sys.path}")
-    traceback.print_exc()
+    logger.error(f"Failed to import OCRWorkerService: {e}", exc_info=True)
+    logger.error(f"Python path: {sys.path}")
     sys.exit(1)
 
 try:
-    print("Importing settings...")
+    logger.info("Importing settings...")
     from app.config import settings
-    print("Settings imported successfully")
+    from app.utils.logging_config import setup_logging
+    # Setup proper logging with settings
+    setup_logging()
+    logger.info("Settings imported successfully")
 except ImportError as e:
-    print(f"ERROR: Failed to import settings: {e}")
-    traceback.print_exc()
+    logger.error(f"Failed to import settings: {e}", exc_info=True)
     sys.exit(1)
 except Exception as e:
-    print(f"ERROR: Failed to load settings: {e}")
-    traceback.print_exc()
+    logger.error(f"Failed to load settings: {e}", exc_info=True)
     sys.exit(1)
 
 
@@ -113,9 +121,9 @@ def parse_args():
 async def main():
     """Main entry point"""
     try:
-        print("Parsing arguments...")
+        logger.info("Parsing arguments...")
         args = parse_args()
-        print("Arguments parsed successfully")
+        logger.info("Arguments parsed successfully")
         
         # Get configuration
         worker_id = args.worker_id or os.getenv("WORKER_ID")
@@ -124,24 +132,24 @@ async def main():
         heartbeat_interval = args.heartbeat_interval or int(os.getenv("OCR_WORKER_HEARTBEAT_INTERVAL", "30"))
         stuck_timeout = args.stuck_timeout or int(os.getenv("OCR_WORKER_STUCK_TIMEOUT", "10"))
         
-        print(f"Worker configuration:")
-        print(f"  Worker ID: {worker_id}")
-        print(f"  Poll interval: {poll_interval}s")
-        print(f"  Max concurrent: {max_concurrent}")
-        print(f"  Heartbeat interval: {heartbeat_interval}s")
-        print(f"  Stuck timeout: {stuck_timeout} minutes")
+        logger.info("Worker configuration:")
+        logger.info(f"  Worker ID: {worker_id}")
+        logger.info(f"  Poll interval: {poll_interval}s")
+        logger.info(f"  Max concurrent: {max_concurrent}")
+        logger.info(f"  Heartbeat interval: {heartbeat_interval}s")
+        logger.info(f"  Stuck timeout: {stuck_timeout} minutes")
         
         # Validate settings
-        print("Validating database connection...")
+        logger.info("Validating database connection...")
         try:
             # Try to access settings to validate connection
             db_host = getattr(settings, 'postgres_host', None)
-            print(f"  Database host: {db_host}")
+            logger.info(f"  Database host: {db_host}")
         except Exception as e:
-            print(f"WARNING: Could not validate database settings: {e}")
+            logger.warning(f"Could not validate database settings: {e}")
         
         # Create worker
-        print("Creating OCRWorkerService...")
+        logger.info("Creating OCRWorkerService...")
         worker = OCRWorkerService(
             worker_id=worker_id,
             poll_interval=poll_interval,
@@ -149,31 +157,29 @@ async def main():
             heartbeat_interval=heartbeat_interval,
             stuck_job_timeout_minutes=stuck_timeout
         )
-        print("OCRWorkerService created successfully")
+        logger.info("OCRWorkerService created successfully")
         
         # Run worker
-        print("Starting worker...")
+        logger.info("Starting worker...")
         await worker.run()
         
     except KeyboardInterrupt:
-        print("\nShutting down gracefully...")
+        logger.info("Shutting down gracefully...")
         if 'worker' in locals():
             worker.running = False
     except Exception as e:
-        print(f"FATAL ERROR: {e}")
-        traceback.print_exc()
+        logger.error(f"FATAL ERROR: {e}", exc_info=True)
         sys.exit(1)
 
 
 if __name__ == "__main__":
     try:
-        print("Starting asyncio event loop...")
+        logger.info("Starting asyncio event loop...")
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nWorker interrupted by user")
+        logger.info("Worker interrupted by user")
         sys.exit(0)
     except Exception as e:
-        print(f"FATAL ERROR in event loop: {e}")
-        traceback.print_exc()
+        logger.error(f"FATAL ERROR in event loop: {e}", exc_info=True)
         sys.exit(1)
 

@@ -2,11 +2,14 @@
 Retention Worker - Scheduled job to check and apply retention policies.
 """
 import asyncio
+import logging
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_async_session
 from ..services.retention import apply_retention_policies
+
+logger = logging.getLogger(__name__)
 
 
 async def run_retention_worker():
@@ -16,10 +19,10 @@ async def run_retention_worker():
     async with AsyncSessionLocal() as session:
         try:
             stats = await apply_retention_policies(session)
-            print(f"Retention worker completed: {stats}")
+            logger.info(f"Retention worker completed: {stats}")
             return stats
         except Exception as e:
-            print(f"Error in retention worker: {e}")
+            logger.error(f"Error in retention worker: {e}", exc_info=True)
             await session.rollback()
             raise
 

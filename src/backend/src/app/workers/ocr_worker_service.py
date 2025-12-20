@@ -6,6 +6,8 @@ import asyncio
 import uuid
 import signal
 import sys
+import logging
+import traceback
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +20,8 @@ from ..services.ai import get_ocr_service
 from ..services.storage import get_minio_client
 from ..services.settings_service import SettingsService
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class OCRWorkerService:
@@ -97,7 +101,7 @@ class OCRWorkerService:
         self._ocr_settings_cache = None
         self._ocr_settings_cache_time = None
         settings = await self._fetch_ocr_settings_from_db()
-        print(f"[{self.worker_id}] OCR settings refreshed: provider={settings['provider']}, languages={settings['languages']}")
+        logger.info(f"[{self.worker_id}] OCR settings refreshed: provider={settings['provider']}, languages={settings['languages']}")
         return settings
     
     async def _periodic_settings_refresh(self):
@@ -148,7 +152,7 @@ class OCRWorkerService:
         embed_count = len(embed_count_result.scalars().all())
         
         if ocr_count > 0 or text_extract_count > 0 or embed_count > 0:
-            print(f"[{self.worker_id}] Found {ocr_count} OCR, {text_extract_count} TEXT_EXTRACT, and {embed_count} EMBED job(s) in queue")
+            logger.debug(f"[{self.worker_id}] Found {ocr_count} OCR, {text_extract_count} TEXT_EXTRACT, and {embed_count} EMBED job(s) in queue")
         
         # Try to claim OCR job first (priority), then TEXT_EXTRACT, then EMBED job
         for job_type in ["ocr", "text_extract", "embed"]:
@@ -169,11 +173,11 @@ class OCRWorkerService:
             if job:
                 job.claim(self.worker_id)
                 await session.commit()
-                print(f"[{self.worker_id}] Successfully claimed {job_type.upper()} job {job.id}")
+                logger.info(f"[{self.worker_id}] Successfully claimed {job_type.upper()} job {job.id}")
                 return job
         
         if ocr_count > 0 or text_extract_count > 0 or embed_count > 0:
-            print(f"[{self.worker_id}] Could not claim job (may be locked by another worker)")
+            logger.debug(f"[{self.worker_id}] Could not claim job (may be locked by another worker)")
         
         return None
     
@@ -202,7 +206,7 @@ class OCRWorkerService:
         stuck_jobs = result.scalars().all()
         
         for job in stuck_jobs:
-            print(f"Releasing stuck job {job.id} (claimed by {job.worker_id})")
+            logger.warning(f"Releasing stuck job {job.id} (claimed by {job.worker_id})")
             job.release()
             job.status = "queued"  # Reset to queued for retry
             if job.can_retry():
@@ -373,7 +377,7 @@ class OCRWorkerService:
                     # Generate auto AI tags if enabled
                     try:
                         auto_ai_tag = job.target.get("auto_ai_tag", True)  # Default to True if not specified
-                        print(f"[OCR Worker Service] Auto AI Tag enabled: {auto_ai_tag} for document {document.id}")
+                        logger.debug(f"[OCR Worker Service] Auto AI Tag enabled: {auto_ai_tag} for document {document.id}")
                         if auto_ai_tag:
                             from ..services.ai import get_llm_service
                             from ..models.documents import Tag, DocumentTag
@@ -384,18 +388,18 @@ class OCRWorkerService:
                             prefix = await SettingsService.get_setting("auto_tag.prefix", default="auto_tag:", session=session)
                             ocr_text_limit = await SettingsService.get_setting("auto_tag.ocr_text_limit", default=5000, session=session)
                             
-                            print(f"[OCR Worker Service] Tag settings - max_tags: {max_tags}, max_length: {max_length}, prefix: {prefix}, ocr_text_limit: {ocr_text_limit}")
+                            logger.debug(f"[OCR Worker Service] Tag settings - max_tags: {max_tags}, max_length: {max_length}, prefix: {prefix}, ocr_text_limit: {ocr_text_limit}")
                             
                             # Truncate OCR text if needed
                             text_for_tagging = extracted_text
                             if len(text_for_tagging) > ocr_text_limit:
                                 text_for_tagging = text_for_tagging[:ocr_text_limit]
-                                print(f"[OCR Worker Service] OCR text truncated from {len(extracted_text)} to {len(text_for_tagging)} characters")
+                                logger.debug(f"[OCR Worker Service] OCR text truncated from {len(extracted_text)} to {len(text_for_tagging)} characters")
                             
                             # Generate tags using LLM
                             llm_service = get_llm_service()
                             if llm_service:
-                                print(f"[OCR Worker Service] Calling LLM to generate tags...")
+                                logger.debug(f"[OCR Worker Service] Calling LLM to generate tags...")
                                 tag_names = await llm_service.generate_tags_async(
                                     content=text_for_tagging,
                                     max_tags=max_tags,
@@ -404,7 +408,7 @@ class OCRWorkerService:
                                     session=session
                                 )
                                 
-                                print(f"[OCR Worker Service] LLM returned {len(tag_names) if tag_names else 0} tags: {tag_names}")
+                                logger.debug(f"[OCR Worker Service] LLM returned {len(tag_names) if tag_names else 0} tags: {tag_names}")
                                 
                                 if tag_names:
                                     created_tags = []
@@ -428,7 +432,7 @@ class OCRWorkerService:
                                             tag = Tag(name=final_tag_name)
                                             session.add(tag)
                                             await session.flush()
-                                            print(f"[OCR Worker Service] Created new tag: {final_tag_name}")
+                                            logger.debug(f"[OCR Worker Service] Created new tag: {final_tag_name}")
                                         
                                         # Check if document_tag association already exists
                                         doc_tag_result = await session.execute(
@@ -446,16 +450,14 @@ class OCRWorkerService:
                                             created_tags.append(final_tag_name)
                                     
                                     await session.commit()
-                                    print(f"[OCR Worker Service] Successfully created {len(created_tags)} tags for document {document.id}: {created_tags}")
+                                    logger.info(f"[OCR Worker Service] Successfully created {len(created_tags)} tags for document {document.id}: {created_tags}")
                                 else:
-                                    print(f"[OCR Worker Service] No tags generated by LLM")
+                                    logger.debug(f"[OCR Worker Service] No tags generated by LLM")
                             else:
-                                print(f"[OCR Worker Service] LLM service not available, skipping tag generation")
+                                logger.debug(f"[OCR Worker Service] LLM service not available, skipping tag generation")
                     except Exception as e:
                         # Log error but don't fail OCR job
-                        import traceback
-                        print(f"[OCR Worker Service] Error generating auto AI tags: {e}")
-                        print(f"[OCR Worker Service] Traceback: {traceback.format_exc()}")
+                        logger.error(f"[OCR Worker Service] Error generating auto AI tags: {e}", exc_info=True)
                     
                     # Trigger embedding job
                     try:
@@ -468,14 +470,14 @@ class OCRWorkerService:
                         session.add(embed_job)
                         await session.commit()
                     except Exception as e:
-                        print(f"Failed to create embedding job: {e}")
+                        logger.error(f"Failed to create embedding job: {e}", exc_info=True)
                 
                 heartbeat_task.cancel()
                 
             except Exception as e:
                 heartbeat_task.cancel()
                 error_msg = str(e)[:500]
-                print(f"OCR job {job.id} failed: {error_msg}")
+                logger.error(f"OCR job {job.id} failed: {error_msg}", exc_info=True)
                 
                 async with AsyncSessionLocal() as session:
                     result = await session.execute(
@@ -626,7 +628,7 @@ class OCRWorkerService:
                     # Generate auto AI tags if enabled
                     try:
                         auto_ai_tag = job.target.get("auto_ai_tag", True)  # Default to True if not specified
-                        print(f"[OCR Worker Service] Auto AI Tag enabled: {auto_ai_tag} for document {document.id} (text extract)")
+                        logger.debug(f"[OCR Worker Service] Auto AI Tag enabled: {auto_ai_tag} for document {document.id} (text extract)")
                         if auto_ai_tag:
                             from ..services.ai import get_llm_service
                             from ..models.documents import Tag, DocumentTag
@@ -637,18 +639,18 @@ class OCRWorkerService:
                             prefix = await SettingsService.get_setting("auto_tag.prefix", default="auto_tag:", session=session)
                             ocr_text_limit = await SettingsService.get_setting("auto_tag.ocr_text_limit", default=5000, session=session)
                             
-                            print(f"[OCR Worker Service] Tag settings - max_tags: {max_tags}, max_length: {max_length}, prefix: {prefix}, ocr_text_limit: {ocr_text_limit}")
+                            logger.debug(f"[OCR Worker Service] Tag settings - max_tags: {max_tags}, max_length: {max_length}, prefix: {prefix}, ocr_text_limit: {ocr_text_limit}")
                             
                             # Truncate extracted text if needed
                             text_for_tagging = extracted_text
                             if len(text_for_tagging) > ocr_text_limit:
                                 text_for_tagging = text_for_tagging[:ocr_text_limit]
-                                print(f"[OCR Worker Service] Text truncated from {len(extracted_text)} to {len(text_for_tagging)} characters")
+                                logger.debug(f"[OCR Worker Service] Text truncated from {len(extracted_text)} to {len(text_for_tagging)} characters")
                             
                             # Generate tags using LLM
                             llm_service = get_llm_service()
                             if llm_service:
-                                print(f"[OCR Worker Service] Calling LLM to generate tags (text extract)...")
+                                logger.debug(f"[OCR Worker Service] Calling LLM to generate tags (text extract)...")
                                 tag_names = await llm_service.generate_tags_async(
                                     content=text_for_tagging,
                                     max_tags=max_tags,
@@ -657,7 +659,7 @@ class OCRWorkerService:
                                     session=session
                                 )
                                 
-                                print(f"[OCR Worker Service] LLM returned {len(tag_names) if tag_names else 0} tags: {tag_names}")
+                                logger.debug(f"[OCR Worker Service] LLM returned {len(tag_names) if tag_names else 0} tags: {tag_names}")
                                 
                                 if tag_names:
                                     created_tags = []
@@ -681,7 +683,7 @@ class OCRWorkerService:
                                             tag = Tag(name=final_tag_name)
                                             session.add(tag)
                                             await session.flush()
-                                            print(f"[OCR Worker Service] Created new tag: {final_tag_name}")
+                                            logger.debug(f"[OCR Worker Service] Created new tag: {final_tag_name}")
                                         
                                         # Check if document_tag association already exists
                                         doc_tag_result = await session.execute(
@@ -699,16 +701,14 @@ class OCRWorkerService:
                                             created_tags.append(final_tag_name)
                                     
                                     await session.commit()
-                                    print(f"[OCR Worker Service] Successfully created {len(created_tags)} tags for document {document.id}: {created_tags}")
+                                    logger.info(f"[OCR Worker Service] Successfully created {len(created_tags)} tags for document {document.id}: {created_tags}")
                                 else:
-                                    print(f"[OCR Worker Service] No tags generated by LLM")
+                                    logger.debug(f"[OCR Worker Service] No tags generated by LLM")
                             else:
-                                print(f"[OCR Worker Service] LLM service not available, skipping tag generation")
+                                logger.debug(f"[OCR Worker Service] LLM service not available, skipping tag generation")
                     except Exception as e:
                         # Log error but don't fail text extraction job
-                        import traceback
-                        print(f"[OCR Worker Service] Error generating auto AI tags: {e}")
-                        print(f"[OCR Worker Service] Traceback: {traceback.format_exc()}")
+                        logger.error(f"[OCR Worker Service] Error generating auto AI tags: {e}", exc_info=True)
                     
                     # Trigger embedding job
                     try:
@@ -721,15 +721,15 @@ class OCRWorkerService:
                         session.add(embed_job)
                         await session.commit()
                     except Exception as e:
-                        print(f"Failed to create embedding job: {e}")
+                        logger.error(f"Failed to create embedding job: {e}", exc_info=True)
                     
                     heartbeat_task.cancel()
-                    print(f"[{self.worker_id}] Text extraction job {job.id} completed")
+                    logger.info(f"[{self.worker_id}] Text extraction job {job.id} completed")
                 
             except Exception as e:
                 heartbeat_task.cancel()
                 error_msg = str(e)[:500]
-                print(f"Text extraction job {job.id} failed: {error_msg}")
+                logger.error(f"Text extraction job {job.id} failed: {error_msg}", exc_info=True)
                 
                 async with AsyncSessionLocal() as session:
                     result = await session.execute(
@@ -771,13 +771,13 @@ class OCRWorkerService:
                     target = job.target
                     doc_id = target.get("document_id")
                     version_id = target.get("version_id")
-                    print(f"[{self.worker_id}] Processing EMBED job {job.id}: doc_id={doc_id}, version_id={version_id}")
+                    logger.info(f"[{self.worker_id}] Processing EMBED job {job.id}: doc_id={doc_id}, version_id={version_id}")
                     
                     from ..services.ai import get_embedding_service
                     from ..services.ai.embedding_service import EmbeddingModelUnavailableError
                     
                     # Initialize embedding service
-                    print(f"[{self.worker_id}] Initializing embedding service...")
+                    logger.debug(f"[{self.worker_id}] Initializing embedding service...")
                     embedding_service = get_embedding_service()
                     
                     if not embedding_service:
@@ -790,7 +790,7 @@ class OCRWorkerService:
                     # Log embedding service status
                     store_type = "Qdrant"
                     has_client = bool(embedding_service.store and embedding_service.store.client)
-                    print(f"[{self.worker_id}] ✓ Embedding service ready (store_type={store_type}, has_client={has_client})")
+                    logger.info(f"[{self.worker_id}] ✓ Embedding service ready (store_type={store_type}, has_client={has_client})")
                     
                     if not version_id:
                         raise ValueError("No version_id in target")
@@ -813,7 +813,7 @@ class OCRWorkerService:
                     if not version.text_uri:
                         raise ValueError("No OCR text available for embedding")
                     
-                    print(f"[{self.worker_id}] Retrieving OCR text from MinIO: {version.text_uri}")
+                    logger.debug(f"[{self.worker_id}] Retrieving OCR text from MinIO: {version.text_uri}")
                     minio_client = get_minio_client()
                     text_object_name = version.text_uri
                     if text_object_name.startswith(f"minio://{settings.minio_bucket}/"):
@@ -824,7 +824,7 @@ class OCRWorkerService:
                         text = file_data.read().decode('utf-8')
                         file_data.close()
                         file_data.release_conn()
-                        print(f"[{self.worker_id}] ✓ Text retrieved: {len(text)} characters")
+                        logger.debug(f"[{self.worker_id}] ✓ Text retrieved: {len(text)} characters")
                     except Exception as e:
                         raise ValueError(f"Failed to read OCR text: {e}")
                     
@@ -845,10 +845,10 @@ class OCRWorkerService:
                     from ..utils.text_chunker import get_default_chunker
                     chunker = get_default_chunker()
                     chunks = chunker.chunk_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
-                    print(f"[{self.worker_id}] ✓ Text chunked into {len(chunks)} chunks (chunk_size={chunk_size}, overlap={chunk_overlap})")
+                    logger.info(f"[{self.worker_id}] ✓ Text chunked into {len(chunks)} chunks (chunk_size={chunk_size}, overlap={chunk_overlap})")
                     
                     # Generate embeddings for each chunk
-                    print(f"[{self.worker_id}] Generating embeddings for {len(chunks)} chunks...")
+                    logger.info(f"[{self.worker_id}] Generating embeddings for {len(chunks)} chunks...")
                     try:
                         # Generate embeddings in batch if possible, otherwise one by one
                         chunk_texts = [chunk["text"] for chunk in chunks]
@@ -862,7 +862,7 @@ class OCRWorkerService:
                                 embedding_vectors.append(embedding_vector)
                         
                         embedding_dim = len(embedding_vectors[0]) if embedding_vectors else 0
-                        print(f"[{self.worker_id}] ✓ Generated {len(embedding_vectors)} embeddings: dimension={embedding_dim}")
+                        logger.info(f"[{self.worker_id}] ✓ Generated {len(embedding_vectors)} embeddings: dimension={embedding_dim}")
                     except EmbeddingModelUnavailableError as e:
                         raise ValueError(f"Embedding model unavailable: {str(e)}")
                     
@@ -896,7 +896,7 @@ class OCRWorkerService:
                         except:
                             pass
                     
-                    print(f"[{self.worker_id}] Upserting {len(embed_ids)} chunk embeddings to Qdrant (collection count before: {collection_count_before})...")
+                    logger.info(f"[{self.worker_id}] Upserting {len(embed_ids)} chunk embeddings to Qdrant (collection count before: {collection_count_before})...")
                     embedding_service.upsert_embeddings(
                         ids=embed_ids,
                         embeddings=embedding_vectors,
@@ -908,11 +908,11 @@ class OCRWorkerService:
                     if embedding_service.store and embedding_service.store.client:
                         try:
                             collection_count_after = embedding_service.store.count()
-                            print(f"[{self.worker_id}] ✓ Upsert completed (collection count after: {collection_count_after})")
+                            logger.info(f"[{self.worker_id}] ✓ Upsert completed (collection count after: {collection_count_after})")
                             if collection_count_after <= collection_count_before:
-                                print(f"[{self.worker_id}] WARNING: Collection count did not increase!")
+                                logger.warning(f"[{self.worker_id}] WARNING: Collection count did not increase!")
                         except Exception as e:
-                            print(f"[{self.worker_id}] Warning: Could not verify collection count after upsert: {e}")
+                            logger.warning(f"[{self.worker_id}] Warning: Could not verify collection count after upsert: {e}")
                     
                     # Update job
                     job.status = "completed"
@@ -924,17 +924,14 @@ class OCRWorkerService:
                     job.release()  # Clear worker tracking
                     
                     await session.commit()
-                    print(f"[{self.worker_id}] ✓ EMBED job {job.id} completed successfully")
+                    logger.info(f"[{self.worker_id}] ✓ EMBED job {job.id} completed successfully")
                 
                 heartbeat_task.cancel()
                 
             except Exception as e:
                 heartbeat_task.cancel()
                 error_msg = str(e)[:500]
-                import traceback
-                print(f"[{self.worker_id}] ERROR: EMBED job {job.id} failed: {error_msg}")
-                print(f"[{self.worker_id}] Traceback:")
-                traceback.print_exc()
+                logger.error(f"[{self.worker_id}] ERROR: EMBED job {job.id} failed: {error_msg}", exc_info=True)
                 
                 async with AsyncSessionLocal() as session:
                     result = await session.execute(
@@ -946,12 +943,12 @@ class OCRWorkerService:
                             job.increment_retry()
                             job.release()
                             job.status = "queued"  # Retry
-                            print(f"[{self.worker_id}] Job {job.id} will be retried (attempt {job.retry_count})")
+                            logger.info(f"[{self.worker_id}] Job {job.id} will be retried (attempt {job.retry_count})")
                         else:
                             job.status = "failed"
                             job.error = error_msg
                             job.release()
-                            print(f"[{self.worker_id}] Job {job.id} marked as failed (max retries reached)")
+                            logger.warning(f"[{self.worker_id}] Job {job.id} marked as failed (max retries reached)")
                         await session.commit()
     
     async def _heartbeat_loop(self, job_id: int):
@@ -966,22 +963,20 @@ class OCRWorkerService:
     async def worker_loop(self):
         """Main worker loop"""
         self.running = True
-        print(f"[{self.worker_id}] OCR Worker started")
-        print(f"[{self.worker_id}]   Poll interval: {self.poll_interval}s")
-        print(f"[{self.worker_id}]   Max concurrent: {self.max_concurrent}")
-        print(f"[{self.worker_id}]   Heartbeat interval: {self.heartbeat_interval}s")
-        print(f"[{self.worker_id}]   Stuck timeout: {self.stuck_job_timeout_minutes} minutes")
-        print(f"[{self.worker_id}] Starting worker loop...")
+        logger.info(f"[{self.worker_id}] OCR Worker started")
+        logger.info(f"[{self.worker_id}]   Poll interval: {self.poll_interval}s")
+        logger.info(f"[{self.worker_id}]   Max concurrent: {self.max_concurrent}")
+        logger.info(f"[{self.worker_id}]   Heartbeat interval: {self.heartbeat_interval}s")
+        logger.info(f"[{self.worker_id}]   Stuck timeout: {self.stuck_job_timeout_minutes} minutes")
+        logger.info(f"[{self.worker_id}] Starting worker loop...")
         
         # Load settings when worker starts
-        print(f"[{self.worker_id}] Loading OCR settings...")
+        logger.info(f"[{self.worker_id}] Loading OCR settings...")
         try:
             initial_settings = await self.get_ocr_settings_from_db()
-            print(f"[{self.worker_id}] OCR settings loaded: provider={initial_settings['provider']}, languages={initial_settings['languages']}")
+            logger.info(f"[{self.worker_id}] OCR settings loaded: provider={initial_settings['provider']}, languages={initial_settings['languages']}")
         except Exception as e:
-            print(f"[{self.worker_id}] ERROR: Failed to load OCR settings: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"[{self.worker_id}] ERROR: Failed to load OCR settings: {e}", exc_info=True)
             # Continue anyway, will use defaults
         
         # Start periodic settings refresh task
@@ -997,7 +992,7 @@ class OCRWorkerService:
                         try:
                             await task
                         except Exception as e:
-                            print(f"Task error: {e}")
+                            logger.error(f"Task error: {e}", exc_info=True)
                     
                     # Claim and process jobs
                     async with AsyncSessionLocal() as session:
@@ -1011,20 +1006,18 @@ class OCRWorkerService:
                             elif job.job_type == "embed":
                                 task = asyncio.create_task(self.process_embedding_job(job))
                             else:
-                                print(f"[{self.worker_id}] Unknown job type: {job.job_type}, skipping")
+                                logger.warning(f"[{self.worker_id}] Unknown job type: {job.job_type}, skipping")
                                 await asyncio.sleep(self.poll_interval)
                                 continue
                             
                             self.active_tasks.add(task)
-                            print(f"[{self.worker_id}] Claimed {job.job_type.upper()} job {job.id}")
+                            logger.debug(f"[{self.worker_id}] Claimed {job.job_type.upper()} job {job.id}")
                         else:
                             # No jobs, wait (log periodically to show worker is alive)
                             await asyncio.sleep(self.poll_interval)
                 
                 except Exception as e:
-                    print(f"[{self.worker_id}] Error in worker loop: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    logger.error(f"[{self.worker_id}] Error in worker loop: {e}", exc_info=True)
                     await asyncio.sleep(self.poll_interval)
         finally:
             # Cancel settings refresh task
@@ -1035,10 +1028,10 @@ class OCRWorkerService:
                 pass
         
         # Wait for active tasks to complete
-        print("Waiting for active tasks to complete...")
+        logger.info("Waiting for active tasks to complete...")
         if self.active_tasks:
             await asyncio.gather(*self.active_tasks, return_exceptions=True)
-        print(f"OCR Worker {self.worker_id} stopped")
+        logger.info(f"OCR Worker {self.worker_id} stopped")
     
     async def run(self):
         """Run the worker"""

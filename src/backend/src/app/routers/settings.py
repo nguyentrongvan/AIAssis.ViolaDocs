@@ -1,4 +1,5 @@
 from typing import Optional, List, Dict
+import logging
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,7 @@ import subprocess
 import sys
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+logger = logging.getLogger(__name__)
 
 
 # Retention Policy Models
@@ -1063,17 +1065,17 @@ def _load_library_models() -> Dict:
         json_path = current_dir / "data" / "ollama_library_models.json"
         
         if not json_path.exists():
-            print(f"Warning: Library models file not found at {json_path}")
+            logger.warning(f"Library models file not found at {json_path}")
             return {"models": []}
         
         with open(json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
             # Debug: Print loaded models count
             models_count = len(data.get("models", []))
-            print(f"Loaded {models_count} library models from {json_path}")
+            logger.info(f"Loaded {models_count} library models from {json_path}")
             return data
     except Exception as e:
-        print(f"Error loading library models: {e}")
+        logger.error(f"Error loading library models: {e}", exc_info=True)
         return {"models": []}
 
 
@@ -1131,12 +1133,12 @@ async def get_ollama_models(
         
         # Debug: Check for specific models in library
         target_models = ["qwen2.5:0.5b", "qwen2.5:1.5b", "mistral:latest", "phi3:latest"]
-        print(f"Checking library for target models:")
+        logger.debug(f"Checking library for target models:")
         for lib_model in library_models:
             variants = lib_model.get("variants", [])
             for target in target_models:
                 if target in variants:
-                    print(f"  Found {target} in {lib_model.get('name')} variants")
+                    logger.debug(f"  Found {target} in {lib_model.get('name')} variants")
         
         # Call Ollama API to get downloaded models
         downloaded_models = []
@@ -1153,7 +1155,7 @@ async def get_ollama_models(
         except (httpx.ConnectError, httpx.TimeoutException):
             ollama_connected = False
         except Exception as e:
-            print(f"Error fetching downloaded models: {e}")
+            logger.error(f"Error fetching downloaded models: {e}", exc_info=True)
             ollama_connected = False
         
         # Create a set of downloaded model names for quick lookup
@@ -1206,19 +1208,19 @@ async def get_ollama_models(
                     added_variants_count += 1
                     # Debug: Log specific models being added
                     if variant in ["qwen2.5:0.5b", "qwen2.5:1.5b", "mistral:latest", "phi3:latest"]:
-                        print(f"  Added library model: {variant} (type: {lib_model.get('type', 'llm')})")
+                        logger.debug(f"  Added library model: {variant} (type: {lib_model.get('type', 'llm')})")
         
-        print(f"Added {added_variants_count} library models (not downloaded) to merged list")
+        logger.debug(f"Added {added_variants_count} library models (not downloaded) to merged list")
         
         # Debug: Print some info about merged models
-        print(f"Total merged models: {len(merged_models)}")
-        print(f"Downloaded models: {len([m for m in merged_models if m['downloaded']])}")
-        print(f"Library models (not downloaded): {len([m for m in merged_models if not m['downloaded']])}")
+        logger.debug(f"Total merged models: {len(merged_models)}")
+        logger.debug(f"Downloaded models: {len([m for m in merged_models if m['downloaded']])}")
+        logger.debug(f"Library models (not downloaded): {len([m for m in merged_models if not m['downloaded']])}")
         # Check for specific models
         target_models = ["qwen2.5:0.5b", "qwen2.5:1.5b", "mistral:latest", "phi3:latest"]
         for target in target_models:
             found = any(m["name"] == target for m in merged_models)
-            print(f"Model {target} in merged list: {found}")
+            logger.debug(f"Model {target} in merged list: {found}")
         
         # Sort models: downloaded first, then by name
         merged_models.sort(key=lambda x: (not x["downloaded"], x["name"]))

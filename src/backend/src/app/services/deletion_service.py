@@ -3,6 +3,7 @@ Document Deletion Service
 Handles soft delete, hard delete, and cleanup of all document-related data
 """
 from typing import List, Optional
+import logging
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, and_, or_, cast, String
@@ -17,6 +18,8 @@ from ..services.settings_service import SettingsService
 # Don't import embedding service at module level - import lazily in function to avoid importing OCR service
 from ..services.retention import check_legal_hold
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentDeletionService:
@@ -215,7 +218,7 @@ class DocumentDeletionService:
         
         if jobs:
             await session.commit()
-            print(f"Cancelled {len(jobs)} AI jobs for document {doc_id}")
+            logger.info(f"Cancelled {len(jobs)} AI jobs for document {doc_id}")
     
     @staticmethod
     async def delete_storage_files(document: Document, session: AsyncSession):
@@ -255,10 +258,10 @@ class DocumentDeletionService:
                         files_deleted += 1
                     else:
                         files_failed += 1
-                        print(f"Failed to delete file: {object_name}")
+                        logger.warning(f"Failed to delete file: {object_name}")
                 except Exception as e:
                     files_failed += 1
-                    print(f"Error deleting file {object_name}: {e}")
+                    logger.error(f"Error deleting file {object_name}: {e}", exc_info=True)
             
             # Delete renditions folder if exists
             try:
@@ -278,11 +281,11 @@ class DocumentDeletionService:
                         files_deleted += 1
                     except Exception as e:
                         files_failed += 1
-                        print(f"Error deleting rendition {obj.object_name}: {e}")
+                        logger.error(f"Error deleting rendition {obj.object_name}: {e}", exc_info=True)
             except Exception as e:
-                print(f"Error listing renditions for document {document.id}: {e}")
+                logger.error(f"Error listing renditions for document {document.id}: {e}", exc_info=True)
         
-        print(f"Deleted {files_deleted} files, {files_failed} failed for document {document.id}")
+        logger.info(f"Deleted {files_deleted} files, {files_failed} failed for document {document.id}")
     
     @staticmethod
     async def delete_embeddings(doc_id: int, version_ids: List[int], session: AsyncSession):
@@ -322,15 +325,13 @@ class DocumentDeletionService:
                             collection_name=embedding_service.store.collection_name,
                             points_selector=PointIdsList(points=point_ids)
                         )
-                        print(f"Deleted {len(point_ids)} embeddings from Qdrant for document {doc_id}")
+                        logger.info(f"Deleted {len(point_ids)} embeddings from Qdrant for document {doc_id}")
                     else:
-                        print(f"No embeddings found in Qdrant for document {doc_id}")
+                        logger.debug(f"No embeddings found in Qdrant for document {doc_id}")
                 except Exception as e:
-                    print(f"Error deleting embeddings from Qdrant: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    logger.error(f"Error deleting embeddings from Qdrant: {e}", exc_info=True)
         except Exception as e:
-            print(f"Error accessing embedding service: {e}")
+            logger.error(f"Error accessing embedding service: {e}", exc_info=True)
         
         # Delete from database (Embedding table)
         try:
@@ -350,11 +351,9 @@ class DocumentDeletionService:
             deleted_count = result.rowcount
             if deleted_count > 0:
                 await session.commit()
-                print(f"Deleted {deleted_count} embedding records from database for document {doc_id}")
+                logger.info(f"Deleted {deleted_count} embedding records from database for document {doc_id}")
         except Exception as e:
-            print(f"Error deleting embeddings from database: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Error deleting embeddings from database: {e}", exc_info=True)
     
     @staticmethod
     async def delete_database_records(document: Document, session: AsyncSession):
@@ -396,7 +395,7 @@ class DocumentDeletionService:
         await session.delete(document)
         
         await session.commit()
-        print(f"Deleted all database records for document {document.id}")
+        logger.info(f"Deleted all database records for document {document.id}")
     
     @staticmethod
     async def _log_audit_event(
@@ -420,6 +419,6 @@ class DocumentDeletionService:
             session.add(audit_event)
             await session.commit()
         except Exception as e:
-            print(f"Error logging audit event: {e}")
+            logger.error(f"Error logging audit event: {e}", exc_info=True)
             # Don't fail deletion if audit logging fails
 

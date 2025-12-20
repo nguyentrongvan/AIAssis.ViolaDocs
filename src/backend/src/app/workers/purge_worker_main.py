@@ -12,65 +12,65 @@ import traceback
 import logging
 from pathlib import Path
 
-# Setup logging
+# Setup basic logging early
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
 
-print("=== Purge Worker Main Starting ===")
-print(f"Python version: {sys.version}")
-print(f"Python executable: {sys.executable}")
-print(f"Current working directory: {os.getcwd()}")
-print(f"Python path: {sys.path}")
+logger.info("=== Purge Worker Main Starting ===")
+logger.info(f"Python version: {sys.version}")
+logger.info(f"Python executable: {sys.executable}")
+logger.info(f"Current working directory: {os.getcwd()}")
+logger.info(f"Python path: {sys.path}")
 
 # Add src directory to Python path
 try:
     backend_dir = Path(__file__).parent.parent.parent.parent
     src_dir = backend_dir / "src"
-    print(f"Backend dir: {backend_dir}")
-    print(f"Source dir: {src_dir}")
-    print(f"Source dir exists: {src_dir.exists()}")
+    logger.debug(f"Backend dir: {backend_dir}")
+    logger.debug(f"Source dir: {src_dir}")
+    logger.debug(f"Source dir exists: {src_dir.exists()}")
     
     if src_dir.exists():
         sys.path.insert(0, str(src_dir))
-        print(f"Added {src_dir} to Python path")
+        logger.debug(f"Added {src_dir} to Python path")
     else:
         # Try alternative path (if running from /app)
         alt_src_dir = Path("/app/src")
         if alt_src_dir.exists():
             sys.path.insert(0, str(alt_src_dir))
-            print(f"Added {alt_src_dir} to Python path (alternative)")
+            logger.debug(f"Added {alt_src_dir} to Python path (alternative)")
         else:
-            print(f"WARNING: Source directory not found at {src_dir} or {alt_src_dir}")
+            logger.warning(f"Source directory not found at {src_dir} or {alt_src_dir}")
 except Exception as e:
-    print(f"ERROR: Failed to setup Python path: {e}")
-    traceback.print_exc()
+    logger.error(f"Failed to setup Python path: {e}", exc_info=True)
     sys.exit(1)
 
 # Import with error handling
 try:
-    print("Importing purge_worker...")
+    logger.info("Importing purge_worker...")
     from app.workers.purge_worker import run_purge_worker
-    print("purge_worker imported successfully")
+    logger.info("purge_worker imported successfully")
 except ImportError as e:
-    print(f"ERROR: Failed to import purge_worker: {e}")
-    print(f"Python path: {sys.path}")
-    traceback.print_exc()
+    logger.error(f"Failed to import purge_worker: {e}", exc_info=True)
+    logger.error(f"Python path: {sys.path}")
     sys.exit(1)
 
 try:
-    print("Importing settings...")
+    logger.info("Importing settings...")
     from app.config import settings
-    print("Settings imported successfully")
+    from app.utils.logging_config import setup_logging
+    # Setup proper logging with settings
+    setup_logging()
+    logger.info("Settings imported successfully")
 except ImportError as e:
-    print(f"ERROR: Failed to import settings: {e}")
-    traceback.print_exc()
+    logger.error(f"Failed to import settings: {e}", exc_info=True)
     sys.exit(1)
 except Exception as e:
-    print(f"ERROR: Failed to load settings: {e}")
-    traceback.print_exc()
+    logger.error(f"Failed to load settings: {e}", exc_info=True)
     sys.exit(1)
 
 

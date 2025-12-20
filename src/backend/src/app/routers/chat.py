@@ -1,4 +1,5 @@
 import uuid
+import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime, date as date_type, timedelta
 from fastapi import APIRouter, Depends, Query, status, BackgroundTasks
@@ -24,6 +25,7 @@ from ..config import settings
 from sqlalchemy import select, and_, or_, func
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+logger = logging.getLogger(__name__)
 
 # In-memory cache for conversation history (TTL 5 minutes)
 _history_cache: Dict[str, tuple[List[Dict[str, str]], datetime]] = {}
@@ -117,7 +119,7 @@ async def get_conversation_history(
                 _history_cache[cache_key] = (conversation_history, datetime.utcnow())
                 return conversation_history
     except Exception as e:
-        print(f"Redis error getting conversation history (trying database fallback): {e}")
+        logger.warning(f"Redis error getting conversation history (trying database fallback): {e}", exc_info=True)
     
     # Fallback to database
     try:
@@ -151,7 +153,7 @@ async def get_conversation_history(
             except Exception:
                 pass  # Ignore Redis update errors
     except Exception as e:
-        print(f"Database error getting conversation history: {e}")
+        logger.error(f"Database error getting conversation history: {e}", exc_info=True)
     
     return conversation_history
 
@@ -175,7 +177,7 @@ async def _update_redis_cache(redis_client: Any, session_key: str, history: List
                 await redis_client.lpush(session_key, *reversed(redis_messages))
             await redis_client.expire(session_key, 3600 * 24)
     except Exception as e:
-        print(f"Error updating Redis cache: {e}")
+        logger.warning(f"Error updating Redis cache: {e}", exc_info=True)
 
 
 class ChatRequest(BaseModel):
@@ -247,7 +249,7 @@ async def _save_chat_to_db(
             
             await session.commit()
     except Exception as e:
-        print(f"Error saving chat to database (background task): {e}")
+        logger.error(f"Error saving chat to database (background task): {e}", exc_info=True)
         import traceback
         traceback.print_exc()
 
@@ -265,7 +267,7 @@ async def _save_chat_to_redis(
             await redis_client.lpush(session_key, f"user:{message}", f"assistant:{answer}")
             await redis_client.expire(session_key, 3600 * 24)  # 24 hours
     except Exception as e:
-        print(f"Redis error saving chat (background task): {e}")
+        logger.warning(f"Redis error saving chat (background task): {e}", exc_info=True)
 
 
 @router.post("")
@@ -656,7 +658,7 @@ async def chat(
                 
             except EmbeddingModelUnavailableError as e:
                 # If embedding service is unavailable, continue without vector search
-                print(f"Embedding service unavailable: {e}")
+                logger.warning(f"Embedding service unavailable: {e}", exc_info=True)
                 warning = "Vector search unavailable. Answering without document context."
     
     # Generate response using LLM service with prompts and get token usage
@@ -806,27 +808,27 @@ async def get_available_documents(
     # Get all document IDs that have embeddings in Qdrant
     docs_with_embeddings = set()
     if embedding_service:
-        print(f"[get_available_documents] Checking embedding service availability...")
+        logger.debug(f"[get_available_documents] Checking embedding service availability...")
         is_available = embedding_service.is_available()
         has_store = bool(embedding_service.store)
         has_client = bool(embedding_service.store and embedding_service.store.client)
         store_type = "Qdrant"
         
-        print(f"[get_available_documents] Embedding service status:")
-        print(f"  - Available: {is_available}")
-        print(f"  - Has store: {has_store}")
-        print(f"  - Has client: {has_client}")
-        print(f"  - Store type: {store_type}")
+        logger.debug(f"[get_available_documents] Embedding service status:")
+        logger.debug(f"  - Available: {is_available}")
+        logger.debug(f"  - Has store: {has_store}")
+        logger.debug(f"  - Has client: {has_client}")
+        logger.debug(f"  - Store type: {store_type}")
         
         if is_available and has_store and has_client:
             try:
                 # Check collection count first - use QdrantVectorStore.count() method
                 collection_count = embedding_service.store.count()
-                print(f"[get_available_documents] Collection count: {collection_count}")
+                logger.debug(f"[get_available_documents] Collection count: {collection_count}")
                 
                 # Handle special case: -1 means collection has data but exact count unavailable
                 if collection_count == -1:
-                    print(f"[get_available_documents] Collection has data but exact count unavailable, proceeding to get embeddings")
+                    logger.debug(f"[get_available_documents] Collection has data but exact count unavailable, proceeding to get embeddings")
                     collection_count = 1  # Set to > 0 to proceed
                 
                 if collection_count > 0:
@@ -849,26 +851,26 @@ async def get_available_documents(
                                         sample_metas.append({"doc_id_raw":doc_id,"doc_id_type":type(doc_id).__name__,"doc_id_int":doc_id_int})
                                 except (ValueError, TypeError) as e:
                                     # Skip invalid doc_id values
-                                    print(f"[get_available_documents] Skipping invalid doc_id: {doc_id} (error: {e})")
+                                    logger.warning(f"[get_available_documents] Skipping invalid doc_id: {doc_id} (error: {e})", exc_info=True)
                                     pass
                         
-                        print(f"[get_available_documents] Found {len(docs_with_embeddings)} unique documents with embeddings")
+                        logger.debug(f"[get_available_documents] Found {len(docs_with_embeddings)} unique documents with embeddings")
                         if sample_metas:
-                            print(f"[get_available_documents] Sample metadata: {sample_metas}")
+                            logger.debug(f"[get_available_documents] Sample metadata: {sample_metas}")
                     else:
-                        print(f"[get_available_documents] No metadata found in collection result")
+                        logger.debug(f"[get_available_documents] No metadata found in collection result")
                 else:
-                    print(f"[get_available_documents] Collection is empty")
+                    logger.debug(f"[get_available_documents] Collection is empty")
                     all_embeddings_result = None
             except Exception as e:
-                print(f"[get_available_documents] ERROR: Error checking embeddings: {e}")
+                logger.error(f"[get_available_documents] ERROR: Error checking embeddings: {e}", exc_info=True)
                 import traceback
                 traceback.print_exc()
                 # If check fails, we'll assume no documents have embeddings
         else:
-            print(f"[get_available_documents] WARNING: Embedding service not fully available (available={is_available}, has_store={has_store}, has_collection={has_collection})")
+            logger.warning(f"[get_available_documents] WARNING: Embedding service not fully available (available={is_available}, has_store={has_store}, has_collection={has_collection})")
     else:
-        print(f"[get_available_documents] WARNING: Embedding service is None")
+        logger.warning(f"[get_available_documents] WARNING: Embedding service is None")
     
     # Process each accessible document
     sample_docs = []
@@ -905,12 +907,12 @@ async def get_available_documents(
             "is_shared": is_shared
         })
     
-    print(f"[get_available_documents] Document processing summary:")
-    print(f"  - Total accessible documents: {len(accessible_docs)}")
-    print(f"  - Documents with embeddings: {docs_with_embedding_count}")
-    print(f"  - Documents without embeddings: {len(accessible_docs) - docs_with_embedding_count}")
+    logger.debug(f"[get_available_documents] Document processing summary:")
+    logger.debug(f"  - Total accessible documents: {len(accessible_docs)}")
+    logger.debug(f"  - Documents with embeddings: {docs_with_embedding_count}")
+    logger.debug(f"  - Documents without embeddings: {len(accessible_docs) - docs_with_embedding_count}")
     if sample_docs:
-        print(f"  - Sample documents: {sample_docs}")
+        logger.debug(f"  - Sample documents: {sample_docs}")
     
     return success_response({
         "documents": documents_list,

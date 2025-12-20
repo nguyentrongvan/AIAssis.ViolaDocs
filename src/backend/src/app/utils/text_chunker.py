@@ -3,7 +3,10 @@ Text Chunking Utility for RAG
 Splits text into chunks with token-based sizing and overlap support
 """
 from typing import List, Dict, Optional
+import logging
 import tiktoken
+
+logger = logging.getLogger(__name__)
 
 
 class TextChunker:
@@ -20,7 +23,7 @@ class TextChunker:
             self.encoding = tiktoken.get_encoding(encoding_name)
         except Exception as e:
             # Fallback to cl100k_base if specified encoding not found
-            print(f"Warning: Encoding {encoding_name} not found, using cl100k_base: {e}")
+            logger.warning(f"Encoding {encoding_name} not found, using cl100k_base: {e}", exc_info=True)
             self.encoding = tiktoken.get_encoding("cl100k_base")
     
     def count_tokens(self, text: str) -> int:

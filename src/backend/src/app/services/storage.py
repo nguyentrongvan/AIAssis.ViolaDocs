@@ -1,10 +1,13 @@
 from datetime import timedelta
 from typing import Optional
+import logging
 from minio import Minio
 from minio.error import S3Error
 from minio.deleteobjects import DeleteObject
 
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 _minio_client: Optional[Minio] = None
 
@@ -23,9 +26,9 @@ def get_minio_client() -> Minio:
         try:
             if not _minio_client.bucket_exists(settings.minio_bucket):
                 _minio_client.make_bucket(settings.minio_bucket)
-                print(f"Created MinIO bucket: {settings.minio_bucket}")
+                logger.info(f"Created MinIO bucket: {settings.minio_bucket}")
         except S3Error as e:
-            print(f"Error creating bucket: {e}")
+            logger.error(f"Error creating bucket: {e}", exc_info=True)
     return _minio_client
 
 
@@ -66,7 +69,7 @@ async def upload_file_to_minio(file_data: bytes, object_name: str, content_type:
         )
         return True
     except S3Error as e:
-        print(f"Error uploading to MinIO: {e}")
+        logger.error(f"Error uploading to MinIO: {e}", exc_info=True)
         return False
 
 
@@ -76,7 +79,7 @@ async def delete_file_from_minio(object_name: str) -> bool:
         client.remove_object(settings.minio_bucket, object_name)
         return True
     except S3Error as e:
-        print(f"Error deleting from MinIO: {e}")
+        logger.error(f"Error deleting from MinIO: {e}", exc_info=True)
         return False
 
 
@@ -96,10 +99,10 @@ async def get_file_bytes_from_minio(object_name: str) -> Optional[bytes]:
         response.release_conn()
         return file_bytes
     except S3Error as e:
-        print(f"Error getting file from MinIO: {e}")
+        logger.error(f"Error getting file from MinIO: {e}", exc_info=True)
         return None
     except Exception as e:
-        print(f"Error reading file from MinIO: {e}")
+        logger.error(f"Error reading file from MinIO: {e}", exc_info=True)
         return None
 
 

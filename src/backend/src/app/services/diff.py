@@ -1,8 +1,11 @@
 from typing import Optional, Dict, List
 import difflib
 import io
+import logging
 from ..services.storage import get_minio_client
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 
 async def get_text_from_uri(text_uri: str) -> Optional[str]:
@@ -47,7 +50,7 @@ async def get_text_from_uri(text_uri: str) -> Optional[str]:
         
         return content.decode('utf-8')
     except Exception as e:
-        print(f"Error reading text from URI {text_uri}: {e}")
+        logger.error(f"Error reading text from URI {text_uri}: {e}", exc_info=True)
         return None
 
 

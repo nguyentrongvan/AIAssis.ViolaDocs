@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict
 import httpx
+import logging
 from ...config import settings, get_ollama_base_url_from_db, get_ollama_llm_model_from_db
 from ...prompts import (
     CHATBOT_SYSTEM_PROMPT,
@@ -16,6 +17,8 @@ from ...prompts import (
     GENERATE_TAG_FROM_FILENAME_PROMPT,
 )
 from ...services.settings_service import SettingsService
+
+logger = logging.getLogger(__name__)
 
 
 class LLMProvider:
@@ -68,7 +71,7 @@ class OllamaLLMProvider(LLMProvider):
                 base_url=self.base_url
             )
         except Exception as e:
-            print(f"Failed to initialize Ollama LLM HTTP client: {e}")
+            logger.error(f"Failed to initialize Ollama LLM HTTP client: {e}", exc_info=True)
             self.http_client = None
     
     async def _get_async_client(self) -> Optional[httpx.AsyncClient]:
@@ -82,7 +85,7 @@ class OllamaLLMProvider(LLMProvider):
                     http2=True  # Enable HTTP/2 for better performance
                 )
             except Exception as e:
-                print(f"Failed to initialize Ollama LLM async HTTP client: {e}")
+                logger.error(f"Failed to initialize Ollama LLM async HTTP client: {e}", exc_info=True)
                 return None
         return OllamaLLMProvider._async_clients[self.base_url]
     
@@ -225,7 +228,7 @@ class LLMService:
                     model=settings.ollama_llm_model
                 )
             except Exception as e:
-                print(f"Failed to initialize Ollama provider: {e}")
+                logger.error(f"Failed to initialize Ollama provider: {e}", exc_info=True)
         
         return None
     
@@ -255,7 +258,7 @@ class LLMService:
             return system_prompt, context_prompt, no_context_prompt, context_with_history_prompt, history_only_prompt
         except Exception as e:
             # If settings service fails, use defaults
-            print(f"Failed to load prompts from settings, using defaults: {e}")
+            logger.warning(f"Failed to load prompts from settings, using defaults: {e}", exc_info=True)
             return CHATBOT_SYSTEM_PROMPT, CHATBOT_CONTEXT_PROMPT, CHATBOT_NO_CONTEXT_PROMPT, CHATBOT_CONTEXT_WITH_HISTORY_PROMPT, CHATBOT_HISTORY_ONLY_PROMPT
     
     def chat(self, question: str, context: Optional[List[str]] = None) -> str:
@@ -323,7 +326,7 @@ class LLMService:
                                 pass
                             del OllamaLLMProvider._async_clients[old_base_url]
             except Exception as e:
-                print(f"Warning: Failed to load LLM settings from DB, using current provider settings: {e}")
+                logger.warning(f"Failed to load LLM settings from DB, using current provider settings: {e}", exc_info=True)
         
         # Load prompts from settings
         system_prompt, context_prompt, no_context_prompt, context_with_history_prompt, history_only_prompt = await self._get_prompts()
@@ -469,10 +472,10 @@ class LLMService:
             try:
                 db_model = await get_ollama_llm_model_from_db()
                 if db_model and db_model != self.provider.model:
-                    print(f"[LLM Service] Updating model from '{self.provider.model}' to '{db_model}' for tag generation")
+                    logger.debug(f"[LLM Service] Updating model from '{self.provider.model}' to '{db_model}' for tag generation")
                     self.provider.model = db_model
             except Exception as e:
-                print(f"[LLM Service] Warning: Failed to load LLM model from DB, using current model '{self.provider.model}': {e}")
+                logger.warning(f"[LLM Service] Failed to load LLM model from DB, using current model '{self.provider.model}': {e}", exc_info=True)
         
         tags = []
         
@@ -496,7 +499,7 @@ class LLMService:
                 
                 # Check if response is an error message (starts with "Error")
                 if response_text and response_text.strip().startswith("Error"):
-                    print(f"[LLM Service] LLM returned error for filename '{filename}': {response_text}")
+                    logger.error(f"[LLM Service] LLM returned error for filename '{filename}': {response_text}")
                     raise Exception(f"LLM error: {response_text}")
                 
                 if response_text:
@@ -537,9 +540,9 @@ class LLMService:
                         if len(filename_tag) > max_length:
                             filename_tag = filename_tag[:max_length]
                         tags.append(filename_tag)
-                        print(f"[LLM Service] Generated generalized tag from filename '{filename}': {filename_tag}")
+                        logger.debug(f"[LLM Service] Generated generalized tag from filename '{filename}': {filename_tag}")
                     else:
-                        print(f"[LLM Service] LLM returned invalid tag from filename '{filename}': '{response_text}'")
+                        logger.warning(f"[LLM Service] LLM returned invalid tag from filename '{filename}': '{response_text}'")
                         # Fallback: try to extract a simple tag from filename
                         import re
                         name_without_ext = re.sub(r'\.[^.]*$', '', filename)
@@ -548,14 +551,12 @@ class LLMService:
                         if parts:
                             fallback_tag = parts[0][:max_length]
                             tags.append(fallback_tag)
-                            print(f"[LLM Service] Using fallback tag from filename '{filename}': {fallback_tag}")
+                            logger.debug(f"[LLM Service] Using fallback tag from filename '{filename}': {fallback_tag}")
                 else:
-                    print(f"[LLM Service] LLM returned no response for filename '{filename}'")
+                    logger.warning(f"[LLM Service] LLM returned no response for filename '{filename}'")
                     
             except Exception as e:
-                print(f"[LLM Service] Error generating tag from filename '{filename}': {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error(f"[LLM Service] Error generating tag from filename '{filename}': {e}", exc_info=True)
         
         # Generate remaining tags from content
         remaining_tags_count = max_tags - len(tags)
@@ -583,7 +584,7 @@ class LLMService:
                 
                 # Check if response is an error message (starts with "Error")
                 if response_text and response_text.strip().startswith("Error"):
-                    print(f"[LLM Service] LLM returned error for content: {response_text}")
+                    logger.error(f"[LLM Service] LLM returned error for content: {response_text}")
                     raise Exception(f"LLM error: {response_text}")
                 
                 if response_text:
@@ -602,10 +603,10 @@ class LLMService:
                     
                     # Limit number of tags and add to list
                     tags.extend(content_tags[:remaining_tags_count])
-                    print(f"[LLM Service] Generated {len(content_tags[:remaining_tags_count])} tags from content")
+                    logger.debug(f"[LLM Service] Generated {len(content_tags[:remaining_tags_count])} tags from content")
             
             except Exception as e:
-                print(f"[LLM Service] Error generating tags from content: {e}")
+                logger.error(f"[LLM Service] Error generating tags from content: {e}", exc_info=True)
         
         return tags
     
