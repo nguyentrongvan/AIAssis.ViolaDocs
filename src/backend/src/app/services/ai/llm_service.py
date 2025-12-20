@@ -9,6 +9,7 @@ from ...prompts import (
     CHATBOT_CONTEXT_WITH_HISTORY_PROMPT,
     CHATBOT_HISTORY_ONLY_PROMPT,
     CLASSIFY_DOCUMENT_PROMPT,
+    CLASSIFY_DOCUMENT_TYPE_PROMPT,
     SUMMARIZE_DOCUMENT_PROMPT,
     EXTRACT_ENTITIES_PROMPT,
     RAG_QA_PROMPT,
@@ -451,6 +452,171 @@ class LLMService:
         )
         return self.provider.generate_response(prompt)
     
+    def _normalize_tag(self, tag: str) -> str:
+        """
+        Normalize a tag to ensure it follows the required format:
+        - Convert to lowercase
+        - Convert spaces to underscores
+        - Remove special characters (keep only ASCII letters, numbers, underscores)
+        - Convert hyphens to underscores
+        - Remove multiple consecutive underscores
+        - Trim underscores from start/end
+        - Remove any non-ASCII characters (like Vietnamese diacritics that got corrupted)
+        """
+        import re
+        
+        if not tag:
+            return ""
+        
+        # Convert to lowercase first
+        tag = tag.lower()
+        
+        # Convert spaces and hyphens to underscores
+        tag = tag.replace(' ', '_').replace('-', '_')
+        
+        # Remove all non-ASCII characters first (handles corrupted characters like "ẻ")
+        # Keep only ASCII letters (a-z), numbers (0-9), and underscores
+        tag = re.sub(r'[^a-z0-9_]', '', tag)
+        
+        # Additional check: ensure all characters are printable ASCII
+        # This catches any remaining problematic characters
+        tag = ''.join(c for c in tag if c.isascii() and (c.isalnum() or c == '_'))
+        
+        # Replace multiple consecutive underscores with a single underscore
+        tag = re.sub(r'_+', '_', tag)
+        
+        # Remove leading and trailing underscores
+        tag = tag.strip('_')
+        
+        return tag
+    
+    def _is_valid_tag(self, tag: str, max_length: int = 50) -> bool:
+        """
+        Validate if a tag is meaningful and not just explanatory text.
+        Returns False for tags that appear to be:
+        - Too long (likely sentences)
+        - Contain prompt-related words
+        - Are generic explanatory phrases
+        - Have obvious typos or corrupted characters
+        - Too short (less than 2 characters)
+        """
+        if not tag or len(tag) < 2:
+            return False
+        
+        if len(tag) > max_length:
+            return False
+        
+        # Check if tag contains only valid ASCII alphanumeric and underscores
+        if not all(c.isascii() and (c.isalnum() or c == '_') for c in tag):
+            return False
+        
+        # Convert to lowercase for checking
+        tag_lower = tag.lower()
+        
+        # List of words/phrases that indicate the tag is explanatory text, not a real tag
+        invalid_patterns = [
+            'based_on',
+            'provided',
+            'document_content',
+            'analyzed',
+            'extracted',
+            'following',
+            'here_are',
+            'the_following',
+            'i_ve',
+            'i_have',
+            'lve_',  # Common typo/cutoff of "I've"
+            'return_only',
+            'tags_must',
+            'output_format',
+            'critical',
+            'rules',
+            'requirements',
+            'instructions',
+            'example',
+            'examples',
+            'correct',
+            'wrong',
+            'remember',
+            'ensure',
+            'must_be',
+            'should_be',
+            'do_not',
+            'dont',
+            'no_spaces',
+            'use_underscores',
+            'and_extracted',
+            'extracted_the',
+            'analyzed_and',
+            'and_extracted_the',
+        ]
+        
+        # Check if tag contains any invalid patterns
+        for pattern in invalid_patterns:
+            if pattern in tag_lower:
+                return False
+        
+        # Check if tag looks like a sentence (too many words, likely > 5 words)
+        word_count = len(tag.split('_'))
+        if word_count > 5:
+            return False
+        
+        # Check for obvious typos (repeated characters that suggest typos)
+        # Like "netwwork" (double 'w'), "leearning" (double 'e'), etc.
+        import re
+        # Check for 3+ consecutive identical letters (likely typo)
+        if re.search(r'(.)\1{2,}', tag_lower):
+            return False
+        
+        # Check for common typo patterns in technical terms
+        # These are often signs that the model is hallucinating or copying examples
+        common_typos_and_hallucinations = [
+            'netwwork',  # network (typo)
+            'neural_netwwork',
+            'machne',  # machine (missing 'i')
+            'leearning',  # learning (double 'e')
+            'leearn',  # learn (double 'e')
+            'machne_learning',  # machine learning with typo
+            'nẻual',  # neural with Vietnamese character
+            'llearning',  # learning (double 'l')
+        ]
+        for typo in common_typos_and_hallucinations:
+            if typo in tag_lower:
+                logger.debug(f"[LLM Service] Rejected tag due to typo/hallucination pattern: {tag}")
+                return False
+        
+        # Check if tag has too many single-character words (likely corrupted)
+        # e.g., "m_y_h_c" from "máy học" after removing diacritics
+        words = tag_lower.split('_')
+        single_char_words = sum(1 for w in words if len(w) == 1)
+        if len(words) > 2 and single_char_words > len(words) / 2:
+            return False
+        
+        # Check for common invalid sentence patterns
+        invalid_sentence_patterns = [
+            'the_following',
+            'the_document',
+            'the_content',
+            'the_tags',
+            'the_provided',
+            'based_on_the',
+            'i_ve_analyzed',
+            'i_have_extracted',
+            'here_are_the',
+        ]
+        
+        for pattern in invalid_sentence_patterns:
+            if pattern in tag_lower:
+                return False
+        
+        # Check if tag starts with common sentence starters that indicate it's not a real tag
+        # But allow short tags (1-3 words) that might be valid entity names
+        sentence_starters = ['i_', 'we_', 'you_', 'they_', 'this_is_', 'that_is_']
+        if any(tag_lower.startswith(starter) for starter in sentence_starters):
+            return False
+        
+        return True
+    
     async def generate_tags_async(
         self,
         content: str,
@@ -462,7 +628,8 @@ class LLMService:
         """
         Generate tags from document content using LLM.
         Returns list of tag names (without prefix).
-        One tag will be generated from filename, the rest from content.
+        First tag is document type (invoice, contract, etc.), remaining tags are from content.
+        All tags are normalized to use underscores instead of spaces.
         """
         if not self.provider:
             return []
@@ -479,86 +646,46 @@ class LLMService:
         
         tags = []
         
-        # Generate 1 tag from filename if provided using LLM to generalize
-        if filename:
+        # Step 1: Generate document type tag (first tag)
+        if content:
             try:
-                # Use LLM to generalize filename into a meaningful tag
-                prompt_template = GENERATE_TAG_FROM_FILENAME_PROMPT
+                # Classify document type
+                doc_type_prompt = CLASSIFY_DOCUMENT_TYPE_PROMPT.format(content=content[:2000])  # Use first 2000 chars for classification
                 
-                # Format prompt with filename
-                prompt = prompt_template.format(
-                    filename=filename,
-                    max_length=max_length
-                )
-                
-                # Call LLM async to generalize filename
                 response_text, _ = await self.provider.generate_response_with_usage_async(
-                    prompt,
+                    doc_type_prompt,
                     system_prompt=None
                 )
                 
-                # Check if response is an error message (starts with "Error")
-                if response_text and response_text.strip().startswith("Error"):
-                    logger.error(f"[LLM Service] LLM returned error for filename '{filename}': {response_text}")
-                    raise Exception(f"LLM error: {response_text}")
-                
-                if response_text:
-                    # Clean up the response: remove quotes, trim whitespace
-                    filename_tag = response_text.strip().strip('"\'`.,;:!?').strip()
+                if response_text and not response_text.strip().startswith("Error"):
+                    doc_type = response_text.strip().strip('"\'`.,;:!?').strip()
+                    # Normalize document type tag
+                    doc_type = self._normalize_tag(doc_type)
                     
-                    # Remove common prefixes/phrases that LLM might add
-                    unwanted_prefixes = [
-                        "based on the filename",
-                        "based on filename",
-                        "tag:",
-                        "tag is:",
-                        "the tag is:",
-                        "generalized tag:",
-                        "extracted tag:",
-                    ]
-                    for prefix in unwanted_prefixes:
-                        if filename_tag.lower().startswith(prefix.lower()):
-                            filename_tag = filename_tag[len(prefix):].strip().strip(':"\'`.,;:!?').strip()
-                    
-                    # Extract first word/phrase if response contains multiple words (take first meaningful part)
-                    # Split by common separators and take the first meaningful part
-                    import re
-                    # Remove any leading text like "Based on..." and take first word/phrase
-                    parts = re.split(r'[:\n\r\t,;]', filename_tag)
-                    if parts:
-                        filename_tag = parts[0].strip().strip('"\'`.,;:!?').strip()
-                    
-                    # Remove any remaining explanatory text (keep only alphanumeric and hyphens)
-                    # Extract only the tag part (word or hyphenated phrase)
-                    tag_match = re.search(r'([a-z0-9]+(?:-[a-z0-9]+)*)', filename_tag.lower())
-                    if tag_match:
-                        filename_tag = tag_match.group(1)
-                    
-                    # Validate and truncate if needed
-                    if filename_tag and len(filename_tag) > 0 and len(filename_tag) <= max_length * 2:  # Allow some buffer for processing
-                        # Truncate if needed
-                        if len(filename_tag) > max_length:
-                            filename_tag = filename_tag[:max_length]
-                        tags.append(filename_tag)
-                        logger.debug(f"[LLM Service] Generated generalized tag from filename '{filename}': {filename_tag}")
+                    # Validate document type (more lenient than content tags)
+                    if doc_type and len(doc_type) >= 2 and len(doc_type) <= max_length:
+                        # Check basic validity (ASCII, no obvious errors)
+                        if all(c.isascii() and (c.isalnum() or c == '_') for c in doc_type):
+                            # Truncate if needed
+                            if len(doc_type) > max_length:
+                                doc_type = doc_type[:max_length]
+                            tags.append(doc_type)
+                            logger.debug(f"[LLM Service] Generated document type tag: {doc_type}")
+                        else:
+                            logger.warning(f"[LLM Service] Document type contains invalid characters: {response_text}")
+                            tags.append("document")
                     else:
-                        logger.warning(f"[LLM Service] LLM returned invalid tag from filename '{filename}': '{response_text}'")
-                        # Fallback: try to extract a simple tag from filename
-                        import re
-                        name_without_ext = re.sub(r'\.[^.]*$', '', filename)
-                        parts = re.split(r'[_\-\s\.]+', name_without_ext.lower())
-                        parts = [p.strip() for p in parts if p.strip() and len(p.strip()) > 2 and p.strip().isalpha()]
-                        if parts:
-                            fallback_tag = parts[0][:max_length]
-                            tags.append(fallback_tag)
-                            logger.debug(f"[LLM Service] Using fallback tag from filename '{filename}': {fallback_tag}")
+                        logger.warning(f"[LLM Service] Invalid document type tag (length): {response_text}")
+                        tags.append("document")
                 else:
-                    logger.warning(f"[LLM Service] LLM returned no response for filename '{filename}'")
-                    
+                    logger.warning(f"[LLM Service] Failed to classify document type, using fallback")
+                    tags.append("document")
             except Exception as e:
-                logger.error(f"[LLM Service] Error generating tag from filename '{filename}': {e}", exc_info=True)
+                logger.error(f"[LLM Service] Error classifying document type: {e}", exc_info=True)
+                # Fallback to generic type
+                tags.append("document")
         
-        # Generate remaining tags from content
+        # Step 2: Generate remaining tags from content
         remaining_tags_count = max_tags - len(tags)
         if remaining_tags_count > 0 and content:
             try:
@@ -569,7 +696,7 @@ class LLMService:
                     session=session
                 )
                 
-                # Format prompt with content and settings
+                # Format prompt with content and settings (for remaining tags)
                 prompt = prompt_template.format(
                     content=content,
                     max_tags=remaining_tags_count,
@@ -588,6 +715,23 @@ class LLMService:
                     raise Exception(f"LLM error: {response_text}")
                 
                 if response_text:
+                    # Clean response: remove common prefixes/phrases that LLM might add
+                    response_text = response_text.strip()
+                    
+                    # Remove common prefixes that LLM might add
+                    unwanted_prefixes = [
+                        "tags:",
+                        "tag:",
+                        "the tags are:",
+                        "here are the tags:",
+                        "based on the content:",
+                        "extracted tags:",
+                        "generated tags:",
+                    ]
+                    for prefix in unwanted_prefixes:
+                        if response_text.lower().startswith(prefix.lower()):
+                            response_text = response_text[len(prefix):].strip()
+                    
                     # Parse response: split by comma, trim, filter empty
                     content_tags = []
                     for tag in response_text.split(','):
@@ -599,11 +743,18 @@ class LLMService:
                             # Remove any leading/trailing quotes or special characters
                             tag = tag.strip('"\'`.,;:!?')
                             if tag:
-                                content_tags.append(tag)
+                                # Normalize tag format (spaces to underscores, remove special chars)
+                                normalized_tag = self._normalize_tag(tag)
+                                if normalized_tag:
+                                    # Validate tag is meaningful and not explanatory text
+                                    if self._is_valid_tag(normalized_tag, max_length):
+                                        content_tags.append(normalized_tag)
+                                    else:
+                                        logger.debug(f"[LLM Service] Filtered out invalid tag: {normalized_tag}")
                     
                     # Limit number of tags and add to list
-                    tags.extend(content_tags[:remaining_tags_count])
-                    logger.debug(f"[LLM Service] Generated {len(content_tags[:remaining_tags_count])} tags from content")
+                    tags.extend(content_tags[:max_tags])
+                    logger.debug(f"[LLM Service] Generated {len(content_tags[:max_tags])} tags from content")
             
             except Exception as e:
                 logger.error(f"[LLM Service] Error generating tags from content: {e}", exc_info=True)

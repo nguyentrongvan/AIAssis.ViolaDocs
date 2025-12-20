@@ -16,7 +16,8 @@ from ..models.roles import Role
 from ..services.storage import generate_presigned_upload_url, get_file_bytes_from_minio
 from ..services.metadata_service import MetadataService
 from ..utils.response import success_response, error_response
-from ..config import settings
+from ..config import settings, get_ocr_provider_from_db
+from ..services.settings_service import SettingsService
 from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
@@ -251,6 +252,8 @@ async def finalize_upload(
     if mime.startswith("image/") or mime == "application/pdf":
         # Create OCR job for images and PDFs
         auto_ai_tag_flag = request.auto_ai_tag if request.auto_ai_tag is not None else True
+        # Get OCR provider from settings
+        ocr_provider = await SettingsService.get_setting("ocr.provider", default="tesseract", session=session)
         ocr_job = AIJob(
             job_type="ocr",
             target={
@@ -258,7 +261,7 @@ async def finalize_upload(
                 "version_id": version.id,
                 "auto_ai_tag": auto_ai_tag_flag
             },
-            provider="paddle",
+            provider=ocr_provider,
             status="queued"
         )
         session.add(ocr_job)

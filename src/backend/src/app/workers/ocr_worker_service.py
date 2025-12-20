@@ -86,7 +86,7 @@ class OCRWorkerService:
                 languages = settings.ocr_lang_list
             
             settings_dict = {
-                "provider": provider or "paddle",
+                "provider": provider or "tesseract",
                 "languages": languages
             }
             

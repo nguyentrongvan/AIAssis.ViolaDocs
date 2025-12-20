@@ -12,6 +12,7 @@ from ..models.users import User
 from ..models.devices import Device
 from ..models.documents import Document, DocumentVersion
 from ..models.ai import AIJob
+from ..services.settings_service import SettingsService
 from ..services.storage import generate_presigned_upload_url
 from ..services.auth import decode_token
 from ..utils.response import success_response, error_response
@@ -140,10 +141,12 @@ async def finalize_scan_job(
     
     # Create OCR job
     if doc.mime.startswith("image/") or doc.mime == "application/pdf":
+        # Get OCR provider from settings
+        ocr_provider = await SettingsService.get_setting("ocr.provider", default="tesseract", session=session)
         ocr_job = AIJob(
             job_type="ocr",
             target={"document_id": doc.id, "version_id": version.id},
-            provider="paddle",
+            provider=ocr_provider,
             status="queued"
         )
         session.add(ocr_job)

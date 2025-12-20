@@ -117,9 +117,11 @@ async def process_ocr_job(job_id: int):
             # Update version with OCR URI
             version.text_uri = text_object_name  # Store just object name
             version.ocr_uri = text_object_name  # Also set ocr_uri
+            # Get provider from result or use tesseract as default
+            provider_name = ocr_result.get("provider", "tesseract")
             version.provider_info = {
                 "ocr": {
-                    "provider": ocr_result.get("provider", "paddle"),
+                    "provider": provider_name,
                     "languages": settings.ocr_lang_list
                 }
             }
@@ -132,7 +134,7 @@ async def process_ocr_job(job_id: int):
                 processing_result=ocr_result,
                 processing_time_ms=processing_time_ms
             )
-            processing_meta["ocr_provider"] = ocr_result.get("provider", "paddle")
+            processing_meta["ocr_provider"] = provider_name
             processing_meta["text_length"] = len(extracted_text)
             
             # Merge processing metadata into existing metadata_snapshot

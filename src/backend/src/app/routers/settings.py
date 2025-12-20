@@ -587,9 +587,9 @@ async def get_rag_settings(
     from ..services.settings_service import SettingsService
     
     # Default values
-    default_chunk_size = 1024
-    default_chunk_overlap = 100
-    default_top_k = 20
+    default_chunk_size = 512
+    default_chunk_overlap = 50
+    default_top_k = 10
     
     # Get settings from database, fallback to defaults
     chunk_size = await SettingsService.get_setting(
