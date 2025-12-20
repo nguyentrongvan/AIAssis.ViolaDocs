@@ -51,7 +51,7 @@
 
 ### See It In Action
 
-Check out our [interactive showcase](docs/showcase.html) to see ViolaDocs features in action with screenshots and demonstrations.
+Check out our [interactive showcase](https://htmlpreview.github.io/?https://github.com/nguyentrongvan/AIAssis.ViolaDocs/blob/develop/docs/showcase.html) to see ViolaDocs features in action with screenshots and demonstrations.
 
 ## About This Project
 
