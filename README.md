@@ -6,9 +6,10 @@
 
 **AI-Powered Document Intelligence**
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Product Showcase](docs/preview/welcome.jpg)](docs/showcase.html)
 
-**[🎨 View Interactive Showcase →](docs/showcase.html)**
+**[🎨 View Interactive Showcase →](https://htmlpreview.github.io/?https://github.com/nguyentrongvan/AIAssis.ViolaDocs/blob/develop/docs/showcase.html)**
 
 </div>
 
@@ -18,26 +19,35 @@
 
 ### Why ViolaDocs?
 
-✨ **Intelligent Document Processing** - Automatically extract text from images and PDFs using advanced OCR technology supporting multiple languages  
-🔍 **Semantic Search** - Find documents by meaning, not just keywords, using hybrid vector and keyword search  
-🤖 **AI-Powered Assistant** - Get instant answers from your document library with our RAG-powered chatbot  
+✨ **Intelligent Document Processing** - Automatically extract text from images and PDFs using Tesseract OCR supporting multiple languages (en, vi, ja, ko, zh, fr, de, es)  
+🤖 **AI Document Intelligence** - Automatic document summarization, tagging, classification, and entity extraction powered by local LLM (Ollama)  
+🔍 **Semantic Search** - Find documents by meaning, not just keywords, using hybrid vector (Qdrant) and keyword search  
+💬 **AI-Powered Assistant** - Get instant answers from your document library with our RAG-powered chatbot  
 📋 **Workflow Automation** - Streamline review and approval processes with built-in workflow management  
 🔒 **Enterprise Security** - Role-based access control, comprehensive audit logging, and enterprise-grade security  
 📱 **Device Integration** - Direct integration with printers and scanners for seamless document capture  
-📊 **Advanced Analytics** - Comprehensive reporting and analytics to track document usage and workflows
+📊 **Advanced Analytics** - Comprehensive reporting and analytics to track document usage and workflows  
+🌐 **Multi-language UI** - Full internationalization support for English, Vietnamese, Japanese, and Chinese
 
 ## 🎯 Key Features
 
 ### Core Capabilities
 
 - **📄 Document Management**: Upload, version control, search, and organize documents with intuitive folder structures
-- **👁️ OCR Processing**: Advanced PaddleOCR support for English, Vietnamese, Japanese, Korean, and Chinese with high accuracy
-- **🔎 Semantic Search**: Hybrid keyword + vector search that understands context and meaning
+- **👁️ OCR Processing**: Tesseract OCR support for multiple languages (English, Vietnamese, Japanese, Korean, Chinese, French, German, Spanish) with high accuracy
+- **🤖 AI Document Intelligence**: 
+  - Automatic document summarization after OCR and tagging (configurable max length)
+  - Automatic tag generation from document content
+  - Document classification and type detection
+  - Entity extraction from documents
+  - Document comparison and analysis
+- **🔎 Semantic Search**: Hybrid keyword + vector search using Qdrant vector database that understands context and meaning
 - **💬 AI Chatbot**: RAG-powered assistant with document group scoping for intelligent Q&A
 - **⚙️ Workflow Management**: Review and approval workflows with customizable task assignments
 - **👥 User Management**: Role-based access control (Admin/Staff/User) with granular permissions
 - **🖨️ Device Integration**: Printer/scanner connector for direct scanning and document capture
 - **📈 Audit & Reports**: Comprehensive logging, reporting, and analytics dashboard
+- **🌐 Multi-language Support**: Full internationalization (i18n) for English, Vietnamese, Japanese, and Chinese
 
 ### See It In Action
 
@@ -50,8 +60,9 @@ This project serves as a **practice implementation** demonstrating modern develo
 **ViolaDocs** is part of the **AIAssis ecosystem**, a collection of projects exploring the integration of AI technologies in software development and business applications.
 
 - **Document Management**: Upload, version control, search, and organize documents
-- **OCR Processing**: PaddleOCR support for English, Vietnamese, Japanese, Korean, and Chinese
-- **Semantic Search**: Hybrid keyword + vector search
+- **OCR Processing**: Tesseract OCR support for multiple languages (en, vi, ja, ko, zh, fr, de, es)
+- **AI Document Intelligence**: Automatic summarization, tagging, classification, entity extraction, and document comparison
+- **Semantic Search**: Hybrid keyword + vector search using Qdrant
 - **AI Chatbot**: RAG-powered assistant with document group scoping
 - **Workflow Management**: Review and approval workflows
 - **User Management**: Role-based access control (Admin/Staff/User)
@@ -61,18 +72,30 @@ This project serves as a **practice implementation** demonstrating modern develo
 ## Tech Stack
 
 ### Backend
-- FastAPI (Python)
-- PostgreSQL with pgvector
-- MinIO (S3-compatible object storage)
-- Redis (caching and queues)
-- PaddleOCR
-- Gemini/OpenAI for LLM
+- **Framework**: FastAPI (Python 3.10+)
+- **Database**: PostgreSQL with pgvector extension
+- **Object Storage**: MinIO (S3-compatible)
+- **Cache & Queue**: Redis
+- **Vector Database**: Qdrant (for semantic search embeddings)
+- **OCR Engine**: Tesseract OCR (via pytesseract)
+- **LLM & Embeddings**: Ollama (local LLM with OpenAI-compatible API)
+  - Supports various models: Llama 3.2, Llama 3.1, Qwen2.5, Qwen3, Mistral, Gemma2, etc.
+  - Embedding models: nomic-embed-text, etc.
+- **Background Workers**: 
+  - OCR Worker (for async OCR processing, tagging, summarization)
+  - Purge Worker (for document retention and cleanup)
+- **Other**: Alembic (migrations), SQLAlchemy (ORM), httpx (async HTTP)
 
 ### Frontend
-- Vue 3 + Vite
-- Pinia (state management)
-- Vue Router
-- Axios
+- **Framework**: Vue 3 (Composition API)
+- **Build Tool**: Vite
+- **State Management**: Pinia
+- **Routing**: Vue Router
+- **HTTP Client**: Axios
+- **Internationalization**: vue-i18n (supports en, vi, ja, zh)
+- **Charts**: Chart.js + vue-chartjs
+- **UI Components**: Custom components with Lucide icons
+- **Styling**: CSS3 with modern design patterns
 
 ## 🚀 Quick Start
 
@@ -88,11 +111,28 @@ See [SETUP.md](SETUP.md) for complete installation guide.
 
 > 💡 **New to ViolaDocs?** Check out our [interactive showcase](docs/showcase.html) to explore features before installation.
 
+## Infrastructure Services
+
+The system runs on Docker Compose with the following services:
+
+- **PostgreSQL** (with pgvector): Main relational database
+- **MinIO**: S3-compatible object storage for documents
+- **Redis**: Caching and job queue management
+- **Qdrant**: Vector database for semantic search embeddings
+- **Ollama**: Local LLM server for AI features (summarization, tagging, chatbot, etc.)
+- **Backend API**: FastAPI application
+- **Frontend**: Vue 3 application (served via Nginx)
+- **OCR Worker**: Background worker for OCR processing, tagging, and summarization
+- **Purge Worker**: Background worker for document retention and cleanup
+
 ## Project Structure
 
 ```
-VanDMS/
-├── docker-compose.yml          # Infrastructure services
+AIAssis.ViolaDocs/
+├── docker/                     # Docker configurations
+│   ├── docker-compose.base.yml # Base infrastructure services
+│   ├── dev/                    # Development environment
+│   └── prod/                   # Production environment
 ├── docs/                       # Design documentation
 │   ├── architecture/
 │   ├── api/
@@ -106,15 +146,20 @@ VanDMS/
 │   │   │   ├── config.py
 │   │   │   ├── models/         # SQLAlchemy models
 │   │   │   ├── routers/        # API routes
-│   │   │   ├── services/       # Business logic
-│   │   │   └── workers/        # Background jobs
-│   │   └── migrations/         # Alembic migrations
+│   │   │   ├── services/       # Business logic (AI, OCR, embedding, etc.)
+│   │   │   ├── workers/        # Background job workers
+│   │   │   └── prompts.py      # LLM prompts
+│   │   ├── migrations/         # Alembic migrations
+│   │   └── tests/              # Backend tests
 │   └── frontend/               # Vue 3 frontend
 │       └── src/
-│           ├── components/
-│           ├── views/
-│           ├── store/
-│           └── services/
+│           ├── components/     # Vue components
+│           ├── views/          # Page views
+│           ├── store/          # Pinia stores
+│           ├── services/       # API services
+│           └── i18n/           # Internationalization
+├── nginx/                      # Nginx configuration
+└── scripts/                    # Deployment scripts
 ```
 
 ## Default Credentials
@@ -169,5 +214,23 @@ Part of the **AIAssis** ecosystem - exploring AI integration in software develop
 
 ## License
 
-Proprietary
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+
+**Copyright (c) 2024 nguyentrongvan**
+
+The MIT License allows you to:
+- ✅ Use the software commercially
+- ✅ Modify the software
+- ✅ Distribute the software
+- ✅ Sublicense the software
+- ✅ Private use
+
+**Conditions:**
+- 📋 Include the original copyright notice
+- 📋 Include a copy of the MIT License
+
+**Limitations:**
+- ❌ No liability or warranty
+
+For more information, visit [choosealicense.com/licenses/mit/](https://choosealicense.com/licenses/mit/)
 

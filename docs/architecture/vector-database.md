@@ -118,3 +118,5 @@ Open browser to: http://localhost:6333/dashboard
 - **Filtering**: Metadata filtering happens before vector search for better performance
 
 
+
+
