@@ -7,6 +7,8 @@ import i18n from './i18n'
 import './theme.css'
 import 'driver.js/dist/driver.min.css'
 import './driver-custom.css'
+import { usePreferencesStore } from './store/preferences'
+import { useAuthStore } from './store/auth'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -14,6 +16,7 @@ app.use(pinia)
 app.use(router)
 app.use(i18n)
 app.component('Toast', Toast)
+
 app.mount('#app')
 
 

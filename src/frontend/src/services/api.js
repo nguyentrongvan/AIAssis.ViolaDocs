@@ -46,7 +46,12 @@ export const usersAPI = {
   delete: (id) => api.delete(`/users/${id}`),
   activate: (id) => api.post(`/users/${id}/activate`),
   deactivate: (id) => api.post(`/users/${id}/deactivate`),
-  setExpiry: (id, expiresAt) => api.patch(`/users/${id}/expiry`, { expires_at: expiresAt })
+  setExpiry: (id, expiresAt) => api.patch(`/users/${id}/expiry`, { expires_at: expiresAt }),
+  preferences: {
+    get: () => api.get('/users/me/preferences'),
+    update: (data) => api.put('/users/me/preferences', data),
+    getTheme: () => api.get('/users/me/preferences/theme')
+  }
 }
 
 export const rolesAPI = {

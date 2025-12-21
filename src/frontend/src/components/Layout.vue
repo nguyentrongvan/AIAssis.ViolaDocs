@@ -93,17 +93,25 @@
       </nav>
       <div class="user-menu">
         <div class="user-info">
-          <div :class="['user-avatar', getUserRoleColor]">
-            <User class="user-icon" />
+          <div class="user-info-top">
+            <div :class="['user-avatar', getUserRoleColor]">
+              <User class="user-icon" />
+            </div>
+            <div class="user-details">
+              <span class="user-name">{{ authStore.user?.name || $t('common.user') }}</span>
+              <span class="user-role">{{ authStore.user?.role || 'user' }}</span>
+            </div>
           </div>
-          <div class="user-details">
-            <span class="user-name">{{ authStore.user?.name || $t('common.user') }}</span>
-            <span class="user-role">{{ authStore.user?.role || 'user' }}</span>
+          <div class="user-info-actions">
+            <router-link to="/preferences" class="btn-link preferences-btn">
+              <Settings class="preferences-icon" />
+              <span>{{ $t('preferences.title') }}</span>
+            </router-link>
+            <button @click="handleLogout" class="btn-link logout-btn">
+              <LogOut class="logout-icon" />
+              <span>{{ $t('common.logout') }}</span>
+            </button>
           </div>
-          <button @click="handleLogout" class="btn-link logout-btn">
-            <LogOut class="logout-icon" />
-            <span>{{ $t('common.logout') }}</span>
-          </button>
         </div>
       </div>
     </aside>
@@ -420,14 +428,28 @@ nav {
 
 .user-info {
   display: flex;
-  align-items: center;
-  gap: var(--space-md);
+  flex-direction: column;
+  gap: var(--space-sm);
   padding: var(--space-md);
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.05);
   transition: all var(--transition-base);
   width: 100%;
   box-sizing: border-box;
+}
+
+.user-info-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+}
+
+.user-info-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  width: 100%;
 }
 
 .user-info:hover {
@@ -537,9 +559,12 @@ nav {
   white-space: nowrap; /* Prevent text wrapping */
 }
 
+.preferences-btn,
 .logout-btn {
-  order: 2;
-  margin-left: auto; /* Push logout button to the right */
+  width: 100%;
+  justify-content: flex-start;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
 }
 
 .btn-link:hover {

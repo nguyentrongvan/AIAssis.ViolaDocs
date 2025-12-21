@@ -254,11 +254,11 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useFoldersStore } from '../store/folders'
 import { useRolesStore } from '../store/roles'
-
-const { t } = useI18n()
 import { foldersAPI, documentsAPI } from '../services/api'
 import { FolderTree, Modal, StatusBadge } from '../components'
 import { Folder, FolderPlus, Edit, Trash2, Share2, FilePlus, FileText } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const foldersStore = useFoldersStore()
@@ -625,6 +625,17 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
+}
+
+.page-header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.02em;
 }
 
 .folders-content {

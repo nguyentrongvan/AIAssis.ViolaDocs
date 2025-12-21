@@ -201,7 +201,7 @@
               <img src="/chatbot.png" :alt="$t('chatbot.altChatbot')" class="welcome-icon" />
               <div class="welcome-glow"></div>
             </div>
-            <h3 class="gradient-text">{{ $t('chatbot.welcomeMessage') }}</h3>
+            <h3 class="gradient-text">{{ $t('chatbot.welcomeMessage', { name: authStore.user?.name ? `, ${authStore.user.name}` : '' }) }}</h3>
             <p>{{ $t('chatbot.welcomeSubmessage') }}</p>
           </div>
           <transition-group name="message" tag="div">
@@ -361,12 +361,14 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useAuthStore } from '../store/auth'
 import { useChatStore } from '../store/chat'
 import { useGroupsStore } from '../store/groups'
 import { chatAPI, groupsAPI } from '../services/api'
 import { Modal } from '../components'
 
 const { t } = useI18n()
+const authStore = useAuthStore()
 import {
   MessageSquare,
   User,

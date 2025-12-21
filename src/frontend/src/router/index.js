@@ -68,6 +68,11 @@ const routes = [
         component: () => import('../views/Folders.vue')
       },
       {
+        path: 'preferences',
+        name: 'Preferences',
+        component: () => import('../views/Preferences.vue')
+      },
+      {
         path: 'admin/users',
         name: 'AdminUsers',
         component: () => import('../views/admin/Users.vue')
@@ -120,10 +125,17 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
+  const { usePreferencesStore } = await import('../store/preferences')
+  const preferencesStore = usePreferencesStore()
   
   // Fetch user if we have token but no user data
   if (authStore.token && !authStore.user) {
     await authStore.fetchMe()
+  }
+  
+  // Load and apply user preferences after authentication
+  if (authStore.isAuthenticated && !preferencesStore.loaded) {
+    await preferencesStore.fetchPreferences()
   }
   
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {

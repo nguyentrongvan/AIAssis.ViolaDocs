@@ -3,7 +3,7 @@
     <!-- Hero Section -->
     <div class="hero-section">
       <h1 class="hero-title">
-        <span class="gradient-text">{{ $t('home.welcome') }}</span>
+        <span class="gradient-text">{{ $t('home.welcome', { name: authStore.user?.name ? `, ${authStore.user.name}` : '' }) }}</span>
       </h1>
       <p class="hero-subtitle">{{ $t('home.subtitle') }}</p>
     </div>
@@ -51,10 +51,12 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useAuthStore } from '../store/auth'
 import api from '../services/api'
 import { Upload, Search, MessageSquare, CheckSquare, FileText, Clock, TrendingUp } from 'lucide-vue-next'
 
 const { t } = useI18n()
+const authStore = useAuthStore()
 
 const stats = ref({
   totalDocuments: 0,

@@ -235,6 +235,17 @@ onMounted(() => {
   margin-bottom: 2rem;
 }
 
+.page-header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.02em;
+}
+
 .header-actions {
   display: flex;
   gap: 1rem;

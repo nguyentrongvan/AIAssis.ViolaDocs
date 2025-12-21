@@ -32,10 +32,11 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../store/auth'
+import { usePreferencesStore } from '../store/preferences'
 import LanguageSelector from '../components/LanguageSelector.vue'
 import Footer from '../components/Footer.vue'
 
@@ -43,6 +44,28 @@ const { t } = useI18n()
 
 const router = useRouter()
 const authStore = useAuthStore()
+const preferencesStore = usePreferencesStore()
+
+onMounted(async () => {
+  // Load preferences if user is logged in (for theme consistency)
+  if (authStore.isAuthenticated && !preferencesStore.loaded) {
+    await preferencesStore.fetchPreferences()
+  } else if (!authStore.isAuthenticated) {
+    // If not logged in, try to load from localStorage for theme consistency
+    const cached = localStorage.getItem('user_preferences')
+    if (cached) {
+      try {
+        const prefs = JSON.parse(cached)
+        if (prefs.primary_color) {
+          const { applyPreferences } = await import('../utils/theme')
+          applyPreferences(prefs)
+        }
+      } catch (err) {
+        console.error('Failed to load cached preferences', err)
+      }
+    }
+  }
+})
 
 const email = ref('')
 const password = ref('')
@@ -144,6 +167,12 @@ const handleLogin = async () => {
   border-radius: 50%;
   background: radial-gradient(circle, rgba(0, 217, 255, 0.4) 0%, transparent 70%);
   animation: float 6s ease-in-out infinite;
+}
+
+/* Update particles to use primary color if available */
+.particles-background::before {
+  background: radial-gradient(circle, var(--primary-light, rgba(0, 217, 255, 0.4)) 0%, transparent 70%);
+  opacity: 0.6;
 }
 
 .particles-background::before {

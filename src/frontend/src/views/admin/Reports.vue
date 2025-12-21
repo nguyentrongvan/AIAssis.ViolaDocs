@@ -993,6 +993,17 @@ watch(activeTab, () => {
 </script>
 
 <style scoped>
+.page-header {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 2rem 0;
+  letter-spacing: -0.02em;
+}
+
 .admin-page {
   background: white;
   padding: 2rem;

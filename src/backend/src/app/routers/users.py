@@ -7,10 +7,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from ..db import get_session
-from ..dependencies import get_current_admin_user, require_permission_or_staff
+from ..dependencies import get_current_user, get_current_admin_user, require_permission_or_staff
 from ..models.users import User
 from ..models.roles import Role
+from ..models.user_preferences import UserPreferences
 from ..services.auth import get_password_hash
+from ..services.user_preferences_service import UserPreferencesService
 from ..utils.response import success_response, error_response
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -286,6 +288,89 @@ async def get_user(
 
 class UserExpiryUpdate(BaseModel):
     expires_at: Optional[str] = None
+
+
+class UserPreferencesUpdate(BaseModel):
+    primary_color: Optional[str] = None
+    font_size: Optional[str] = None
+    border_radius: Optional[str] = None
+    animation_speed: Optional[str] = None
+    compact_mode: Optional[bool] = None
+
+
+@router.get("/me/preferences")
+async def get_my_preferences(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get current user's preferences"""
+    preferences = await UserPreferencesService.get_or_create_preferences(
+        current_user.id, session
+    )
+    
+    return success_response({
+        "primary_color": preferences.primary_color,
+        "font_size": preferences.font_size,
+        "border_radius": preferences.border_radius,
+        "animation_speed": preferences.animation_speed,
+        "compact_mode": preferences.compact_mode
+    })
+
+
+@router.put("/me/preferences")
+async def update_my_preferences(
+    payload: UserPreferencesUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update current user's preferences"""
+    preferences = await UserPreferencesService.update_preferences(
+        user_id=current_user.id,
+        session=session,
+        primary_color=payload.primary_color,
+        font_size=payload.font_size,
+        border_radius=payload.border_radius,
+        animation_speed=payload.animation_speed,
+        compact_mode=payload.compact_mode
+    )
+    
+    return success_response({
+        "primary_color": preferences.primary_color,
+        "font_size": preferences.font_size,
+        "border_radius": preferences.border_radius,
+        "animation_speed": preferences.animation_speed,
+        "compact_mode": preferences.compact_mode
+    })
+
+
+@router.get("/me/preferences/theme")
+async def get_my_theme(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get theme CSS variables for current user"""
+    preferences = await UserPreferencesService.get_or_create_preferences(
+        current_user.id, session
+    )
+    
+    theme_vars = {}
+    
+    # If user has custom primary color, calculate theme colors
+    if preferences.primary_color:
+        theme_vars = UserPreferencesService.calculate_theme_colors(
+            preferences.primary_color
+        )
+    
+    return success_response({
+        "css_variables": theme_vars,
+        "preferences": {
+            "primary_color": preferences.primary_color,
+            "font_size": preferences.font_size,
+            "border_radius": preferences.border_radius,
+            "animation_speed": preferences.animation_speed,
+            "compact_mode": preferences.compact_mode
+        }
+    })
 
 
 @router.patch("/{user_id}/expiry")

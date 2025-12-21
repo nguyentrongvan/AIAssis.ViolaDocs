@@ -10,6 +10,7 @@ from .retention import RetentionPolicy
 from .roles import Role, user_role
 from .chat import ChatSession
 from .settings import SystemSettings
+from .user_preferences import UserPreferences
 
 __all__ = [
     "Base",
@@ -34,6 +35,7 @@ __all__ = [
     "user_role",
     "ChatSession",
     "SystemSettings",
+    "UserPreferences",
 ]
 
 
