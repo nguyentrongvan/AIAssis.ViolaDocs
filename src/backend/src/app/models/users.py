@@ -20,6 +20,10 @@ class User(BaseModel):
     is_maintainer = Column(Boolean, default=False, nullable=False)  # Root admin/maintainer flag for system config access
     has_completed_onboarding = Column(Boolean, default=False, nullable=False)  # Track if user has completed onboarding tour
     last_login_at = Column(DateTime, nullable=True)  # Track last login time
+    date_of_birth = Column(DateTime, nullable=True)  # User's date of birth
+    phone = Column(String(20), nullable=True)  # User's phone number
+    address = Column(String(500), nullable=True)  # User's address
+    avatar_url = Column(String(500), nullable=True)  # URL to user's avatar image
     
     # Many-to-many relationship with Role
     roles = relationship("Role", secondary="user_roles", back_populates="users")

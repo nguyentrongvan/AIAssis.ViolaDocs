@@ -103,6 +103,10 @@
             </div>
           </div>
           <div class="user-info-actions">
+            <router-link to="/profile" class="btn-link profile-btn">
+              <User class="profile-icon" />
+              <span>{{ $t('profile.title') }}</span>
+            </router-link>
             <router-link to="/preferences" class="btn-link preferences-btn">
               <Settings class="preferences-icon" />
               <span>{{ $t('preferences.title') }}</span>

@@ -183,23 +183,23 @@ const presetColors = [
   { name: 'Indigo', value: '#6366F1' }
 ]
 
-const fontSizes = [
+const fontSizes = computed(() => [
   { value: 'small', label: t('preferences.fontSizeSmall') },
   { value: 'medium', label: t('preferences.fontSizeMedium') },
   { value: 'large', label: t('preferences.fontSizeLarge') }
-]
+])
 
-const borderRadii = [
+const borderRadii = computed(() => [
   { value: 'small', label: t('preferences.borderRadiusSmall') },
   { value: 'medium', label: t('preferences.borderRadiusMedium') },
   { value: 'large', label: t('preferences.borderRadiusLarge') }
-]
+])
 
-const animationSpeeds = [
+const animationSpeeds = computed(() => [
   { value: 'fast', label: t('preferences.animationSpeedFast') },
   { value: 'normal', label: t('preferences.animationSpeedNormal') },
   { value: 'slow', label: t('preferences.animationSpeedSlow') }
-]
+])
 
 const previewStyle = computed(() => {
   if (!localPreferences.value.primary_color) return {}

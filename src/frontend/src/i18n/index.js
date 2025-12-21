@@ -23,7 +23,9 @@ const i18n = createI18n({
     ja,
     zh
   },
-  globalInjection: true
+  globalInjection: true,
+  warnHtmlMessage: false,
+  escapeParameter: false
 })
 
 export default i18n

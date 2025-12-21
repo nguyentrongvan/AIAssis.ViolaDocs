@@ -91,6 +91,41 @@ export const useAuthStore = defineStore('auth', {
         throw e
       }
     },
+    async updateProfile(profileData) {
+      try {
+        const res = await api.put('/users/me/profile', profileData)
+        if (res.is_success && res.data) {
+          // Update user data in store
+          if (this.user) {
+            this.user = {
+              ...this.user,
+              ...res.data
+            }
+          }
+          return true
+        }
+        return false
+      } catch (e) {
+        console.error('Failed to update profile', e)
+        throw e
+      }
+    },
+    async changePassword(currentPassword, newPassword, confirmPassword) {
+      try {
+        const res = await api.put('/users/me/password', {
+          current_password: currentPassword,
+          new_password: newPassword,
+          confirm_password: confirmPassword
+        })
+        if (res.is_success) {
+          return true
+        }
+        return false
+      } catch (e) {
+        console.error('Failed to change password', e)
+        throw e
+      }
+    },
     logout() {
       this.user = null
       this.token = null

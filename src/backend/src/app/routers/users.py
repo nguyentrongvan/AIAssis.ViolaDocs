@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, UploadFile, File, Response, Query
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -11,8 +11,11 @@ from ..dependencies import get_current_user, get_current_admin_user, require_per
 from ..models.users import User
 from ..models.roles import Role
 from ..models.user_preferences import UserPreferences
-from ..services.auth import get_password_hash
+from ..services.auth import get_password_hash, verify_password
 from ..services.user_preferences_service import UserPreferencesService
+from ..services.avatar_service import upload_avatar, delete_avatar
+from ..services.storage import get_file_bytes_from_minio
+from ..utils.password_validator import PasswordValidator
 from ..utils.response import success_response, error_response
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -371,6 +374,201 @@ async def get_my_theme(
             "compact_mode": preferences.compact_mode
         }
     })
+
+
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    date_of_birth: Optional[str] = None  # ISO format date string
+    phone: Optional[str] = None
+    address: Optional[str] = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_password: str
+
+
+@router.get("/me/profile")
+async def get_my_profile(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get current user's full profile"""
+    return success_response({
+        "id": current_user.id,
+        "name": current_user.name,
+        "email": current_user.email,
+        "role": current_user.role,
+        "status": current_user.status,
+        "date_of_birth": current_user.date_of_birth.isoformat() if current_user.date_of_birth else None,
+        "phone": current_user.phone,
+        "address": current_user.address,
+        "avatar_url": current_user.avatar_url,
+        "locale": current_user.locale,
+        "time_zone": current_user.time_zone,
+        "created_at": current_user.created_at.isoformat(),
+        "last_login_at": current_user.last_login_at.isoformat() if current_user.last_login_at else None
+    })
+
+
+@router.put("/me/profile")
+async def update_my_profile(
+    payload: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update current user's profile"""
+    # Refresh user from database
+    await session.refresh(current_user)
+    
+    if payload.name is not None:
+        current_user.name = payload.name
+    if payload.date_of_birth is not None:
+        if payload.date_of_birth:
+            current_user.date_of_birth = datetime.fromisoformat(payload.date_of_birth)
+        else:
+            current_user.date_of_birth = None
+    if payload.phone is not None:
+        current_user.phone = payload.phone
+    if payload.address is not None:
+        current_user.address = payload.address
+    
+    await session.commit()
+    await session.refresh(current_user)
+    
+    return success_response({
+        "id": current_user.id,
+        "name": current_user.name,
+        "email": current_user.email,
+        "date_of_birth": current_user.date_of_birth.isoformat() if current_user.date_of_birth else None,
+        "phone": current_user.phone,
+        "address": current_user.address,
+        "avatar_url": current_user.avatar_url
+    })
+
+
+@router.post("/me/avatar")
+async def upload_my_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Upload avatar for current user"""
+    # Read file data
+    file_data = await file.read()
+    
+    # Upload avatar
+    try:
+        old_avatar_url = current_user.avatar_url
+        avatar_url = await upload_avatar(
+            current_user.id,
+            file_data,
+            file.filename,
+            file.content_type,
+            old_avatar_url
+        )
+        
+        # Update user's avatar_url
+        current_user.avatar_url = avatar_url
+        await session.commit()
+        await session.refresh(current_user)
+        
+        return success_response({
+            "avatar_url": avatar_url
+        })
+    except ValueError as e:
+        return error_response(str(e), status_code=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return error_response(f"Failed to upload avatar: {str(e)}", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@router.put("/me/password")
+async def change_my_password(
+    payload: PasswordChange,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Change current user's password"""
+    # Verify current password
+    if not verify_password(payload.current_password, current_user.password_hash):
+        return error_response("Current password is incorrect", status_code=status.HTTP_400_BAD_REQUEST)
+    
+    # Check if new password matches confirmation
+    if payload.new_password != payload.confirm_password:
+        return error_response("New password and confirmation do not match", status_code=status.HTTP_400_BAD_REQUEST)
+    
+    # Validate new password strength
+    is_valid, errors = PasswordValidator.validate(payload.new_password)
+    if not is_valid:
+        return error_response({
+            "message": "Password does not meet requirements",
+            "errors": errors
+        }, status_code=status.HTTP_400_BAD_REQUEST)
+    
+    # Update password
+    current_user.password_hash = get_password_hash(payload.new_password)
+    await session.commit()
+    
+    return success_response({
+        "message": "Password changed successfully"
+    })
+
+
+@router.get("/me/avatar")
+async def get_my_avatar(
+    object: Optional[str] = Query(None, description="Object name in MinIO (optional, will use from avatar_url if not provided)"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get current user's avatar image"""
+    from urllib.parse import urlparse, parse_qs
+    from fastapi import Query
+    
+    # Refresh user to get latest avatar_url
+    await session.refresh(current_user)
+    
+    object_name = None
+    
+    # First, try to get object_name from query parameter (if provided)
+    if object:
+        object_name = object
+    elif current_user.avatar_url:
+        # Extract object name from avatar URL stored in database
+        # URL format: /api/v1/users/me/avatar?object=avatars/{user_id}/{avatar_id}.jpg (dev) or full MinIO URL (prod)
+        if current_user.avatar_url.startswith('/api/v1/users/me/avatar'):
+            # Dev mode: extract object from query parameter in stored URL
+            parsed = urlparse(current_user.avatar_url)
+            params = parse_qs(parsed.query)
+            if 'object' in params:
+                object_name = params['object'][0]
+        elif '/avatars/' in current_user.avatar_url:
+            # Production mode: extract from MinIO URL
+            parts = current_user.avatar_url.split('/avatars/')
+            if len(parts) > 1:
+                object_name = f"avatars/{parts[-1]}"
+        elif current_user.avatar_url.startswith('http'):
+            # Full URL - extract object name
+            if '/avatars/' in current_user.avatar_url:
+                parts = current_user.avatar_url.split('/avatars/')
+                if len(parts) > 1:
+                    object_name = f"avatars/{parts[-1]}"
+    
+    if not object_name:
+        return error_response("Avatar not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Get file from MinIO
+    file_data = await get_file_bytes_from_minio(object_name)
+    if file_data:
+        return Response(
+            content=file_data,
+            media_type="image/jpeg",
+            headers={
+                "Cache-Control": "public, max-age=3600"
+            }
+        )
+    
+    return error_response("Avatar not found", status_code=status.HTTP_404_NOT_FOUND)
 
 
 @router.patch("/{user_id}/expiry")

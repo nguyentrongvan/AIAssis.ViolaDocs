@@ -51,6 +51,16 @@ export const usersAPI = {
     get: () => api.get('/users/me/preferences'),
     update: (data) => api.put('/users/me/preferences', data),
     getTheme: () => api.get('/users/me/preferences/theme')
+  },
+  profile: {
+    get: () => api.get('/users/me/profile'),
+    update: (data) => api.put('/users/me/profile', data),
+    uploadAvatar: (formData) => api.post('/users/me/avatar', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    }),
+    changePassword: (data) => api.put('/users/me/password', data)
   }
 }
 
