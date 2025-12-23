@@ -1,5 +1,6 @@
 import uuid
 import logging
+import builtins
 from typing import Optional, List, Dict, Any
 from datetime import datetime, date as date_type, timedelta
 from fastapi import APIRouter, Depends, Query, status, BackgroundTasks
@@ -848,8 +849,8 @@ async def get_available_documents(
                                     doc_id_int = int(doc_id) if isinstance(doc_id, str) else doc_id
                                     docs_with_embeddings.add(doc_id_int)
                                     if idx < 3:  # Sample first 3
-                                        # Use __builtins__.type to avoid shadowing by function parameter
-                                        sample_metas.append({"doc_id_raw":doc_id,"doc_id_type":__builtins__.type(doc_id).__name__,"doc_id_int":doc_id_int})
+                                        # Use builtins.type to avoid shadowing by function parameter
+                                        sample_metas.append({"doc_id_raw":doc_id,"doc_id_type":builtins.type(doc_id).__name__,"doc_id_int":doc_id_int})
                                 except (ValueError, TypeError) as e:
                                     # Skip invalid doc_id values
                                     logger.warning(f"[get_available_documents] Skipping invalid doc_id: {doc_id} (error: {e})", exc_info=True)

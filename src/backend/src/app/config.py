@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     # Ollama - Local LLM with OpenAI-compatible API
     ollama_base_url: str = "http://localhost:11434"  # Default to localhost, use http://ollama:11434 in docker
     ollama_api_key: str = ""  # Optional API key for OpenAI-compatible endpoints
-    ollama_llm_model: str = "llama3.2:1b"  # Default LLM model for chat
+    ollama_llm_model: str = "qwen2.5:0.5b"  # Default LLM model for chat
     ollama_embedding_model: str = "nomic-embed-text:latest"  # Default embedding model
 
     # OCR

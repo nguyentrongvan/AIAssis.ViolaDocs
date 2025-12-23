@@ -114,6 +114,16 @@ else
     echo "   Continuing anyway - user may be created on app startup..."
 fi
 
+# Initialize Ollama models
+echo ""
+echo "Initializing Ollama models..."
+if python /app/docker/init_ollama_models.py 2>&1; then
+    echo "✅ Ollama models initialization completed."
+else
+    echo "⚠️  WARNING: Ollama models initialization had issues."
+    echo "   Continuing anyway - models may be pulled manually later..."
+fi
+
 # Start the application (always start, even if previous steps had warnings)
 echo ""
 echo "Starting ViolaDocs backend server..."

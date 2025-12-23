@@ -140,6 +140,7 @@
     "failedToLoadDocument": "ドキュメントの読み込みに失敗しました",
     "ocrTextCopied": "OCRテキストをクリップボードにコピーしました",
     "failedToCopyText": "テキストのコピーに失敗しました",
+    "playAudio": "音声を再生",
     "metadataSaved": "メタデータを保存しました",
     "failedToSaveMetadata": "メタデータの保存に失敗しました",
     "invalidPositionJson": "無効な位置JSON",

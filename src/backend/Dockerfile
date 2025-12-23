@@ -29,9 +29,11 @@ COPY migrations/ ./migrations/
 COPY docker/backend_entrypoint.sh ./docker/
 COPY docker/init_root_user.py ./docker/
 COPY docker/fix_migration.py ./docker/
+COPY docker/init_ollama_models.py ./docker/
 RUN chmod +x docker/backend_entrypoint.sh
 RUN chmod +x docker/init_root_user.py
 RUN chmod +x docker/fix_migration.py
+RUN chmod +x docker/init_ollama_models.py
 
 # Set Python path
 ENV PYTHONPATH=/app/src

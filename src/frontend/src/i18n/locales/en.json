@@ -142,6 +142,7 @@
     "failedToLoadDocument": "Failed to load document",
     "ocrTextCopied": "OCR text copied to clipboard",
     "failedToCopyText": "Failed to copy text",
+    "playAudio": "Play Audio",
     "metadataSaved": "Metadata saved",
     "failedToSaveMetadata": "Failed to save metadata",
     "invalidPositionJson": "Invalid position JSON",

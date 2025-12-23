@@ -142,6 +142,7 @@
     "failedToLoadDocument": "Không thể tải tài liệu",
     "ocrTextCopied": "Văn bản OCR đã được sao chép vào clipboard",
     "failedToCopyText": "Không thể sao chép văn bản",
+    "playAudio": "Phát Audio",
     "metadataSaved": "Siêu dữ liệu đã lưu",
     "failedToSaveMetadata": "Không thể lưu siêu dữ liệu",
     "invalidPositionJson": "JSON vị trí không hợp lệ",

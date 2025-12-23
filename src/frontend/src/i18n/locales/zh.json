@@ -140,6 +140,7 @@
     "failedToLoadDocument": "加载文档失败",
     "ocrTextCopied": "OCR文本已复制到剪贴板",
     "failedToCopyText": "复制文本失败",
+    "playAudio": "播放音频",
     "metadataSaved": "元数据已保存",
     "failedToSaveMetadata": "保存元数据失败",
     "invalidPositionJson": "无效的位置JSON",

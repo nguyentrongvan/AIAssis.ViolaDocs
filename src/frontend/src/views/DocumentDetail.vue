@@ -1741,21 +1741,60 @@ const generateTTS = async () => {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  background: var(--primary-light);
-  color: var(--primary);
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
+  padding: 0.4375rem 0.9375rem;
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.12) 0%, rgba(108, 92, 231, 0.08) 100%);
+  color: #6c5ce7;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1.5px solid rgba(108, 92, 231, 0.25);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(108, 92, 231, 0.15);
+  letter-spacing: 0.01em;
+}
+
+.tag-badge:hover {
+  background: linear-gradient(135deg, #6c5ce7 0%, #5a4fcf 100%);
+  color: white;
+  border-color: #6c5ce7;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3), 0 2px 4px rgba(108, 92, 231, 0.2);
 }
 
 .tag-remove {
-  background: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(108, 92, 231, 0.15);
   border: none;
+  border-radius: 50%;
   cursor: pointer;
-  color: var(--primary);
-  font-size: 1.2rem;
+  color: #6c5ce7;
+  font-size: 1rem;
+  font-weight: 600;
   line-height: 1;
   padding: 0;
+  width: 18px;
+  height: 18px;
+  margin-left: 0.25rem;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tag-remove:hover {
+  background: rgba(220, 53, 69, 0.2);
+  color: #dc3545;
+  transform: scale(1.1);
+}
+
+.tag-badge:hover .tag-remove {
+  background: rgba(255, 255, 255, 0.25);
+  color: white;
+}
+
+.tag-badge:hover .tag-remove:hover {
+  background: rgba(220, 53, 69, 0.4);
+  color: white;
 }
 
 .comments-section {

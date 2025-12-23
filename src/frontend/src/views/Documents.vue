@@ -99,12 +99,22 @@
           <div class="card-content">
             <div class="card-header">
               <h3>{{ doc.title || $t('documents.untitledDocument') }}</h3>
-              <span 
-                v-if="doc.document_type || doc.file_extension" 
-                :class="['doc-type-badge', getDocumentTypeClass(doc)]"
-              >
-                {{ getDocumentTypeLabel(doc) }}
-              </span>
+              <div class="card-header-badges">
+                <span 
+                  v-if="doc.document_type || doc.file_extension" 
+                  :class="['doc-type-badge', getDocumentTypeClass(doc)]"
+                >
+                  {{ getDocumentTypeLabel(doc) }}
+                </span>
+                <button
+                  v-if="documentsWithAudio.has(doc.id)"
+                  @click.stop="openDocumentWithAudio(doc.id)"
+                  class="audio-icon-btn"
+                  :title="$t('documents.playAudio')"
+                >
+                  <Volume2 :size="16" />
+                </button>
+              </div>
             </div>
             <div class="card-meta">
               <StatusBadge :status="doc.status" />
@@ -196,6 +206,14 @@
                       {{ getDocumentTypeLabel(doc) }}
                     </span>
                     <span class="table-title-text">{{ doc.title || $t('documents.untitledDocument') }}</span>
+                    <button
+                      v-if="documentsWithAudio.has(doc.id)"
+                      @click.stop="openDocumentWithAudio(doc.id)"
+                      class="audio-icon-btn-small"
+                      :title="$t('documents.playAudio')"
+                    >
+                      <Volume2 :size="14" />
+                    </button>
                   </div>
                 </div>
               </td>
@@ -281,7 +299,8 @@ import {
   FileText,
   Folder,
   X,
-  Trash2
+  Trash2,
+  Volume2
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -297,6 +316,7 @@ const viewMode = ref('cards')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const documentsWithAudio = ref(new Set())
 const showDeleteModal = ref(false)
 const documentToDelete = ref(null)
 const purgeGracePeriodDays = ref(1)
@@ -447,6 +467,9 @@ const loadDocuments = async () => {
     if (res.is_success) {
       documents.value = res.data?.items || res.data || []
       total.value = res.data?.total || documents.value.length
+      
+      // Check which documents have audio (async, non-blocking)
+      checkAudioAvailability()
     }
   } catch (e) {
     console.error('Failed to load documents', e)
@@ -501,6 +524,30 @@ const confirmDelete = async (doc) => {
   
   documentToDelete.value = doc
   showDeleteModal.value = true
+}
+
+const checkAudioAvailability = async () => {
+  // Check audio availability for all documents in parallel (non-blocking)
+  const checkPromises = documents.value.map(async (doc) => {
+    try {
+      // Try to get TTS - if it exists, document has audio
+      await documentsAPI.getTTS(doc.id)
+      documentsWithAudio.value.add(doc.id)
+    } catch (e) {
+      // 404 means no audio - silently ignore
+      // Other errors also mean no audio available
+    }
+  })
+  
+  // Don't await - let it run in background
+  Promise.all(checkPromises).catch(() => {
+    // Ignore errors
+  })
+}
+
+const openDocumentWithAudio = (docId) => {
+  // Navigate to document detail - audio will auto-load if available
+  router.push(`/documents/${docId}`)
 }
 
 const deleteDocument = async () => {
@@ -756,6 +803,68 @@ onMounted(async () => {
   gap: var(--space-sm);
 }
 
+.card-header-badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.audio-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.12) 0%, rgba(108, 92, 231, 0.08) 100%);
+  border: 1.5px solid rgba(108, 92, 231, 0.25);
+  border-radius: 50%;
+  color: #6c5ce7;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(108, 92, 231, 0.1);
+  flex-shrink: 0;
+}
+
+.audio-icon-btn:hover {
+  background: linear-gradient(135deg, #6c5ce7 0%, #5a4fcf 100%);
+  color: white;
+  border-color: #6c5ce7;
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3), 0 2px 4px rgba(108, 92, 231, 0.2);
+}
+
+.audio-icon-btn:active {
+  transform: translateY(-1px) scale(1.02);
+}
+
+.audio-icon-btn-small {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.12) 0%, rgba(108, 92, 231, 0.08) 100%);
+  border: 1.5px solid rgba(108, 92, 231, 0.25);
+  border-radius: 50%;
+  color: #6c5ce7;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(108, 92, 231, 0.1);
+  flex-shrink: 0;
+  margin-left: var(--space-xs);
+}
+
+.audio-icon-btn-small:hover {
+  background: linear-gradient(135deg, #6c5ce7 0%, #5a4fcf 100%);
+  color: white;
+  border-color: #6c5ce7;
+  transform: translateY(-1px) scale(1.05);
+  box-shadow: 0 3px 8px rgba(108, 92, 231, 0.3);
+}
+
 .card-content h3 {
   font-size: 1rem;
   font-weight: 600;
@@ -892,22 +1001,27 @@ onMounted(async () => {
 }
 
 .tag-small {
-  padding: 0.25rem 0.625rem;
-  background: linear-gradient(135deg, var(--primary-light) 0%, rgba(108, 92, 231, 0.1) 100%);
-  border-radius: var(--radius-full);
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--primary-dark);
-  border: 1px solid rgba(108, 92, 231, 0.2);
-  transition: all var(--transition-base);
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.875rem;
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.12) 0%, rgba(108, 92, 231, 0.08) 100%);
+  border-radius: 20px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #6c5ce7;
+  border: 1.5px solid rgba(108, 92, 231, 0.25);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(108, 92, 231, 0.1);
+  letter-spacing: 0.01em;
 }
 
 .tag-small:hover {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  background: linear-gradient(135deg, #6c5ce7 0%, #5a4fcf 100%);
   color: white;
-  border-color: var(--primary);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+  border-color: #6c5ce7;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3), 0 2px 4px rgba(108, 92, 231, 0.2);
 }
 
 .tag-more-wrapper {
@@ -916,21 +1030,27 @@ onMounted(async () => {
 }
 
 .tag-more {
-  padding: 0.25rem 0.625rem;
-  background: var(--bg-light);
-  border-radius: var(--radius-full);
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--text-medium);
-  border: 1px solid #e5e7eb;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.875rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 20px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #6c757d;
+  border: 1.5px solid #dee2e6;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .tag-more:hover {
-  background: var(--primary-light);
-  color: var(--primary-dark);
-  border-color: var(--primary);
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.15) 0%, rgba(108, 92, 231, 0.1) 100%);
+  color: #6c5ce7;
+  border-color: rgba(108, 92, 231, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(108, 92, 231, 0.2);
 }
 
 .tag-tooltip {
@@ -979,11 +1099,16 @@ onMounted(async () => {
 }
 
 .tag-tooltip-item {
-  padding: 0.25rem 0.5rem;
-  background: linear-gradient(135deg, var(--primary-light) 0%, rgba(108, 92, 231, 0.1) 100%);
-  border-radius: var(--radius-sm);
-  font-size: 0.75rem;
-  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.75rem;
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.12) 0%, rgba(108, 92, 231, 0.08) 100%);
+  border-radius: 16px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #6c5ce7;
+  border: 1.5px solid rgba(108, 92, 231, 0.25);
+  box-shadow: 0 1px 2px rgba(108, 92, 231, 0.1);
   color: var(--primary-dark);
   border: 1px solid rgba(108, 92, 231, 0.2);
 }

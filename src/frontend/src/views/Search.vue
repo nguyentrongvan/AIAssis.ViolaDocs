@@ -862,11 +862,27 @@ const formatDate = (dateStr) => {
 }
 
 .tag {
-  background: var(--primary-light);
-  color: var(--primary);
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4375rem 0.9375rem;
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.12) 0%, rgba(108, 92, 231, 0.08) 100%);
+  color: #6c5ce7;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1.5px solid rgba(108, 92, 231, 0.25);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(108, 92, 231, 0.15);
+  letter-spacing: 0.01em;
+}
+
+.tag:hover {
+  background: linear-gradient(135deg, #6c5ce7 0%, #5a4fcf 100%);
+  color: white;
+  border-color: #6c5ce7;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3), 0 2px 4px rgba(108, 92, 231, 0.2);
 }
 
 .results-table {
@@ -913,12 +929,28 @@ const formatDate = (dateStr) => {
 }
 
 .tag-small {
-  background: var(--primary-light);
-  color: var(--primary);
-  padding: 0.125rem 0.5rem;
-  border-radius: 8px;
-  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.875rem;
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.12) 0%, rgba(108, 92, 231, 0.08) 100%);
+  color: #6c5ce7;
+  border-radius: 20px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: 1.5px solid rgba(108, 92, 231, 0.25);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(108, 92, 231, 0.1);
+  letter-spacing: 0.01em;
   margin-right: 0.25rem;
+}
+
+.tag-small:hover {
+  background: linear-gradient(135deg, #6c5ce7 0%, #5a4fcf 100%);
+  color: white;
+  border-color: #6c5ce7;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3), 0 2px 4px rgba(108, 92, 231, 0.2);
 }
 
 .btn-link-small {
@@ -1061,11 +1093,25 @@ const formatDate = (dateStr) => {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  background: var(--primary-light);
-  color: var(--primary);
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
+  padding: 0.4375rem 0.9375rem;
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.12) 0%, rgba(108, 92, 231, 0.08) 100%);
+  color: #6c5ce7;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1.5px solid rgba(108, 92, 231, 0.25);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(108, 92, 231, 0.15);
+  letter-spacing: 0.01em;
+}
+
+.tag-badge:hover {
+  background: linear-gradient(135deg, #6c5ce7 0%, #5a4fcf 100%);
+  color: white;
+  border-color: #6c5ce7;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3), 0 2px 4px rgba(108, 92, 231, 0.2);
 }
 
 .tag-remove {
