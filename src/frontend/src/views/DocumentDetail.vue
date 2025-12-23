@@ -116,56 +116,66 @@
             <h3>{{ $t('documentDetail.textToSpeech') }}</h3>
           </div>
           <div class="tts-controls">
-            <div class="form-group">
-              <label>{{ $t('documentDetail.playbackSpeed') }}</label>
-              <div class="speed-control">
-                <input
-                  type="range"
-                  v-model.number="ttsSpeed"
-                  min="0.5"
-                  max="2.0"
-                  step="0.25"
-                  class="speed-slider"
-                />
-                <span class="speed-value">{{ ttsSpeed }}x</span>
+            <div class="tts-controls-row">
+              <div class="form-group speed-control-group">
+                <label>{{ $t('documentDetail.playbackSpeed') }}</label>
+                <div class="speed-control">
+                  <input
+                    type="range"
+                    v-model.number="ttsSpeed"
+                    min="0.5"
+                    max="2.0"
+                    step="0.25"
+                    class="speed-slider"
+                  />
+                  <span class="speed-value">{{ ttsSpeed }}x</span>
+                </div>
+                <div class="speed-buttons">
+                  <button
+                    v-for="speed in [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]"
+                    :key="speed"
+                    @click="ttsSpeed = speed"
+                    :class="['btn-small', { 'btn-active': ttsSpeed === speed }]"
+                  >
+                    {{ speed }}x
+                  </button>
+                </div>
               </div>
-              <div class="speed-buttons">
+              <div class="form-group generate-button-group">
                 <button
-                  v-for="speed in [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]"
-                  :key="speed"
-                  @click="ttsSpeed = speed"
-                  :class="['btn-small', { 'btn-active': ttsSpeed === speed }]"
+                  @click="generateTTS"
+                  :disabled="generatingTTS || !hasTextContent"
+                  class="btn-primary"
                 >
-                  {{ speed }}x
+                  <Loader v-if="generatingTTS" :size="14" class="spinning" />
+                  <template v-if="generatingTTS">
+                    {{ $t('documentDetail.generatingTTS') }}
+                  </template>
+                  <template v-else-if="ttsAudioUrl">
+                    {{ $t('documentDetail.regenerateTTS') }}
+                  </template>
+                  <template v-else>
+                    {{ $t('documentDetail.generateTTS') }}
+                  </template>
                 </button>
               </div>
             </div>
-            <div class="form-group">
-              <button
-                @click="generateTTS"
-                :disabled="generatingTTS || !hasTextContent"
-                class="btn-primary"
-              >
-                <Loader v-if="generatingTTS" :size="14" class="spinning" />
-                {{ generatingTTS ? $t('documentDetail.generatingTTS') : $t('documentDetail.generateTTS') }}
-              </button>
-            </div>
-          </div>
-          <div v-if="ttsAudioUrl" class="tts-player">
-            <div class="audio-player-wrapper">
-              <audio
-                ref="audioPlayer"
-                :src="ttsAudioUrl"
-                controls
-                class="audio-player"
-                @loadedmetadata="onAudioLoaded"
-              ></audio>
-            </div>
-            <div class="audio-info">
-              <span class="audio-speed-badge">
-                <span class="audio-speed-icon">⚡</span>
-                {{ $t('documentDetail.currentSpeed') }}: <strong>{{ ttsSpeed }}x</strong>
-              </span>
+            <div v-if="ttsAudioUrl" class="tts-player-row">
+              <div class="audio-player-wrapper">
+                <audio
+                  ref="audioPlayer"
+                  :src="ttsAudioUrl"
+                  controls
+                  class="audio-player"
+                  @loadedmetadata="onAudioLoaded"
+                ></audio>
+              </div>
+              <div class="audio-info">
+                <span class="audio-speed-badge">
+                  <span class="audio-speed-icon">⚡</span>
+                  {{ $t('documentDetail.currentSpeed') }}: <strong>{{ ttsSpeed }}x</strong>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -1433,76 +1443,16 @@ const generateTTS = async () => {
     })
     
     if (res.is_success) {
-      // Poll for job completion
-      const jobId = res.data.job_id
-      let attempts = 0
-      const maxAttempts = 30 // 30 attempts = 60 seconds (2s interval)
+      // Job created successfully - show info message and stop
+      generatingTTS.value = false
       
-      const checkJob = async () => {
-        attempts++
-        
-        try {
-          // Wait before checking
-          await new Promise(resolve => setTimeout(resolve, 2000))
-          
-          // Fetch the TTS audio with silent error handling for 404
-          let audioRes = null
-          try {
-            audioRes = await documentsAPI.getTTS(document.value.id)
-          } catch (e) {
-            // 404 is expected when TTS is not ready yet - don't treat as error
-            if (e.response?.status === 404) {
-              // TTS not ready yet, will retry
-              if (attempts < maxAttempts) {
-                // Only log every 5 attempts to reduce console noise
-                if (attempts % 5 === 0) {
-                  console.log(`TTS generation in progress... (${attempts}/${maxAttempts})`)
-                }
-                setTimeout(checkJob, 2000)
-                return
-              } else {
-                // Max attempts reached
-                console.warn('TTS generation timed out after 60 seconds')
-                if (window.$toast) {
-                  window.$toast.show(t('documentDetail.ttsGenerationFailed'), 'error')
-                }
-                generatingTTS.value = false
-                return
-              }
-            } else {
-              // Real error (not 404)
-              throw e
-            }
-          }
-          
-          // If we got a blob response, TTS is ready
-          if (audioRes) {
-            // Create blob URL from response
-            const blob = audioRes
-            ttsAudioUrl.value = URL.createObjectURL(blob)
-            
-            // Set playback speed on audio element
-            if (audioPlayer.value) {
-              audioPlayer.value.playbackRate = ttsSpeed.value
-            }
-            
-            if (window.$toast) {
-              window.$toast.show(t('documentDetail.ttsGenerated'), 'success')
-            }
-            generatingTTS.value = false
-          }
-        } catch (e) {
-          // Real error (not 404)
-          console.error('Error fetching TTS:', e)
-          if (window.$toast) {
-            window.$toast.show(t('documentDetail.ttsGenerationFailed'), 'error')
-          }
-          generatingTTS.value = false
-        }
+      if (window.$toast) {
+        window.$toast.show(
+          t('documentDetail.ttsGenerationStarted'), 
+          'info',
+          { duration: 8000 } // Show for 8 seconds
+        )
       }
-      
-      // Start polling
-      checkJob()
     } else {
       if (window.$toast) {
         window.$toast.show(res.message || t('documentDetail.ttsGenerationFailed'), 'error')
@@ -2470,6 +2420,40 @@ const generateTTS = async () => {
   gap: var(--space-md);
 }
 
+.tts-controls-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.speed-control-group {
+  flex: 1;
+  min-width: 300px;
+}
+
+.generate-button-group {
+  flex-shrink: 0;
+}
+
+.tts-player-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-color);
+}
+
+.tts-player-row .audio-player-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.tts-player-row .audio-info {
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
 .spinning {
   animation: spin 1s linear infinite;
 }
@@ -2483,11 +2467,6 @@ const generateTTS = async () => {
   }
 }
 
-.tts-player {
-  margin-top: var(--space-md);
-  padding-top: var(--space-md);
-  border-top: 1px solid var(--border-color);
-}
 
 .audio-player-wrapper {
   background: var(--bg-light);
