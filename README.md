@@ -20,6 +20,8 @@
 ### Why ViolaDocs?
 
 ✨ **Intelligent Document Processing** - Automatically extract text from images and PDFs using Tesseract OCR supporting multiple languages (en, vi, ja, ko, zh, fr, de, es)  
+🔊 **Text-to-Speech (TTS)** - Convert document text to speech audio with adjustable playback speed (0.5x - 2.0x) using Google TTS  
+🌐 **Language Detection** - Automatic language detection from document content with confidence scores  
 🤖 **AI Document Intelligence** - Automatic document summarization, tagging, classification, and entity extraction powered by local LLM (Ollama)  
 🔍 **Semantic Search** - Find documents by meaning, not just keywords, using hybrid vector (Qdrant) and keyword search  
 💬 **AI-Powered Assistant** - Get instant answers from your document library with our RAG-powered chatbot  
@@ -35,6 +37,18 @@
 
 - **📄 Document Management**: Upload, version control, search, and organize documents with intuitive folder structures
 - **👁️ OCR Processing**: Tesseract OCR support for multiple languages (English, Vietnamese, Japanese, Korean, Chinese, French, German, Spanish) with high accuracy
+- **🔊 Text-to-Speech (TTS)**: 
+  - Convert document text to speech audio
+  - Adjustable playback speed (0.5x - 2.0x)
+  - Support for multiple languages (en, vi, ja, zh, ko, fr, de, es)
+  - Automatic language detection before TTS generation
+  - Async processing for large documents
+- **🌐 Language Detection**: 
+  - Automatic language detection from document content
+  - Confidence scores for detected languages
+  - Integrated into OCR processing workflow
+  - Manual detection available via API
+  - Language metadata stored in document metadata
 - **🤖 AI Document Intelligence**: 
   - Automatic document summarization after OCR and tagging (configurable max length)
   - Automatic tag generation from document content
@@ -61,6 +75,8 @@ This project serves as a **practice implementation** demonstrating modern develo
 
 - **Document Management**: Upload, version control, search, and organize documents
 - **OCR Processing**: Tesseract OCR support for multiple languages (en, vi, ja, ko, zh, fr, de, es)
+- **Text-to-Speech (TTS)**: Convert document text to speech with adjustable speed
+- **Language Detection**: Automatic language detection from document content
 - **AI Document Intelligence**: Automatic summarization, tagging, classification, entity extraction, and document comparison
 - **Semantic Search**: Hybrid keyword + vector search using Qdrant
 - **AI Chatbot**: RAG-powered assistant with document group scoping
@@ -81,8 +97,10 @@ This project serves as a **practice implementation** demonstrating modern develo
 - **LLM & Embeddings**: Ollama (local LLM with OpenAI-compatible API)
   - Supports various models: Llama 3.2, Llama 3.1, Qwen2.5, Qwen3, Mistral, Gemma2, etc.
   - Embedding models: nomic-embed-text, etc.
+- **TTS Engine**: Google Text-to-Speech (gTTS) with pydub for audio processing
+- **Language Detection**: langdetect library for automatic language identification
 - **Background Workers**: 
-  - OCR Worker (for async OCR processing, tagging, summarization)
+  - OCR Worker (for async OCR processing, tagging, summarization, TTS, language detection)
   - Purge Worker (for document retention and cleanup)
 - **Other**: Alembic (migrations), SQLAlchemy (ORM), httpx (async HTTP)
 
