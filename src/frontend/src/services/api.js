@@ -25,6 +25,11 @@ api.interceptors.response.use(
       localStorage.removeItem('refresh_token')
       window.location.href = '/login'
     }
+    // Don't log 404 errors for TTS polling (expected behavior)
+    if (error.config?.url?.includes('/tts') && error.response?.status === 404) {
+      // Silently handle 404 for TTS - it means TTS is not ready yet
+      return Promise.reject(error)
+    }
     return Promise.reject(error)
   }
 )
@@ -98,6 +103,27 @@ export const documentsAPI = {
   compareVersions: (id, v1, v2) => api.get(`/documents/${id}/versions/${v1}/diff/${v2}`),
   comments: (id) => api.get(`/documents/${id}/comments`),
   createComment: (id, data) => api.post(`/documents/${id}/comments`, data),
+  generateTTS: (id, data) => api.post(`/documents/${id}/tts/generate`, data),
+  getTTS: (id) => {
+    // Use axios directly with validateStatus to prevent console errors for expected 404s
+    const token = localStorage.getItem('access_token')
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
+    return axios.get(`${API_BASE}/documents/${id}/tts`, {
+      responseType: 'blob',
+      headers,
+      validateStatus: (status) => status === 200 || status === 404 // Don't throw on 404
+    }).then(response => {
+      if (response.status === 404) {
+        // TTS not ready yet - return error but don't log to console
+        const error = new Error('TTS not ready')
+        error.response = { status: 404 }
+        error.config = { url: `/documents/${id}/tts` } // Mark as TTS request
+        throw error
+      }
+      return response.data
+    })
+  },
+  detectLanguage: (id) => api.post(`/documents/${id}/detect-language`),
   updateComment: (id, commentId, data) => api.patch(`/documents/${id}/comments/${commentId}`, data),
   deleteComment: (id, commentId) => api.delete(`/documents/${id}/comments/${commentId}`),
   download: (id) => api.get(`/documents/${id}/download`, { responseType: 'blob' }),
@@ -239,6 +265,14 @@ export const settingsAPI = {
   purgeGracePeriod: {
     get: () => api.get('/settings/purge_grace_period'),
     update: (days) => api.put('/settings/purge_grace_period', { days })
+  },
+  ttsDefaultSpeed: {
+    get: () => api.get('/settings/tts/default-speed'),
+    update: (data) => api.post('/settings/tts/default-speed', data)
+  },
+  ttsChunkSize: {
+    get: () => api.get('/settings/tts/chunk-size'),
+    update: (data) => api.post('/settings/tts/chunk-size', data)
   }
 }
 

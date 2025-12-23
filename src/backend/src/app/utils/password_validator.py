@@ -99,3 +99,5 @@ class PasswordValidator:
         else:
             return 'weak'
 
+
+

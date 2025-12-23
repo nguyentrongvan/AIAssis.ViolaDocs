@@ -21,3 +21,5 @@ class UserPreferences(BaseModel):
         UniqueConstraint('user_id', name='uq_user_preferences_user_id'),
     )
 
+
+

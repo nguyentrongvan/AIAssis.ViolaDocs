@@ -341,6 +341,34 @@ async def get_provider_settings(
             "description": "Mature, stable, multi-language support. Requires system installation."
         })
     
+    # Check TTS providers
+    tts_providers = []
+    
+    # gTTS
+    try:
+        from gtts import gTTS
+        gTTS("test")  # Quick test
+        tts_providers.append({
+            "name": "gtts",
+            "enabled": True,
+            "health": "available",
+            "description": "Free Google Text-to-Speech (requires internet connection)"
+        })
+    except ImportError:
+        tts_providers.append({
+            "name": "gtts",
+            "enabled": True,
+            "health": "not_installed",
+            "description": "Free Google Text-to-Speech (requires internet connection). Install with: pip install gtts"
+        })
+    except Exception as e:
+        tts_providers.append({
+            "name": "gtts",
+            "enabled": True,
+            "health": "error",
+            "description": f"gTTS error: {str(e)}"
+        })
+    
     return success_response({
         "ocr": ocr_providers,
         "embedding": [
@@ -361,6 +389,7 @@ async def get_provider_settings(
                 "description": "Local LLM via Ollama OpenAI-compatible API"
             }
         ],
+        "tts": tts_providers,
         "search": [
             {
                 "name": "postgres",
@@ -396,6 +425,23 @@ async def update_provider_settings(
                     session
                 )
                 updated_keys.append(f"ocr.{provider_name}.enabled")
+    
+    # Update TTS provider enabled states
+    if "tts" in payload and isinstance(payload["tts"], list):
+        for provider in payload["tts"]:
+            if "name" in provider and "enabled" in provider:
+                provider_name = provider["name"]
+                enabled = provider.get("enabled", False)
+                await SettingsService.set_setting(
+                    f"tts.{provider_name}.enabled",
+                    enabled,
+                    "tts",
+                    f"{provider_name} TTS provider enabled",
+                    False,
+                    current_user.id,
+                    session
+                )
+                updated_keys.append(f"tts.{provider_name}.enabled")
     
     return success_response({
         "message": "Provider settings updated",
@@ -1491,3 +1537,109 @@ async def test_ollama_model(
             f"Error: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+# TTS Settings Models
+class TTSDefaultSpeedUpdate(BaseModel):
+    speed: float
+
+
+class TTSChunkSizeUpdate(BaseModel):
+    chunk_size: int
+
+
+@router.get("/tts/default-speed")
+async def get_tts_default_speed(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get default TTS playback speed setting"""
+    default_speed = await SettingsService.get_setting(
+        "tts.default_speed",
+        default=1.0,
+        session=session
+    )
+    
+    return success_response({
+        "speed": default_speed,
+        "min": 0.5,
+        "max": 2.0
+    })
+
+
+@router.post("/tts/default-speed")
+async def update_tts_default_speed(
+    payload: TTSDefaultSpeedUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update default TTS playback speed setting"""
+    if payload.speed < 0.5 or payload.speed > 2.0:
+        return error_response(
+            "Speed must be between 0.5 and 2.0",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    
+    await SettingsService.set_setting(
+        "tts.default_speed",
+        payload.speed,
+        "tts",
+        "Default TTS playback speed",
+        False,
+        current_user.id,
+        session
+    )
+    
+    return success_response({
+        "speed": payload.speed,
+        "message": "Default TTS speed updated"
+    })
+
+
+@router.get("/tts/chunk-size")
+async def get_tts_chunk_size(
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get TTS chunk size setting"""
+    chunk_size = await SettingsService.get_setting(
+        "tts.chunk_size",
+        default=1200,
+        session=session
+    )
+    
+    return success_response({
+        "chunk_size": chunk_size,
+        "min": 1000,
+        "max": 1500,
+        "message": "TTS chunk size retrieved"
+    })
+
+
+@router.post("/tts/chunk-size")
+async def update_tts_chunk_size(
+    payload: TTSChunkSizeUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update TTS chunk size setting"""
+    if payload.chunk_size < 1000 or payload.chunk_size > 1500:
+        return error_response(
+            "Chunk size must be between 1000 and 1500 characters",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    
+    await SettingsService.set_setting(
+        "tts.chunk_size",
+        payload.chunk_size,
+        "tts",
+        "TTS chunk size for long text processing (1000-1500 characters)",
+        False,
+        current_user.id,
+        session
+    )
+    
+    return success_response({
+        "chunk_size": payload.chunk_size,
+        "message": "TTS chunk size updated"
+    })

@@ -34,7 +34,7 @@ async def embedding_health_check():
 
 @router.get("/health/workers")
 async def workers_health_check(session: AsyncSession = Depends(get_session)):
-    """Check OCR worker health status"""
+    """Check AI worker health status"""
     # Get active workers (jobs with recent heartbeat)
     heartbeat_threshold = datetime.utcnow() - timedelta(minutes=2)
     

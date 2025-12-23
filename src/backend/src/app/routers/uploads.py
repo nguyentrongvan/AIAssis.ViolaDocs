@@ -267,7 +267,7 @@ async def finalize_upload(
         session.add(ocr_job)
         await session.flush()
         
-        # Job will be automatically processed by OCR worker service (Docker)
+        # Job will be automatically processed by AI worker service (Docker)
         # The worker will claim and process this job using SELECT FOR UPDATE SKIP LOCKED
     elif mime in [
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # DOCX
@@ -292,6 +292,10 @@ async def finalize_upload(
         await session.flush()
         
         # Job will be automatically processed by worker service
+    
+    # NOTE: TTS (Text-to-Speech) is NOT automatically generated on upload.
+    # TTS will only be created when user explicitly requests it via the "Generate Speech" button
+    # in the document detail page, which calls POST /documents/{doc_id}/tts/generate
     
     # Get share permissions (default to ["view"] if not provided)
     share_permissions = request.share_permissions or ["view"]

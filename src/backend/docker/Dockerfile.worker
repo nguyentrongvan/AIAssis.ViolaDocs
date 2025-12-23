@@ -1,4 +1,4 @@
-# Dockerfile for OCR Worker Service
+# Dockerfile for AI Worker Service (handles OCR, Text Extraction, Embedding, TTS, Language Detection)
 FROM python:3.10-slim
 
 # Install system dependencies including Tesseract OCR and build tools
@@ -24,6 +24,8 @@ RUN apt-get update && apt-get install -y \
     libopenjp2-7-dev \
     # PDF processing
     poppler-utils \
+    # Audio processing (required for pydub to merge TTS audio chunks)
+    ffmpeg \
     # Cleanup
     && rm -rf /var/lib/apt/lists/*
 
@@ -49,16 +51,18 @@ COPY src/ ./src/
 COPY alembic.ini .
 COPY migrations/ ./migrations/
 COPY docker/worker_entrypoint.sh ./
+COPY docker/fix_migration.py ./docker/
 RUN chmod +x worker_entrypoint.sh
+RUN chmod +x docker/fix_migration.py
 
 # Set Python path
 ENV PYTHONPATH=/app/src
 
 # Default environment variables
-ENV OCR_WORKER_POLL_INTERVAL=2
-ENV OCR_WORKER_MAX_CONCURRENT=2
-ENV OCR_WORKER_HEARTBEAT_INTERVAL=30
-ENV OCR_WORKER_STUCK_TIMEOUT=10
+ENV AI_WORKER_POLL_INTERVAL=2
+ENV AI_WORKER_MAX_CONCURRENT=2
+ENV AI_WORKER_HEARTBEAT_INTERVAL=30
+ENV AI_WORKER_STUCK_TIMEOUT=10
 
 # Run migrations and start worker
 CMD ["./worker_entrypoint.sh"]

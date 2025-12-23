@@ -1,7 +1,6 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
 
-REM Get script directory and project root
 set "SCRIPT_DIR=%~dp0"
 set "PROJECT_ROOT=%SCRIPT_DIR%"
 cd /d "%PROJECT_ROOT%"
@@ -11,35 +10,50 @@ echo ViolaDocs Platform - Stop Script
 echo ==========================================
 
 echo.
-echo [STOP] Stopping ViolaDocs Platform...
+call :ColorEcho Red "[STOP] Stopping ViolaDocs Platform..."
 echo.
 echo Select mode to stop:
-echo   1) Development
-echo   2) Production
-echo   3) Both (all running containers)
+echo   1^) Development
+echo   2^) Production
+echo   3^) Both (all running containers)
 echo.
 set /p mode="Enter choice [1-3] (default: 3): "
 if "%mode%"=="" set mode=3
 
 if "%mode%"=="1" (
-    echo Stopping Development mode...
+    call :ColorEcho Cyan "[INFO] Stopping Development mode..."
     docker-compose -f docker/docker-compose.base.yml -f docker/dev/docker-compose.yml down
+    if errorlevel 1 (
+        call :ColorEcho Red "[ERROR] Failed to stop Development services."
+        exit /b 1
+    )
+    call :ColorEcho Green "[OK] Development services stopped successfully."
 ) else if "%mode%"=="2" (
-    echo Stopping Production mode...
+    call :ColorEcho Cyan "[INFO] Stopping Production mode..."
     docker-compose -f docker/docker-compose.base.yml -f docker/prod/docker-compose.yml down
+    if errorlevel 1 (
+        call :ColorEcho Red "[ERROR] Failed to stop Production services."
+        exit /b 1
+    )
+    call :ColorEcho Green "[OK] Production services stopped successfully."
 ) else (
-    echo Stopping all containers...
+    call :ColorEcho Cyan "[INFO] Stopping all containers..."
     docker-compose -f docker/docker-compose.base.yml -f docker/dev/docker-compose.yml down 2>nul
     docker-compose -f docker/docker-compose.base.yml -f docker/prod/docker-compose.yml down 2>nul
+    call :ColorEcho Green "[OK] All services stopped successfully."
 )
 
 echo.
-echo [OK] All services stopped!
+call :ColorEcho Green "[OK] All services stopped!"
 echo.
-echo [TIP] To remove volumes (data will be lost):
+call :ColorEcho Yellow "[TIP] To remove volumes (data will be lost):"
 echo    docker-compose -f docker/docker-compose.base.yml -f docker/dev/docker-compose.yml down -v
 echo    docker-compose -f docker/docker-compose.base.yml -f docker/prod/docker-compose.yml down -v
 echo.
 
 endlocal
+exit /b 0
 
+:ColorEcho
+powershell -NoProfile -Command "Write-Host '%~2' -ForegroundColor %~1"
+exit /b

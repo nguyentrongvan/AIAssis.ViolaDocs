@@ -93,6 +93,12 @@ class ShareRequest(BaseModel):
     permissions: Optional[list[str]] = None
 
 
+class TTSGenerateRequest(BaseModel):
+    voice_id: Optional[int] = None  # If None, auto-select based on document language
+    speed: float = 1.0  # Speed range: 0.5-2.0
+    provider: Optional[str] = "gtts"  # TTS provider name
+
+
 @router.post("")
 async def create_document(
     request: DocumentCreate,
@@ -1550,6 +1556,255 @@ async def preview_object(
         media_type=content_type,
         headers={
             "Content-Disposition": "inline",  # inline for browser preview
+            "Content-Length": str(len(file_bytes))
+        }
+    )
+
+
+@router.post("/{doc_id}/detect-language")
+async def detect_document_language(
+    doc_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Detect language for a document"""
+    # Check document access
+    result = await session.execute(
+        select(Document).where(
+            and_(
+                Document.id == doc_id,
+                Document.deleted_at.is_(None)
+            )
+        )
+    )
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Check access
+    has_access, _, reason = await check_document_access(session, current_user, doc, "view")
+    if not has_access:
+        return error_response(reason or "Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    
+    # Get latest version with text
+    version_result = await session.execute(
+        select(DocumentVersion)
+        .where(DocumentVersion.document_id == doc_id)
+        .order_by(DocumentVersion.version_no.desc())
+        .limit(1)
+    )
+    version = version_result.scalar_one_or_none()
+    
+    if not version or not version.text_uri:
+        return error_response("Document must be processed (OCR/text extraction) before detecting language", status_code=status.HTTP_400_BAD_REQUEST)
+    
+    # Read text from MinIO
+    from ..services.storage import get_file_bytes_from_minio
+    try:
+        text_bytes = await get_file_bytes_from_minio(version.text_uri)
+        if not text_bytes:
+            return error_response("Failed to read document text", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        text_content = text_bytes.decode('utf-8')
+    except Exception as e:
+        return error_response(f"Failed to read document text: {str(e)}", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    # Detect language
+    from ..services.language_detection_service import LanguageDetectionService
+    language_info = LanguageDetectionService.detect_language(text_content)
+    
+    # Save to document metadata
+    # IMPORTANT: SQLAlchemy doesn't detect changes inside JSON dict
+    # Must create a new dict to trigger update
+    current_metadata = dict(doc.file_metadata) if doc.file_metadata else {}
+    current_metadata["language"] = language_info
+    doc.file_metadata = current_metadata  # Reassign to trigger SQLAlchemy change detection
+    
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(doc, "file_metadata")
+    
+    await session.commit()
+    
+    return success_response({
+        "language": language_info,
+        "message": "Language detected successfully"
+    })
+
+
+@router.post("/{doc_id}/tts/generate")
+async def generate_document_tts(
+    doc_id: int,
+    request: TTSGenerateRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Generate TTS audio for a document.
+    
+    NOTE: TTS is only generated when explicitly requested by the user.
+    It is NOT automatically created during document upload or processing.
+    """
+    # Check document access
+    result = await session.execute(
+        select(Document).where(
+            and_(
+                Document.id == doc_id,
+                Document.deleted_at.is_(None)
+            )
+        )
+    )
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Check access
+    has_access, _, reason = await check_document_access(session, current_user, doc, "view")
+    if not has_access:
+        return error_response(reason or "Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    
+    # Validate speed
+    if request.speed < 0.5 or request.speed > 2.0:
+        return error_response("Speed must be between 0.5 and 2.0", status_code=status.HTTP_400_BAD_REQUEST)
+    
+    # Check if document has text (must be processed first)
+    version_result = await session.execute(
+        select(DocumentVersion)
+        .where(DocumentVersion.document_id == doc_id)
+        .order_by(DocumentVersion.version_no.desc())
+        .limit(1)
+    )
+    version = version_result.scalar_one_or_none()
+    
+    if not version or not version.text_uri:
+        return error_response("Document must be processed (OCR/text extraction) before generating TTS", status_code=status.HTTP_400_BAD_REQUEST)
+    
+    # Check if language is detected, if not, detect it first
+    detected_language = None
+    if not doc.file_metadata or not doc.file_metadata.get("language"):
+        # Language not detected yet, detect it now
+        from ..services.storage import get_file_bytes_from_minio
+        from ..services.language_detection_service import LanguageDetectionService
+        from sqlalchemy.orm.attributes import flag_modified
+        
+        try:
+            text_bytes = await get_file_bytes_from_minio(version.text_uri)
+            if text_bytes:
+                text_content = text_bytes.decode('utf-8')
+                language_info = LanguageDetectionService.detect_language(text_content)
+                
+                # Save to document metadata
+                # IMPORTANT: SQLAlchemy doesn't detect changes inside JSON dict
+                current_metadata = dict(doc.file_metadata) if doc.file_metadata else {}
+                current_metadata["language"] = language_info
+                doc.file_metadata = current_metadata
+                flag_modified(doc, "file_metadata")
+                
+                await session.commit()
+                
+                detected_language = language_info.get("primary", "en")
+        except Exception as e:
+            logger.warning(f"Failed to detect language before TTS generation: {e}")
+            # Continue with default language
+            detected_language = "en"
+    else:
+        detected_language = doc.file_metadata.get("language", {}).get("primary", "en")
+    
+    # Create TTS job
+    from ..models.ai import AIJob
+    
+    job = AIJob(
+        job_type="tts",
+        target={"document_id": doc_id},
+        provider=request.provider or "gtts",
+        status="queued",
+        input_ref={
+            "voice_id": request.voice_id,
+            "speed": request.speed,
+            "provider": request.provider or "gtts",
+            "language": detected_language
+        }
+    )
+    session.add(job)
+    await session.commit()
+    await session.refresh(job)
+    
+    return success_response({
+        "job_id": job.id,
+        "status": job.status,
+        "message": "TTS generation job created",
+        "language": detected_language
+    })
+
+
+@router.get("/{doc_id}/tts")
+async def get_document_tts(
+    doc_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get TTS audio for a document (returns latest TTS job result)"""
+    # Check document access
+    result = await session.execute(
+        select(Document).where(
+            and_(
+                Document.id == doc_id,
+                Document.deleted_at.is_(None)
+            )
+        )
+    )
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        return error_response("Document not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Check access
+    has_access, _, reason = await check_document_access(session, current_user, doc, "view")
+    if not has_access:
+        return error_response(reason or "Access denied", status_code=status.HTTP_403_FORBIDDEN)
+    
+    # Find latest completed TTS job
+    from ..models.ai import AIJob
+    
+    # Query all TTS jobs and filter in Python (more reliable for JSON fields)
+    job_result = await session.execute(
+        select(AIJob)
+        .where(
+            and_(
+                AIJob.job_type == "tts",
+                AIJob.status == "completed"
+            )
+        )
+        .order_by(AIJob.created_at.desc())
+    )
+    all_jobs = job_result.scalars().all()
+    
+    # Filter jobs that match this document
+    job = None
+    for j in all_jobs:
+        if j.target and isinstance(j.target, dict):
+            target_doc_id = j.target.get("document_id")
+            if target_doc_id == doc_id:
+                job = j
+                break
+    
+    if not job or not job.output_ref:
+        return error_response("No TTS audio available. Please generate TTS first.", status_code=status.HTTP_404_NOT_FOUND)
+    
+    audio_uri = job.output_ref.get("audio_uri")
+    if not audio_uri:
+        return error_response("TTS job completed but audio URI not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    # Get audio from MinIO
+    file_bytes = await get_file_bytes_from_minio(audio_uri)
+    if not file_bytes:
+        return error_response("TTS audio file not found", status_code=status.HTTP_404_NOT_FOUND)
+    
+    return Response(
+        content=file_bytes,
+        media_type="audio/mpeg",
+        headers={
+            "Content-Disposition": f'inline; filename="tts_{doc_id}.mp3"',
             "Content-Length": str(len(file_bytes))
         }
     )

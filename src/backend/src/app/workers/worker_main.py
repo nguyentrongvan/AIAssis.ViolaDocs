@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-OCR Worker Entry Point
-Standalone service for processing OCR jobs from database
+AI Worker Entry Point
+Standalone service for processing AI jobs (OCR, Text Extraction, Embedding, TTS, Language Detection) from database
 """
 import asyncio
 import argparse
@@ -20,7 +20,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-logger.info("=== OCR Worker Main Starting ===")
+logger.info("=== AI Worker Main Starting ===")
 logger.info(f"Python version: {sys.version}")
 logger.info(f"Python executable: {sys.executable}")
 logger.info(f"Current working directory: {os.getcwd()}")
@@ -51,11 +51,11 @@ except Exception as e:
 
 # Import with error handling
 try:
-    logger.info("Importing OCRWorkerService...")
-    from app.workers.ocr_worker_service import OCRWorkerService
-    logger.info("OCRWorkerService imported successfully")
+    logger.info("Importing AIWorkerService...")
+    from app.workers.ocr_worker_service import AIWorkerService
+    logger.info("AIWorkerService imported successfully")
 except ImportError as e:
-    logger.error(f"Failed to import OCRWorkerService: {e}", exc_info=True)
+    logger.error(f"Failed to import AIWorkerService: {e}", exc_info=True)
     logger.error(f"Python path: {sys.path}")
     sys.exit(1)
 
@@ -76,7 +76,7 @@ except Exception as e:
 
 def parse_args():
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description="OCR Worker Service")
+    parser = argparse.ArgumentParser(description="AI Worker Service")
     parser.add_argument(
         "--worker-id",
         type=str,
@@ -127,10 +127,10 @@ async def main():
         
         # Get configuration
         worker_id = args.worker_id or os.getenv("WORKER_ID")
-        poll_interval = args.poll_interval or int(os.getenv("OCR_WORKER_POLL_INTERVAL", "2"))
-        max_concurrent = args.max_concurrent or int(os.getenv("OCR_WORKER_MAX_CONCURRENT", "2"))
-        heartbeat_interval = args.heartbeat_interval or int(os.getenv("OCR_WORKER_HEARTBEAT_INTERVAL", "30"))
-        stuck_timeout = args.stuck_timeout or int(os.getenv("OCR_WORKER_STUCK_TIMEOUT", "10"))
+        poll_interval = args.poll_interval or int(os.getenv("AI_WORKER_POLL_INTERVAL", "2"))
+        max_concurrent = args.max_concurrent or int(os.getenv("AI_WORKER_MAX_CONCURRENT", "2"))
+        heartbeat_interval = args.heartbeat_interval or int(os.getenv("AI_WORKER_HEARTBEAT_INTERVAL", "30"))
+        stuck_timeout = args.stuck_timeout or int(os.getenv("AI_WORKER_STUCK_TIMEOUT", "10"))
         
         logger.info("Worker configuration:")
         logger.info(f"  Worker ID: {worker_id}")
@@ -149,15 +149,15 @@ async def main():
             logger.warning(f"Could not validate database settings: {e}")
         
         # Create worker
-        logger.info("Creating OCRWorkerService...")
-        worker = OCRWorkerService(
+        logger.info("Creating AIWorkerService...")
+        worker = AIWorkerService(
             worker_id=worker_id,
             poll_interval=poll_interval,
             max_concurrent=max_concurrent,
             heartbeat_interval=heartbeat_interval,
             stuck_job_timeout_minutes=stuck_timeout
         )
-        logger.info("OCRWorkerService created successfully")
+        logger.info("AIWorkerService created successfully")
         
         # Run worker
         logger.info("Starting worker...")

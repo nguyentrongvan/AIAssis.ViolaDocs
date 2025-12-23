@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# Color codes
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
 echo "=========================================="
 echo "ViolaDocs Platform - Stop Development Mode"
 echo "=========================================="
@@ -22,9 +28,14 @@ echo "[STOP] Stopping ViolaDocs Platform (Development mode)..."
 echo ""
 
 # Stop all services
-$DOCKER_COMPOSE -f docker/docker-compose.base.yml -f docker/dev/docker-compose.yml down
+if $DOCKER_COMPOSE -f docker/docker-compose.base.yml -f docker/dev/docker-compose.yml down; then
+    echo -e "${GREEN}[✓ OK]${NC} All services stopped successfully!"
+else
+    echo -e "${RED}[✗ ERROR]${NC} Failed to stop services."
+    exit 1
+fi
 
 echo ""
-echo "[OK] All services stopped!"
+echo -e "${GREEN}[✓ OK]${NC} All services stopped!"
 echo ""
 

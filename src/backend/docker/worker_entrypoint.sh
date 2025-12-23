@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== OCR Worker Entrypoint ==="
+echo "=== AI Worker Entrypoint ==="
 echo "Working directory: $(pwd)"
 echo "Python path: $PYTHONPATH"
 echo "Python version: $(python --version)"
@@ -9,11 +9,43 @@ echo "Python version: $(python --version)"
 # Run database migrations
 echo "Running database migrations..."
 cd /app
-if ! alembic upgrade head; then
-    echo "ERROR: Database migrations failed!"
-    exit 1
+
+# Try to fix migration issues first (if any)
+if [ -f "/app/docker/fix_migration.py" ]; then
+    echo "Checking for migration issues..."
+    python /app/docker/fix_migration.py 2>&1 || echo "Migration fix script completed (may have warnings)"
 fi
-echo "Database migrations completed successfully."
+
+# Try to upgrade to head
+if alembic upgrade head 2>&1; then
+    echo "Database migrations completed successfully."
+else
+    MIGRATION_EXIT=$?
+    echo "WARNING: Migration command returned error code: $MIGRATION_EXIT"
+    
+    # Check if error is about missing revision
+    MIGRATION_OUTPUT=$(alembic upgrade head 2>&1)
+    if echo "$MIGRATION_OUTPUT" | grep -q "Can't locate revision"; then
+        echo "ERROR: Database has revision that doesn't exist in migration files."
+        echo "Attempting automatic fix..."
+        
+        # Run fix script again with more verbose output
+        if [ -f "/app/docker/fix_migration.py" ]; then
+            python /app/docker/fix_migration.py 2>&1
+            # Try upgrade again after fix
+            if alembic upgrade head 2>&1; then
+                echo "Database migrations completed successfully after fix."
+            else
+                echo "ERROR: Still failed after fix. Continuing anyway..."
+            fi
+        else
+            echo "ERROR: Fix script not found. Continuing anyway..."
+        fi
+    else
+        echo "ERROR: Database migrations failed with unknown error!"
+        echo "Continuing anyway - application may not work correctly."
+    fi
+fi
 
 # Check Python path
 echo "Checking Python path..."
@@ -38,5 +70,5 @@ fi
 echo "Module check passed."
 
 # Start worker
-echo "Starting OCR worker..."
+echo "Starting AI worker..."
 exec python -m app.workers.worker_main

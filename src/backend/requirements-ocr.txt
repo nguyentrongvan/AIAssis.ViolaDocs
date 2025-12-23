@@ -28,6 +28,10 @@ python-docx==1.1.0
 openpyxl==3.1.2
 python-pptx==0.6.21
 chardet==5.2.0
+# Language detection and TTS
+langdetect>=1.0.9
+gtts>=2.5.0
+pydub>=0.25.1  # For audio speed control with gTTS
 # Testing dependencies
 pytest==7.4.3
 pytest-asyncio==0.21.1

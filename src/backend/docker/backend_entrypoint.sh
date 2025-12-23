@@ -56,13 +56,45 @@ fi
 echo ""
 echo "Running database migrations..."
 cd /app
+
+# Try to fix migration issues first (if any)
+if [ -f "/app/docker/fix_migration.py" ]; then
+    echo "Checking for migration issues..."
+    python /app/docker/fix_migration.py 2>&1 || echo "Migration fix script completed (may have warnings)"
+fi
+
 MIGRATION_SUCCESS=0
+# Try to upgrade to head
 if alembic upgrade head 2>&1; then
     echo "✅ Database migrations completed successfully."
     MIGRATION_SUCCESS=1
 else
-    echo "⚠️  WARNING: Database migrations may have failed or already up to date."
-    echo "   Continuing anyway..."
+    MIGRATION_EXIT=$?
+    echo "⚠️  WARNING: Migration command returned error code: $MIGRATION_EXIT"
+    
+    # Check if error is about missing revision
+    MIGRATION_OUTPUT=$(alembic upgrade head 2>&1)
+    if echo "$MIGRATION_OUTPUT" | grep -q "Can't locate revision"; then
+        echo "⚠️  ERROR: Database has revision that doesn't exist in migration files."
+        echo "   Attempting automatic fix..."
+        
+        # Run fix script again with more verbose output
+        if [ -f "/app/docker/fix_migration.py" ]; then
+            python /app/docker/fix_migration.py 2>&1
+            # Try upgrade again after fix
+            if alembic upgrade head 2>&1; then
+                echo "✅ Database migrations completed successfully after fix."
+                MIGRATION_SUCCESS=1
+            else
+                echo "⚠️  WARNING: Still failed after fix. Continuing anyway..."
+            fi
+        else
+            echo "⚠️  WARNING: Fix script not found. Continuing anyway..."
+        fi
+    else
+        echo "⚠️  WARNING: Database migrations may have failed or already up to date."
+        echo "   Continuing anyway..."
+    fi
 fi
 
 # Initialize root user

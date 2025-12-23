@@ -1,5 +1,5 @@
 """
-OCR Worker Service - Standalone service for processing OCR jobs
+AI Worker Service - Standalone service for processing AI jobs (OCR, Text Extraction, Embedding, TTS, Language Detection)
 Uses database polling with SELECT FOR UPDATE SKIP LOCKED for atomic job claiming
 """
 import asyncio
@@ -24,8 +24,8 @@ from ..config import settings
 logger = logging.getLogger(__name__)
 
 
-class OCRWorkerService:
-    """OCR Worker Service with DB locking and settings integration"""
+class AIWorkerService:
+    """AI Worker Service with DB locking and settings integration - handles OCR, Text Extraction, Embedding, TTS, and Language Detection"""
     
     def __init__(
         self,
@@ -35,7 +35,7 @@ class OCRWorkerService:
         heartbeat_interval: int = 30,
         stuck_job_timeout_minutes: int = 10
     ):
-        self.worker_id = worker_id or f"ocr-worker-{uuid.uuid4().hex[:8]}"
+        self.worker_id = worker_id or f"ai-worker-{uuid.uuid4().hex[:8]}"
         self.poll_interval = poll_interval
         self.max_concurrent = max_concurrent
         self.heartbeat_interval = heartbeat_interval
@@ -147,15 +147,25 @@ class OCRWorkerService:
                 )
             )
         )
+        tts_count_result = await session.execute(
+            select(AIJob)
+            .where(
+                and_(
+                    AIJob.job_type == "tts",
+                    AIJob.status == "queued"
+                )
+            )
+        )
         ocr_count = len(ocr_count_result.scalars().all())
         text_extract_count = len(text_extract_count_result.scalars().all())
         embed_count = len(embed_count_result.scalars().all())
+        tts_count = len(tts_count_result.scalars().all())
         
-        if ocr_count > 0 or text_extract_count > 0 or embed_count > 0:
-            logger.debug(f"[{self.worker_id}] Found {ocr_count} OCR, {text_extract_count} TEXT_EXTRACT, and {embed_count} EMBED job(s) in queue")
+        if ocr_count > 0 or text_extract_count > 0 or embed_count > 0 or tts_count > 0:
+            logger.debug(f"[{self.worker_id}] Found {ocr_count} OCR, {text_extract_count} TEXT_EXTRACT, {embed_count} EMBED, and {tts_count} TTS job(s) in queue")
         
-        # Try to claim OCR job first (priority), then TEXT_EXTRACT, then EMBED job
-        for job_type in ["ocr", "text_extract", "embed"]:
+        # Try to claim OCR job first (priority), then TEXT_EXTRACT, then EMBED, then TTS job
+        for job_type in ["ocr", "text_extract", "embed", "tts"]:
             result = await session.execute(
                 select(AIJob)
                 .where(
@@ -176,22 +186,22 @@ class OCRWorkerService:
                 logger.info(f"[{self.worker_id}] Successfully claimed {job_type.upper()} job {job.id}")
                 return job
         
-        if ocr_count > 0 or text_extract_count > 0 or embed_count > 0:
+        if ocr_count > 0 or text_extract_count > 0 or embed_count > 0 or tts_count > 0:
             logger.debug(f"[{self.worker_id}] Could not claim job (may be locked by another worker)")
         
         return None
     
     async def _release_stuck_jobs(self, session: AsyncSession):
-        """Release jobs that are stuck (claimed but no heartbeat) - both OCR and EMBED"""
+        """Release jobs that are stuck (claimed but no heartbeat) - OCR, TEXT_EXTRACT, EMBED, and TTS"""
         timeout = timedelta(minutes=self.stuck_job_timeout_minutes)
         cutoff_time = datetime.utcnow() - timeout
         
-        # Find stuck jobs (OCR, TEXT_EXTRACT, and EMBED)
+        # Find stuck jobs (OCR, TEXT_EXTRACT, EMBED, and TTS)
         result = await session.execute(
             select(AIJob)
             .where(
                 and_(
-                    AIJob.job_type.in_(["ocr", "text_extract", "embed"]),
+                    AIJob.job_type.in_(["ocr", "text_extract", "embed", "tts"]),
                     AIJob.status == "processing",
                     or_(
                         AIJob.last_heartbeat < cutoff_time,
@@ -320,6 +330,22 @@ class OCRWorkerService:
                     
                     extracted_text = ocr_result.get("text", "")
                     
+                    # Detect language from extracted text
+                    if extracted_text:
+                        from ..services.language_detection_service import LanguageDetectionService
+                        from sqlalchemy.orm.attributes import flag_modified
+                        try:
+                            language_info = LanguageDetectionService.detect_language(extracted_text)
+                            # Save language info to document metadata
+                            # IMPORTANT: SQLAlchemy doesn't detect changes inside JSON dict
+                            current_metadata = dict(document.file_metadata) if document.file_metadata else {}
+                            current_metadata["language"] = language_info
+                            document.file_metadata = current_metadata
+                            flag_modified(document, "file_metadata")
+                            logger.info(f"[AI Worker Service] Detected language: {language_info['primary']} (confidence: {language_info['confidence']}) for document {document.id}")
+                        except Exception as e:
+                            logger.error(f"[AI Worker Service] Error detecting language: {e}", exc_info=True)
+                    
                     # Save extracted text to MinIO
                     text_object_name = f"renditions/{document.id}/{version_id}/text.txt"
                     from io import BytesIO
@@ -377,7 +403,7 @@ class OCRWorkerService:
                     # Generate auto AI tags if enabled
                     try:
                         auto_ai_tag = job.target.get("auto_ai_tag", True)  # Default to True if not specified
-                        logger.debug(f"[OCR Worker Service] Auto AI Tag enabled: {auto_ai_tag} for document {document.id}")
+                        logger.debug(f"[AI Worker Service] Auto AI Tag enabled: {auto_ai_tag} for document {document.id}")
                         if auto_ai_tag:
                             from ..services.ai import get_llm_service
                             from ..models.documents import Tag, DocumentTag
@@ -388,18 +414,18 @@ class OCRWorkerService:
                             prefix = await SettingsService.get_setting("auto_tag.prefix", default="auto_tag:", session=session)
                             ocr_text_limit = await SettingsService.get_setting("auto_tag.ocr_text_limit", default=5000, session=session)
                             
-                            logger.debug(f"[OCR Worker Service] Tag settings - max_tags: {max_tags}, max_length: {max_length}, prefix: {prefix}, ocr_text_limit: {ocr_text_limit}")
+                            logger.debug(f"[AI Worker Service] Tag settings - max_tags: {max_tags}, max_length: {max_length}, prefix: {prefix}, ocr_text_limit: {ocr_text_limit}")
                             
                             # Truncate OCR text if needed
                             text_for_tagging = extracted_text
                             if len(text_for_tagging) > ocr_text_limit:
                                 text_for_tagging = text_for_tagging[:ocr_text_limit]
-                                logger.debug(f"[OCR Worker Service] OCR text truncated from {len(extracted_text)} to {len(text_for_tagging)} characters")
+                                logger.debug(f"[AI Worker Service] OCR text truncated from {len(extracted_text)} to {len(text_for_tagging)} characters")
                             
                             # Generate tags using LLM
                             llm_service = get_llm_service()
                             if llm_service:
-                                logger.debug(f"[OCR Worker Service] Calling LLM to generate tags...")
+                                logger.debug(f"[AI Worker Service] Calling LLM to generate tags...")
                                 tag_names = await llm_service.generate_tags_async(
                                     content=text_for_tagging,
                                     max_tags=max_tags,
@@ -408,7 +434,7 @@ class OCRWorkerService:
                                     session=session
                                 )
                                 
-                                logger.debug(f"[OCR Worker Service] LLM returned {len(tag_names) if tag_names else 0} tags: {tag_names}")
+                                logger.debug(f"[AI Worker Service] LLM returned {len(tag_names) if tag_names else 0} tags: {tag_names}")
                                 
                                 if tag_names:
                                     created_tags = []
@@ -432,7 +458,7 @@ class OCRWorkerService:
                                             tag = Tag(name=final_tag_name)
                                             session.add(tag)
                                             await session.flush()
-                                            logger.debug(f"[OCR Worker Service] Created new tag: {final_tag_name}")
+                                            logger.debug(f"[AI Worker Service] Created new tag: {final_tag_name}")
                                         
                                         # Check if document_tag association already exists
                                         doc_tag_result = await session.execute(
@@ -450,14 +476,14 @@ class OCRWorkerService:
                                             created_tags.append(final_tag_name)
                                     
                                     await session.commit()
-                                    logger.info(f"[OCR Worker Service] Successfully created {len(created_tags)} tags for document {document.id}: {created_tags}")
+                                    logger.info(f"[AI Worker Service] Successfully created {len(created_tags)} tags for document {document.id}: {created_tags}")
                                 else:
-                                    logger.debug(f"[OCR Worker Service] No tags generated by LLM")
+                                    logger.debug(f"[AI Worker Service] No tags generated by LLM")
                             else:
-                                logger.debug(f"[OCR Worker Service] LLM service not available, skipping tag generation")
+                                logger.debug(f"[AI Worker Service] LLM service not available, skipping tag generation")
                     except Exception as e:
                         # Log error but don't fail OCR job
-                        logger.error(f"[OCR Worker Service] Error generating auto AI tags: {e}", exc_info=True)
+                        logger.error(f"[AI Worker Service] Error generating auto AI tags: {e}", exc_info=True)
                     
                     # Refresh document to ensure it's still in session after tag commit
                     await session.refresh(document)
@@ -476,7 +502,7 @@ class OCRWorkerService:
                         llm_service = get_llm_service()
                         
                         if llm_service:
-                            logger.debug(f"[OCR Worker Service] Generating summary for document {document.id} (max_length={max_length})")
+                            logger.debug(f"[AI Worker Service] Generating summary for document {document.id} (max_length={max_length})")
                             summary = await llm_service.generate_summary_async(
                                 content=extracted_text,
                                 max_length=max_length,
@@ -485,25 +511,25 @@ class OCRWorkerService:
                             
                             if summary:
                                 document.summary = summary
-                                logger.info(f"[OCR Worker Service] Successfully generated summary for document {document.id}: {len(summary)} characters")
+                                logger.info(f"[AI Worker Service] Successfully generated summary for document {document.id}: {len(summary)} characters")
                             else:
                                 document.summary = None
-                                logger.debug(f"[OCR Worker Service] No summary generated (LLM not available or error)")
+                                logger.debug(f"[AI Worker Service] No summary generated (LLM not available or error)")
                             
                             # Commit summary (whether it's None or has value)
                             await session.commit()
                         else:
                             document.summary = None
                             await session.commit()
-                            logger.debug(f"[OCR Worker Service] LLM service not available, skipping summary generation")
+                            logger.debug(f"[AI Worker Service] LLM service not available, skipping summary generation")
                     except Exception as e:
                         # Log error but don't fail OCR job
-                        logger.error(f"[OCR Worker Service] Error generating summary: {e}", exc_info=True)
+                        logger.error(f"[AI Worker Service] Error generating summary: {e}", exc_info=True)
                         try:
                             document.summary = None
                             await session.commit()
                         except Exception as commit_error:
-                            logger.error(f"[OCR Worker Service] Failed to commit summary=None after error: {commit_error}", exc_info=True)
+                            logger.error(f"[AI Worker Service] Failed to commit summary=None after error: {commit_error}", exc_info=True)
                     
                     # Trigger embedding job
                     try:
@@ -618,6 +644,21 @@ class OCRWorkerService:
                     if not extracted_text:
                         raise ValueError("No text extracted from file")
                     
+                    # Detect language from extracted text
+                    from ..services.language_detection_service import LanguageDetectionService
+                    from sqlalchemy.orm.attributes import flag_modified
+                    try:
+                        language_info = LanguageDetectionService.detect_language(extracted_text)
+                        # Save language info to document metadata
+                        # IMPORTANT: SQLAlchemy doesn't detect changes inside JSON dict
+                        current_metadata = dict(document.file_metadata) if document.file_metadata else {}
+                        current_metadata["language"] = language_info
+                        document.file_metadata = current_metadata
+                        flag_modified(document, "file_metadata")
+                        logger.info(f"[AI Worker Service] Detected language: {language_info['primary']} (confidence: {language_info['confidence']}) for document {document.id} (text extract)")
+                    except Exception as e:
+                        logger.error(f"[AI Worker Service] Error detecting language: {e}", exc_info=True)
+                    
                     # Save extracted text to MinIO
                     text_object_name = f"renditions/{document.id}/{version_id}/text.txt"
                     from io import BytesIO
@@ -674,7 +715,7 @@ class OCRWorkerService:
                     # Generate auto AI tags if enabled
                     try:
                         auto_ai_tag = job.target.get("auto_ai_tag", True)  # Default to True if not specified
-                        logger.debug(f"[OCR Worker Service] Auto AI Tag enabled: {auto_ai_tag} for document {document.id} (text extract)")
+                        logger.debug(f"[AI Worker Service] Auto AI Tag enabled: {auto_ai_tag} for document {document.id} (text extract)")
                         if auto_ai_tag:
                             from ..services.ai import get_llm_service
                             from ..models.documents import Tag, DocumentTag
@@ -685,18 +726,18 @@ class OCRWorkerService:
                             prefix = await SettingsService.get_setting("auto_tag.prefix", default="auto_tag:", session=session)
                             ocr_text_limit = await SettingsService.get_setting("auto_tag.ocr_text_limit", default=5000, session=session)
                             
-                            logger.debug(f"[OCR Worker Service] Tag settings - max_tags: {max_tags}, max_length: {max_length}, prefix: {prefix}, ocr_text_limit: {ocr_text_limit}")
+                            logger.debug(f"[AI Worker Service] Tag settings - max_tags: {max_tags}, max_length: {max_length}, prefix: {prefix}, ocr_text_limit: {ocr_text_limit}")
                             
                             # Truncate extracted text if needed
                             text_for_tagging = extracted_text
                             if len(text_for_tagging) > ocr_text_limit:
                                 text_for_tagging = text_for_tagging[:ocr_text_limit]
-                                logger.debug(f"[OCR Worker Service] Text truncated from {len(extracted_text)} to {len(text_for_tagging)} characters")
+                                logger.debug(f"[AI Worker Service] Text truncated from {len(extracted_text)} to {len(text_for_tagging)} characters")
                             
                             # Generate tags using LLM
                             llm_service = get_llm_service()
                             if llm_service:
-                                logger.debug(f"[OCR Worker Service] Calling LLM to generate tags (text extract)...")
+                                logger.debug(f"[AI Worker Service] Calling LLM to generate tags (text extract)...")
                                 tag_names = await llm_service.generate_tags_async(
                                     content=text_for_tagging,
                                     max_tags=max_tags,
@@ -705,7 +746,7 @@ class OCRWorkerService:
                                     session=session
                                 )
                                 
-                                logger.debug(f"[OCR Worker Service] LLM returned {len(tag_names) if tag_names else 0} tags: {tag_names}")
+                                logger.debug(f"[AI Worker Service] LLM returned {len(tag_names) if tag_names else 0} tags: {tag_names}")
                                 
                                 if tag_names:
                                     created_tags = []
@@ -729,7 +770,7 @@ class OCRWorkerService:
                                             tag = Tag(name=final_tag_name)
                                             session.add(tag)
                                             await session.flush()
-                                            logger.debug(f"[OCR Worker Service] Created new tag: {final_tag_name}")
+                                            logger.debug(f"[AI Worker Service] Created new tag: {final_tag_name}")
                                         
                                         # Check if document_tag association already exists
                                         doc_tag_result = await session.execute(
@@ -747,14 +788,14 @@ class OCRWorkerService:
                                             created_tags.append(final_tag_name)
                                     
                                     await session.commit()
-                                    logger.info(f"[OCR Worker Service] Successfully created {len(created_tags)} tags for document {document.id}: {created_tags}")
+                                    logger.info(f"[AI Worker Service] Successfully created {len(created_tags)} tags for document {document.id}: {created_tags}")
                                 else:
-                                    logger.debug(f"[OCR Worker Service] No tags generated by LLM")
+                                    logger.debug(f"[AI Worker Service] No tags generated by LLM")
                             else:
-                                logger.debug(f"[OCR Worker Service] LLM service not available, skipping tag generation")
+                                logger.debug(f"[AI Worker Service] LLM service not available, skipping tag generation")
                     except Exception as e:
                         # Log error but don't fail text extraction job
-                        logger.error(f"[OCR Worker Service] Error generating auto AI tags: {e}", exc_info=True)
+                        logger.error(f"[AI Worker Service] Error generating auto AI tags: {e}", exc_info=True)
                     
                     # Refresh document to ensure it's still in session after tag commit
                     await session.refresh(document)
@@ -773,7 +814,7 @@ class OCRWorkerService:
                         llm_service = get_llm_service()
                         
                         if llm_service:
-                            logger.debug(f"[OCR Worker Service] Generating summary for document {document.id} (text extract, max_length={max_length})")
+                            logger.debug(f"[AI Worker Service] Generating summary for document {document.id} (text extract, max_length={max_length})")
                             summary = await llm_service.generate_summary_async(
                                 content=extracted_text,
                                 max_length=max_length,
@@ -782,25 +823,25 @@ class OCRWorkerService:
                             
                             if summary:
                                 document.summary = summary
-                                logger.info(f"[OCR Worker Service] Successfully generated summary for document {document.id}: {len(summary)} characters")
+                                logger.info(f"[AI Worker Service] Successfully generated summary for document {document.id}: {len(summary)} characters")
                             else:
                                 document.summary = None
-                                logger.debug(f"[OCR Worker Service] No summary generated (LLM not available or error)")
+                                logger.debug(f"[AI Worker Service] No summary generated (LLM not available or error)")
                             
                             # Commit summary (whether it's None or has value)
                             await session.commit()
                         else:
                             document.summary = None
                             await session.commit()
-                            logger.debug(f"[OCR Worker Service] LLM service not available, skipping summary generation")
+                            logger.debug(f"[AI Worker Service] LLM service not available, skipping summary generation")
                     except Exception as e:
                         # Log error but don't fail text extraction job
-                        logger.error(f"[OCR Worker Service] Error generating summary: {e}", exc_info=True)
+                        logger.error(f"[AI Worker Service] Error generating summary: {e}", exc_info=True)
                         try:
                             document.summary = None
                             await session.commit()
                         except Exception as commit_error:
-                            logger.error(f"[OCR Worker Service] Failed to commit summary=None after error: {commit_error}", exc_info=True)
+                            logger.error(f"[AI Worker Service] Failed to commit summary=None after error: {commit_error}", exc_info=True)
                     
                     # Trigger embedding job
                     try:
@@ -822,6 +863,160 @@ class OCRWorkerService:
                 heartbeat_task.cancel()
                 error_msg = str(e)[:500]
                 logger.error(f"Text extraction job {job.id} failed: {error_msg}", exc_info=True)
+                
+                async with AsyncSessionLocal() as session:
+                    result = await session.execute(
+                        select(AIJob).where(AIJob.id == job.id)
+                    )
+                    job = result.scalar_one_or_none()
+                    if job:
+                        if job.can_retry():
+                            job.increment_retry()
+                            job.release()
+                            job.status = "queued"  # Retry
+                        else:
+                            job.status = "failed"
+                            job.error = error_msg
+                            job.release()
+                        await session.commit()
+    
+    async def process_tts_job(self, job: AIJob):
+        """Process a single TTS job"""
+        async with self.semaphore:
+            try:
+                # Update heartbeat periodically during processing
+                heartbeat_task = asyncio.create_task(
+                    self._heartbeat_loop(job.id)
+                )
+                
+                async with AsyncSessionLocal() as session:
+                    # Refresh job to get latest state
+                    result = await session.execute(
+                        select(AIJob).where(AIJob.id == job.id)
+                    )
+                    job = result.scalar_one_or_none()
+                    
+                    if not job or job.status != "processing" or job.worker_id != self.worker_id:
+                        heartbeat_task.cancel()
+                        return
+                    
+                    # Get job input parameters
+                    input_ref = job.input_ref or {}
+                    document_id = job.target.get("document_id")
+                    voice_id = input_ref.get("voice_id")  # Optional, can be None for auto-select
+                    speed = input_ref.get("speed", 1.0)  # Default speed 1.0
+                    provider_name = input_ref.get("provider", "gtts")  # Default to gtts
+                    
+                    # Get document
+                    doc_result = await session.execute(
+                        select(Document).where(Document.id == document_id)
+                    )
+                    document = doc_result.scalar_one_or_none()
+                    if not document:
+                        raise ValueError(f"Document {document_id} not found")
+                    
+                    # Get document language from metadata (auto-detected)
+                    language = "en"  # Default
+                    if document.file_metadata and "language" in document.file_metadata:
+                        language_info = document.file_metadata["language"]
+                        language = language_info.get("primary", "en")
+                    
+                    # Auto-select voice if not provided
+                    if voice_id is None:
+                        # For now, we'll use the language to select a voice
+                        # In a full implementation, you'd query a TTSVoice table
+                        # For gTTS, voice selection isn't supported, so we just use language
+                        logger.info(f"[{self.worker_id}] Auto-selecting voice for language: {language}")
+                    
+                    # Get text from document (from OCR or text extraction)
+                    # Get latest version
+                    version_result = await session.execute(
+                        select(DocumentVersion)
+                        .where(DocumentVersion.document_id == document_id)
+                        .order_by(DocumentVersion.version_no.desc())
+                        .limit(1)
+                    )
+                    version = version_result.scalar_one_or_none()
+                    
+                    if not version or not version.text_uri:
+                        raise ValueError("No text available for TTS. Document must be processed first.")
+                    
+                    # Download text from MinIO
+                    minio_client = get_minio_client()
+                    text_object_name = version.text_uri
+                    if text_object_name.startswith(f"minio://{settings.minio_bucket}/"):
+                        text_object_name = text_object_name.replace(f"minio://{settings.minio_bucket}/", "")
+                    
+                    try:
+                        file_data = minio_client.get_object(settings.minio_bucket, text_object_name)
+                        text = file_data.read().decode('utf-8')
+                        file_data.close()
+                        file_data.release_conn()
+                    except Exception as e:
+                        raise ValueError(f"Failed to read document text: {e}")
+                    
+                    if not text or len(text.strip()) == 0:
+                        raise ValueError("Document text is empty")
+                    
+                    # Generate TTS audio
+                    from ..services.ai.tts_service import get_tts_service
+                    tts_service = get_tts_service()
+                    if not tts_service:
+                        raise ValueError("TTS service not available")
+                    
+                    # Get TTS chunk size from settings
+                    chunk_size = await SettingsService.get_setting(
+                        "tts.chunk_size",
+                        default=1200,
+                        session=session
+                    )
+                    # Ensure chunk size is within reasonable range (1000-1500)
+                    chunk_size = max(1000, min(1500, chunk_size))
+                    
+                    logger.info(f"[{self.worker_id}] Generating TTS audio for document {document_id} (language: {language}, speed: {speed}, chunk_size: {chunk_size})")
+                    audio_bytes = tts_service.generate_audio(
+                        text=text,
+                        language=language,
+                        voice_id=voice_id,
+                        speed=speed,
+                        provider_name=provider_name,
+                        chunk_size=chunk_size
+                    )
+                    
+                    # Save audio to MinIO
+                    audio_object_name = f"renditions/{document_id}/{version.id}/tts.mp3"
+                    from io import BytesIO
+                    try:
+                        minio_client.put_object(
+                            settings.minio_bucket,
+                            audio_object_name,
+                            BytesIO(audio_bytes),
+                            length=len(audio_bytes),
+                            content_type="audio/mpeg"
+                        )
+                    except Exception as e:
+                        raise ValueError(f"Failed to save TTS audio: {e}")
+                    
+                    # Update job
+                    job.status = "completed"
+                    job.output_ref = {
+                        "audio_uri": audio_object_name,
+                        "language": language,
+                        "speed": speed,
+                        "provider": provider_name,
+                        "audio_size": len(audio_bytes)
+                    }
+                    job.release()
+                    
+                    await session.commit()
+                    logger.info(f"[{self.worker_id}] TTS job {job.id} completed successfully")
+                    
+                    heartbeat_task.cancel()
+                    
+            except Exception as e:
+                heartbeat_task.cancel()
+                error_msg = str(e)[:500]
+                logger.error(f"TTS job {job.id} failed: {error_msg}", exc_info=True)
                 
                 async with AsyncSessionLocal() as session:
                     result = await session.execute(
@@ -1055,7 +1250,7 @@ class OCRWorkerService:
     async def worker_loop(self):
         """Main worker loop"""
         self.running = True
-        logger.info(f"[{self.worker_id}] OCR Worker started")
+        logger.info(f"[{self.worker_id}] AI Worker started")
         logger.info(f"[{self.worker_id}]   Poll interval: {self.poll_interval}s")
         logger.info(f"[{self.worker_id}]   Max concurrent: {self.max_concurrent}")
         logger.info(f"[{self.worker_id}]   Heartbeat interval: {self.heartbeat_interval}s")
@@ -1097,6 +1292,8 @@ class OCRWorkerService:
                                 task = asyncio.create_task(self.process_text_extract_job(job))
                             elif job.job_type == "embed":
                                 task = asyncio.create_task(self.process_embedding_job(job))
+                            elif job.job_type == "tts":
+                                task = asyncio.create_task(self.process_tts_job(job))
                             else:
                                 logger.warning(f"[{self.worker_id}] Unknown job type: {job.job_type}, skipping")
                                 await asyncio.sleep(self.poll_interval)
@@ -1123,7 +1320,7 @@ class OCRWorkerService:
         logger.info("Waiting for active tasks to complete...")
         if self.active_tasks:
             await asyncio.gather(*self.active_tasks, return_exceptions=True)
-        logger.info(f"OCR Worker {self.worker_id} stopped")
+        logger.info(f"AI Worker {self.worker_id} stopped")
     
     async def run(self):
         """Run the worker"""

@@ -68,6 +68,107 @@
             <p v-else class="summary-empty">{{ $t('documentDetail.summaryNotAvailable') }}</p>
           </div>
         </div>
+
+        <!-- Language Detection Section -->
+        <div class="language-section">
+          <div class="language-header">
+            <h3>{{ $t('documentDetail.detectedLanguage') }}</h3>
+            <button
+              v-if="!document?.metadata?.language && hasTextContent"
+              @click="detectLanguage"
+              :disabled="detectingLanguage"
+              class="btn-small btn-secondary"
+            >
+              <Loader v-if="detectingLanguage" :size="14" class="spinning" />
+              {{ detectingLanguage ? $t('documentDetail.detectingLanguage') : $t('documentDetail.detectLanguage') }}
+            </button>
+          </div>
+          <div class="language-content">
+            <div v-if="document?.metadata?.language" class="language-info">
+              <div class="language-item">
+                <span class="language-label">{{ $t('documentDetail.primaryLanguage') }}:</span>
+                <span class="language-value language-badge">{{ getLanguageName(document.metadata.language.primary) }}</span>
+                <span v-if="document.metadata.language.confidence" class="language-confidence">
+                  {{ (document.metadata.language.confidence * 100).toFixed(1) }}%
+                </span>
+              </div>
+              <div v-if="document.metadata.language.secondary && document.metadata.language.secondary.length > 0" class="language-item">
+                <span class="language-label">{{ $t('documentDetail.secondaryLanguages') }}:</span>
+                <span class="language-value">
+                  {{ document.metadata.language.secondary.map(l => `${getLanguageName(Array.isArray(l) ? l[0] : l.lang)} (${((Array.isArray(l) ? l[1] : l.confidence) * 100).toFixed(1)}%)`).join(', ') }}
+                </span>
+              </div>
+              <div v-if="document.metadata.language.detected_at" class="language-item">
+                <span class="language-label">{{ $t('documentDetail.detectedAt') }}:</span>
+                <span class="language-value">{{ formatDate(document.metadata.language.detected_at) }}</span>
+              </div>
+            </div>
+            <div v-else class="language-empty">
+              <p v-if="hasTextContent">{{ $t('documentDetail.languageNotDetected') }}</p>
+              <p v-else>{{ $t('documentDetail.languageNotAvailable') }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TTS Section -->
+        <div class="tts-section">
+          <div class="tts-header">
+            <h3>{{ $t('documentDetail.textToSpeech') }}</h3>
+          </div>
+          <div class="tts-controls">
+            <div class="form-group">
+              <label>{{ $t('documentDetail.playbackSpeed') }}</label>
+              <div class="speed-control">
+                <input
+                  type="range"
+                  v-model.number="ttsSpeed"
+                  min="0.5"
+                  max="2.0"
+                  step="0.25"
+                  class="speed-slider"
+                />
+                <span class="speed-value">{{ ttsSpeed }}x</span>
+              </div>
+              <div class="speed-buttons">
+                <button
+                  v-for="speed in [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]"
+                  :key="speed"
+                  @click="ttsSpeed = speed"
+                  :class="['btn-small', { 'btn-active': ttsSpeed === speed }]"
+                >
+                  {{ speed }}x
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <button
+                @click="generateTTS"
+                :disabled="generatingTTS || !hasTextContent"
+                class="btn-primary"
+              >
+                <Loader v-if="generatingTTS" :size="14" class="spinning" />
+                {{ generatingTTS ? $t('documentDetail.generatingTTS') : $t('documentDetail.generateTTS') }}
+              </button>
+            </div>
+          </div>
+          <div v-if="ttsAudioUrl" class="tts-player">
+            <div class="audio-player-wrapper">
+              <audio
+                ref="audioPlayer"
+                :src="ttsAudioUrl"
+                controls
+                class="audio-player"
+                @loadedmetadata="onAudioLoaded"
+              ></audio>
+            </div>
+            <div class="audio-info">
+              <span class="audio-speed-badge">
+                <span class="audio-speed-icon">⚡</span>
+                {{ $t('documentDetail.currentSpeed') }}: <strong>{{ ttsSpeed }}x</strong>
+              </span>
+            </div>
+          </div>
+        </div>
         
         <div class="preview-area">
           <!-- For PDF and Images: use iframe -->
@@ -205,6 +306,25 @@
                 <div v-if="document.metadata.file.upload_timestamp" class="metadata-item">
                   <label>{{ $t('documentDetail.uploadTime') }}</label>
                   <span>{{ formatDate(document.metadata.file.upload_timestamp) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Detected Language -->
+            <div v-if="document.metadata && document.metadata.language" class="metadata-group">
+              <h4>{{ $t('documentDetail.detectedLanguage') }}</h4>
+              <div class="metadata-grid">
+                <div class="metadata-item">
+                  <label>{{ $t('documentDetail.primaryLanguage') }}</label>
+                  <span>{{ getLanguageName(document.metadata.language.primary) }}</span>
+                </div>
+                <div v-if="document.metadata.language.confidence" class="metadata-item">
+                  <label>{{ $t('documentDetail.confidence') }}</label>
+                  <span>{{ (document.metadata.language.confidence * 100).toFixed(1) }}%</span>
+                </div>
+                <div v-if="document.metadata.language.detected_at" class="metadata-item">
+                  <label>{{ $t('documentDetail.detectedAt') }}</label>
+                  <span>{{ formatDate(document.metadata.language.detected_at) }}</span>
                 </div>
               </div>
             </div>
@@ -635,7 +755,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../store/auth'
@@ -692,6 +812,25 @@ const compareV2 = ref(null)
 const showDeleteModal = ref(false)
 const purgeGracePeriodDays = ref(1)
 const regeneratingSummary = ref(false)
+const detectingLanguage = ref(false)
+const ttsSpeed = ref(1.0)
+const generatingTTS = ref(false)
+const ttsAudioUrl = ref('')
+const audioPlayer = ref(null)
+
+const onAudioLoaded = () => {
+  // Set playback speed when audio is loaded
+  if (audioPlayer.value) {
+    audioPlayer.value.playbackRate = ttsSpeed.value
+  }
+}
+
+// Watch for speed changes and update audio playback rate
+watch(ttsSpeed, (newSpeed) => {
+  if (audioPlayer.value) {
+    audioPlayer.value.playbackRate = newSpeed
+  }
+})
 
 const tabs = computed(() => {
   const { t } = useI18n()
@@ -748,12 +887,58 @@ const isOfficeOrTextFile = computed(() => {
          mime === 'text/plain'
 })
 
+// Check if document has text content available for TTS
+const hasTextContent = computed(() => {
+  if (!document.value) return false
+  
+  // Find current version object (selectedVersion is an ID, need to find the object)
+  let currentVersion = null
+  if (selectedVersion.value) {
+    currentVersion = versions.value.find(v => v.id === selectedVersion.value)
+  }
+  if (!currentVersion) {
+    currentVersion = versions.value.find(v => v.version_no === latestVersion.value)
+  }
+  
+  // Check if any version has text content, or document itself has text_uri
+  return !!(currentVersion?.text_uri || currentVersion?.ocr_uri || document.value.text_uri)
+})
+
 // Check if file can be previewed in iframe (PDF, images)
 const canPreviewInIframe = computed(() => {
   if (!document.value) return false
   const mime = document.value.mime || ''
   return mime === 'application/pdf' || mime.startsWith('image/')
 })
+
+// Language code to name mapping
+const languageNames = {
+  'vi': { en: 'Vietnamese', native: 'Tiếng Việt' },
+  'en': { en: 'English', native: 'English' },
+  'zh': { en: 'Chinese', native: '中文' },
+  'ja': { en: 'Japanese', native: '日本語' },
+  'ko': { en: 'Korean', native: '한국어' },
+  'fr': { en: 'French', native: 'Français' },
+  'de': { en: 'German', native: 'Deutsch' },
+  'es': { en: 'Spanish', native: 'Español' },
+  'pt': { en: 'Portuguese', native: 'Português' },
+  'ru': { en: 'Russian', native: 'Русский' },
+  'it': { en: 'Italian', native: 'Italiano' },
+  'th': { en: 'Thai', native: 'ไทย' },
+  'id': { en: 'Indonesian', native: 'Bahasa Indonesia' },
+  'ms': { en: 'Malay', native: 'Bahasa Melayu' },
+  'ar': { en: 'Arabic', native: 'العربية' },
+  'hi': { en: 'Hindi', native: 'हिन्दी' }
+}
+
+const getLanguageName = (code) => {
+  if (!code) return 'N/A'
+  const lang = languageNames[code.toLowerCase()]
+  if (lang) {
+    return `${lang.native} (${lang.en})`
+  }
+  return code.toUpperCase()
+}
 
 onMounted(async () => {
   const docId = parseInt(route.params.id)
@@ -766,9 +951,10 @@ onMounted(async () => {
 const loadDocument = async (docId) => {
   loading.value = true
   try {
-    await documentsStore.fetchDocument(docId)
-    document.value = documentsStore.currentDocument
-    versions.value = documentsStore.versions
+    const docData = await documentsStore.fetchDocument(docId)
+    // Use spread to create a new reactive object
+    document.value = { ...docData }
+    versions.value = [...documentsStore.versions]
 
     if (versions.value.length > 0) {
       selectedVersion.value = versions.value[0].id
@@ -792,6 +978,9 @@ const loadDocument = async (docId) => {
 
     // Load comments
     await loadComments(docId)
+    
+    // Auto-load TTS audio if available
+    await loadTTSAudio(docId)
   } catch (e) {
     console.error('Failed to load document', e)
     // Check if document was not found (404) - likely deleted
@@ -1139,6 +1328,193 @@ const deleteDocument = async () => {
     if (window.$toast) {
       window.$toast.show(t('documents.failedToDeleteDocument'), 'error')
     }
+  }
+}
+
+const detectLanguage = async () => {
+  if (!document.value || !document.value.id) return
+  
+  detectingLanguage.value = true
+  try {
+    const res = await documentsAPI.detectLanguage(document.value.id)
+    console.log('Detect language response:', res)
+    
+    if (res.is_success) {
+      // Update document metadata directly from response
+      if (res.data && res.data.language) {
+        if (!document.value.metadata) {
+          document.value.metadata = {}
+        }
+        document.value.metadata.language = res.data.language
+        console.log('Updated language metadata:', document.value.metadata.language)
+      }
+      
+      if (window.$toast) {
+        window.$toast.show(t('documentDetail.languageDetected'), 'success')
+      }
+    } else {
+      if (window.$toast) {
+        window.$toast.show(res.message || t('documentDetail.languageDetectionFailed'), 'error')
+      }
+    }
+  } catch (e) {
+    console.error('Failed to detect language', e)
+    if (window.$toast) {
+      window.$toast.show(t('documentDetail.languageDetectionFailed'), 'error')
+    }
+  } finally {
+    detectingLanguage.value = false
+  }
+}
+
+const loadTTSAudio = async (docId) => {
+  // Check if TTS audio is available for this document
+  try {
+    const audioRes = await documentsAPI.getTTS(docId)
+    if (audioRes) {
+      // Create blob URL from response
+      const blob = audioRes
+      ttsAudioUrl.value = URL.createObjectURL(blob)
+      
+      // Set playback speed on audio element
+      if (audioPlayer.value) {
+        audioPlayer.value.playbackRate = ttsSpeed.value
+      }
+    }
+  } catch (e) {
+    // 404 is expected when TTS is not available - silently ignore
+    if (e.response?.status !== 404) {
+      console.error('Failed to load TTS audio:', e)
+    }
+  }
+}
+
+const generateTTS = async () => {
+  if (!document.value || !document.value.id) return
+  
+  // Check if language is detected, if not, detect it first
+  if (!document.value.metadata || !document.value.metadata.language) {
+    if (window.$toast) {
+      window.$toast.show(t('documentDetail.detectingLanguageBeforeTTS'), 'info')
+    }
+    
+    // Detect language first
+    detectingLanguage.value = true
+    try {
+      const res = await documentsAPI.detectLanguage(document.value.id)
+      if (res.is_success) {
+        // Refresh document to get updated metadata
+        await loadDocument(document.value.id)
+      } else {
+        if (window.$toast) {
+          window.$toast.show(res.message || t('documentDetail.languageDetectionFailed'), 'error')
+        }
+        detectingLanguage.value = false
+        return
+      }
+    } catch (e) {
+      console.error('Failed to detect language before TTS', e)
+      if (window.$toast) {
+        window.$toast.show(t('documentDetail.languageDetectionFailed'), 'error')
+      }
+      detectingLanguage.value = false
+      return
+    } finally {
+      detectingLanguage.value = false
+    }
+  }
+  
+  generatingTTS.value = true
+  try {
+    const res = await documentsAPI.generateTTS(document.value.id, {
+      speed: ttsSpeed.value,
+      voice_id: null, // Auto-select based on language
+      provider: 'gtts'
+    })
+    
+    if (res.is_success) {
+      // Poll for job completion
+      const jobId = res.data.job_id
+      let attempts = 0
+      const maxAttempts = 30 // 30 attempts = 60 seconds (2s interval)
+      
+      const checkJob = async () => {
+        attempts++
+        
+        try {
+          // Wait before checking
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          
+          // Fetch the TTS audio with silent error handling for 404
+          let audioRes = null
+          try {
+            audioRes = await documentsAPI.getTTS(document.value.id)
+          } catch (e) {
+            // 404 is expected when TTS is not ready yet - don't treat as error
+            if (e.response?.status === 404) {
+              // TTS not ready yet, will retry
+              if (attempts < maxAttempts) {
+                // Only log every 5 attempts to reduce console noise
+                if (attempts % 5 === 0) {
+                  console.log(`TTS generation in progress... (${attempts}/${maxAttempts})`)
+                }
+                setTimeout(checkJob, 2000)
+                return
+              } else {
+                // Max attempts reached
+                console.warn('TTS generation timed out after 60 seconds')
+                if (window.$toast) {
+                  window.$toast.show(t('documentDetail.ttsGenerationFailed'), 'error')
+                }
+                generatingTTS.value = false
+                return
+              }
+            } else {
+              // Real error (not 404)
+              throw e
+            }
+          }
+          
+          // If we got a blob response, TTS is ready
+          if (audioRes) {
+            // Create blob URL from response
+            const blob = audioRes
+            ttsAudioUrl.value = URL.createObjectURL(blob)
+            
+            // Set playback speed on audio element
+            if (audioPlayer.value) {
+              audioPlayer.value.playbackRate = ttsSpeed.value
+            }
+            
+            if (window.$toast) {
+              window.$toast.show(t('documentDetail.ttsGenerated'), 'success')
+            }
+            generatingTTS.value = false
+          }
+        } catch (e) {
+          // Real error (not 404)
+          console.error('Error fetching TTS:', e)
+          if (window.$toast) {
+            window.$toast.show(t('documentDetail.ttsGenerationFailed'), 'error')
+          }
+          generatingTTS.value = false
+        }
+      }
+      
+      // Start polling
+      checkJob()
+    } else {
+      if (window.$toast) {
+        window.$toast.show(res.message || t('documentDetail.ttsGenerationFailed'), 'error')
+      }
+    }
+  } catch (e) {
+    console.error('Failed to generate TTS', e)
+    if (window.$toast) {
+      window.$toast.show(t('documentDetail.ttsGenerationFailed'), 'error')
+    }
+  } finally {
+    generatingTTS.value = false
   }
 }
 </script>
@@ -1983,6 +2359,117 @@ const deleteDocument = async () => {
   margin: 0;
 }
 
+.language-section {
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+}
+
+.language-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.language-header h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.language-content {
+  color: var(--text-medium);
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+.language-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.language-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.language-label {
+  font-weight: 500;
+  color: var(--text-dark);
+  min-width: 120px;
+}
+
+.language-value {
+  color: var(--text-medium);
+  font-weight: 500;
+}
+
+.language-badge {
+  background: var(--gradient-primary);
+  color: white;
+  padding: 4px 12px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+.language-confidence {
+  color: var(--text-light);
+  font-size: 0.85em;
+  background: var(--bg-light);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  margin-left: var(--space-xs);
+}
+
+.language-empty {
+  color: var(--text-light);
+  font-style: italic;
+  margin: 0;
+  text-align: center;
+  padding: var(--space-md);
+}
+
+.tts-section {
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+}
+
+.tts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tts-header h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.tts-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
 .spinning {
   animation: spin 1s linear infinite;
 }
@@ -1994,5 +2481,83 @@ const deleteDocument = async () => {
   to {
     transform: rotate(360deg);
   }
+}
+
+.tts-player {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-color);
+}
+
+.audio-player-wrapper {
+  background: var(--bg-light);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  margin-bottom: var(--space-sm);
+  box-shadow: var(--shadow-xs);
+}
+
+.audio-player {
+  width: 100%;
+  height: 48px;
+  outline: none;
+  border-radius: var(--radius-sm);
+}
+
+.audio-player::-webkit-media-controls-panel {
+  background-color: var(--bg-white);
+  border-radius: var(--radius-sm);
+}
+
+.audio-player::-webkit-media-controls-play-button {
+  background-color: var(--primary);
+  border-radius: 50%;
+}
+
+.audio-player::-webkit-media-controls-current-time-display,
+.audio-player::-webkit-media-controls-time-remaining-display {
+  color: var(--text-dark);
+  font-weight: 500;
+}
+
+.audio-player::-webkit-media-controls-timeline {
+  background-color: var(--bg-light);
+  border-radius: var(--radius-sm);
+  margin: 0 var(--space-xs);
+}
+
+.audio-player::-webkit-media-controls-volume-slider {
+  background-color: var(--bg-light);
+  border-radius: var(--radius-sm);
+}
+
+.audio-info {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: var(--space-sm);
+}
+
+.audio-speed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background: var(--gradient-primary);
+  color: white;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-sm);
+}
+
+.audio-speed-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.audio-speed-badge strong {
+  font-weight: 600;
+  font-size: 1.05em;
 }
 </style>

@@ -5,21 +5,27 @@ echo ==========================================
 echo ViolaDocs Platform - Stop Development Mode
 echo ==========================================
 
-REM Get script directory and project root
 set "SCRIPT_DIR=%~dp0"
 set "PROJECT_ROOT=%SCRIPT_DIR%..\.."
 cd /d "%PROJECT_ROOT%"
 
 echo.
-echo [STOP] Stopping ViolaDocs Platform (Development mode)...
+call :ColorEcho Red "[STOP] Stopping ViolaDocs Platform (Development mode)..."
 echo.
 
-REM Stop all services
 docker-compose -f docker/docker-compose.base.yml -f docker/dev/docker-compose.yml down
+if errorlevel 1 (
+    call :ColorEcho Red "[ERROR] Failed to stop services."
+    exit /b 1
+)
 
 echo.
-echo [OK] All services stopped!
+call :ColorEcho Green "[OK] All services stopped!"
 echo.
 
 endlocal
+exit /b 0
 
+:ColorEcho
+powershell -NoProfile -Command "Write-Host '%~2' -ForegroundColor %~1"
+exit /b

@@ -182,11 +182,11 @@ services:
       start_period: 5s
       retries: 3
 
-  ocr-worker:
+  ai-worker:
     build:
       context: ../src/backend
       dockerfile: docker/Dockerfile.worker
-    container_name: violadocs_ocr_worker
+    container_name: violadocs_ai_worker
     environment:
       # Database
       POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
@@ -210,10 +210,10 @@ services:
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-embeddings}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       # Worker config
-      OCR_WORKER_POLL_INTERVAL: ${OCR_WORKER_POLL_INTERVAL:-2}
-      OCR_WORKER_MAX_CONCURRENT: ${OCR_WORKER_MAX_CONCURRENT:-2}
-      OCR_WORKER_HEARTBEAT_INTERVAL: ${OCR_WORKER_HEARTBEAT_INTERVAL:-30}
-      OCR_WORKER_STUCK_TIMEOUT: ${OCR_WORKER_STUCK_TIMEOUT:-10}
+      AI_WORKER_POLL_INTERVAL: ${AI_WORKER_POLL_INTERVAL:-2}
+      AI_WORKER_MAX_CONCURRENT: ${AI_WORKER_MAX_CONCURRENT:-2}
+      AI_WORKER_HEARTBEAT_INTERVAL: ${AI_WORKER_HEARTBEAT_INTERVAL:-30}
+      AI_WORKER_STUCK_TIMEOUT: ${AI_WORKER_STUCK_TIMEOUT:-10}
     networks:
       - violadocs_network
     depends_on:

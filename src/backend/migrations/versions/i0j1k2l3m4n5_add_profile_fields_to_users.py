@@ -32,3 +32,5 @@ def downgrade() -> None:
     op.drop_column('users', 'phone')
     op.drop_column('users', 'date_of_birth')
 
+
+

@@ -22,12 +22,20 @@ services:
         condition: service_started
 
   frontend:
-    ports:
-      - "${FRONTEND_PORT:-3000}:80"
     build:
-      args:
-        # In dev mode, use absolute URL for API to call backend directly
-        VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8000/api/v1}
+      context: ../src/frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
     environment:
       - VITE_API_BASE=${VITE_API_BASE:-http://localhost:8000/api/v1}
+    volumes:
+      # Mount source code for hot reload
+      - ../src/frontend/src:/app/src
+      - ../src/frontend/public:/app/public
+      - ../src/frontend/index.html:/app/index.html
+      - ../src/frontend/vite.config.js:/app/vite.config.js
+      - ../src/frontend/package.json:/app/package.json
+      # Exclude node_modules from volume mount
+      - /app/node_modules
 

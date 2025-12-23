@@ -234,11 +234,97 @@
               </div>
             </div>
           </div>
+          <div class="provider-section">
+            <h3>{{ $t('admin.settings.ttsProvidersSection') }}</h3>
+            <div class="provider-list">
+              <div
+                v-for="provider in providers.tts || []"
+                :key="provider.name"
+                class="provider-item"
+              >
+                <div class="provider-info">
+                  <h4>{{ provider.name }}</h4>
+                  <StatusBadge :status="provider.health || 'unknown'" />
+                  <div v-if="provider.description" class="provider-description">
+                    {{ provider.description }}
+                  </div>
+                </div>
+                <div class="provider-config">
+                  <label>
+                    <input type="checkbox" v-model="provider.enabled" />
+                    {{ $t('admin.settings.enabled') }}
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="section-actions">
             <button @click="saveProviders" class="btn-primary">{{ $t('admin.settings.saveProviders') }}</button>
           </div>
         </div>
         <div v-else class="loading">{{ $t('admin.settings.loadingProviders') }}</div>
+
+        <!-- TTS Default Speed Settings -->
+        <div class="tts-settings-section">
+          <h3>{{ $t('admin.settings.ttsDefaultSpeed') }}</h3>
+          <div class="form-section">
+            <div class="form-group">
+              <label for="tts_default_speed">{{ $t('admin.settings.defaultPlaybackSpeed') }}</label>
+              <div class="speed-control">
+                <input
+                  id="tts_default_speed"
+                  type="range"
+                  v-model.number="ttsDefaultSpeed"
+                  min="0.5"
+                  max="2.0"
+                  step="0.25"
+                  class="speed-slider"
+                />
+                <span class="speed-value">{{ ttsDefaultSpeed }}x</span>
+              </div>
+              <small>{{ $t('admin.settings.defaultPlaybackSpeedHint') }}</small>
+            </div>
+            <div class="form-actions">
+              <button @click="saveTTSDefaultSpeed" class="btn-primary" :disabled="savingTTSSpeed">
+                <Save :size="16" />
+                {{ savingTTSSpeed ? $t('admin.settings.saving') : $t('admin.settings.saveSettings') }}
+              </button>
+              <button @click="loadTTSDefaultSpeed" class="btn-secondary" :disabled="savingTTSSpeed">
+                <RefreshCw :size="16" />
+                {{ $t('common.refresh') }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TTS Chunk Size Settings -->
+        <div class="tts-settings-section">
+          <h3>{{ $t('admin.settings.ttsChunkSize') }}</h3>
+          <div class="form-section">
+            <div class="form-group">
+              <label for="tts_chunk_size">{{ $t('admin.settings.ttsChunkSizeLabel') }}</label>
+              <input
+                id="tts_chunk_size"
+                type="number"
+                v-model.number="ttsChunkSize"
+                min="1000"
+                max="1500"
+                :placeholder="$t('admin.settings.ttsChunkSizePlaceholder')"
+              />
+              <small>{{ $t('admin.settings.ttsChunkSizeHint') }}</small>
+            </div>
+            <div class="form-actions">
+              <button @click="saveTTSChunkSize" class="btn-primary" :disabled="savingTTSChunkSize">
+                <Save :size="16" />
+                {{ savingTTSChunkSize ? $t('admin.settings.saving') : $t('admin.settings.saveSettings') }}
+              </button>
+              <button @click="loadTTSChunkSize" class="btn-secondary" :disabled="savingTTSChunkSize">
+                <RefreshCw :size="16" />
+                {{ $t('common.refresh') }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- LLM Settings Tab -->
@@ -1110,6 +1196,12 @@ const purgeGracePeriodForm = ref({
 })
 const savingPurgeGracePeriod = ref(false)
 
+// TTS Settings
+const ttsDefaultSpeed = ref(1.0)
+const savingTTSSpeed = ref(false)
+const ttsChunkSize = ref(1200)
+const savingTTSChunkSize = ref(false)
+
 // Auto Tag Settings
 const tagForm = ref({
   max_tags: 3,
@@ -1165,6 +1257,8 @@ onMounted(async () => {
   await loadPrompts()
   await loadRAGSettings()
   await loadTagSettings()
+  await loadTTSDefaultSpeed()
+  await loadTTSChunkSize()
   // Load Ollama models when LLM tab is active
   if (activeTab.value === 'llm') {
     await loadOllamaModels()
@@ -1665,6 +1759,97 @@ const savePurgeGracePeriod = async () => {
     }
   } finally {
     savingPurgeGracePeriod.value = false
+  }
+}
+
+// TTS Settings Functions
+const loadTTSDefaultSpeed = async () => {
+  try {
+    const res = await settingsAPI.ttsDefaultSpeed.get()
+    if (res.is_success && res.data) {
+      ttsDefaultSpeed.value = res.data.speed || 1.0
+    }
+  } catch (e) {
+    console.error('Failed to load TTS default speed', e)
+    if (window.$toast) {
+      window.$toast.show(t('admin.settings.failedToLoadTTSDefaultSpeed'), 'error')
+    }
+  }
+}
+
+const saveTTSDefaultSpeed = async () => {
+  savingTTSSpeed.value = true
+  try {
+    if (ttsDefaultSpeed.value < 0.5 || ttsDefaultSpeed.value > 2.0) {
+      if (window.$toast) {
+        window.$toast.show(t('admin.settings.ttsSpeedMustBeBetween'), 'error')
+      }
+      return
+    }
+    
+    const res = await settingsAPI.ttsDefaultSpeed.update({ speed: ttsDefaultSpeed.value })
+    if (res.is_success) {
+      if (window.$toast) {
+        window.$toast.show(t('admin.settings.ttsDefaultSpeedSaved'), 'success')
+      }
+      await loadTTSDefaultSpeed()
+    } else {
+      if (window.$toast) {
+        window.$toast.show(res.message || t('admin.settings.failedToSaveTTSDefaultSpeed'), 'error')
+      }
+    }
+  } catch (e) {
+    console.error('Failed to save TTS default speed', e)
+    if (window.$toast) {
+      window.$toast.show(t('admin.settings.failedToSaveTTSDefaultSpeed'), 'error')
+    }
+  } finally {
+    savingTTSSpeed.value = false
+  }
+}
+
+const loadTTSChunkSize = async () => {
+  try {
+    const res = await settingsAPI.ttsChunkSize.get()
+    if (res.is_success && res.data) {
+      ttsChunkSize.value = res.data.chunk_size || 1200
+    }
+  } catch (e) {
+    console.error('Failed to load TTS chunk size', e)
+    if (window.$toast) {
+      window.$toast.show(t('admin.settings.failedToLoadTTSChunkSize'), 'error')
+    }
+  }
+}
+
+const saveTTSChunkSize = async () => {
+  savingTTSChunkSize.value = true
+  try {
+    if (ttsChunkSize.value < 1000 || ttsChunkSize.value > 1500) {
+      if (window.$toast) {
+        window.$toast.show(t('admin.settings.ttsChunkSizeMustBeBetween'), 'error')
+      }
+      return
+    }
+    
+    const res = await settingsAPI.ttsChunkSize.update({ chunk_size: ttsChunkSize.value })
+    if (res.is_success) {
+      if (window.$toast) {
+        window.$toast.show(t('admin.settings.ttsChunkSizeSaved'), 'success')
+      }
+      await loadTTSChunkSize()
+    } else {
+      if (window.$toast) {
+        window.$toast.show(res.message || t('admin.settings.failedToSaveTTSChunkSize'), 'error')
+      }
+    }
+  } catch (e) {
+    console.error('Failed to save TTS chunk size', e)
+    if (window.$toast) {
+      window.$toast.show(t('admin.settings.failedToSaveTTSChunkSize'), 'error')
+    }
+  } finally {
+    savingTTSChunkSize.value = false
   }
 }
 
