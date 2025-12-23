@@ -127,7 +127,7 @@ services:
       ROOT_USER_NAME: ${ROOT_USER_NAME:-Admin}
       # OCR
       OCR_PROVIDER: ${OCR_PROVIDER:-paddle}
-      OCR_LANGUAGES: ${OCR_LANGUAGES:-en,vi}
+      OCR_LANGUAGES: ${OCR_LANGUAGES:-en,vi,ja,zh}
       # App Settings
       API_V1_PREFIX: ${API_V1_PREFIX:-/api/v1}
       DEBUG: ${DEBUG:-false}

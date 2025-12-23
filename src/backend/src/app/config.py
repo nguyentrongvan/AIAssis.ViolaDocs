@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     # Only Tesseract is supported now
     # Supported languages: en (English), vi (Vietnamese), ja (Japanese), ko (Korean), zh (Chinese)
     ocr_provider: str = "tesseract"
-    ocr_languages: str = "en,vi"  # Default: English and Vietnamese. Can add: ja,ko,zh
+    ocr_languages: str = "en,vi,ja,zh"  # Default: English, Vietnamese, Japanese, and Chinese
     
     # Qdrant vector store config
     qdrant_host: str = "localhost"  # Qdrant server host (use "qdrant" in Docker)
