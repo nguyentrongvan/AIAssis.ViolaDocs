@@ -4,7 +4,7 @@ Script to initialize Ollama models for ViolaDocs.
 This script is called from backend_entrypoint.sh after Ollama service is ready.
 
 It checks if default models exist and pulls them if missing:
-- LLM model: qwen2.5:0.5b (or from OLLAMA_LLM_MODEL env var)
+- LLM model: gemma3:270m (or from OLLAMA_LLM_MODEL env var)
 - Embedding model: nomic-embed-text:latest (or from OLLAMA_EMBEDDING_MODEL env var)
 """
 import os
@@ -89,7 +89,7 @@ def model_exists(model_name: str, existing_models: list) -> bool:
     if model_name in existing_models:
         return True
     
-    # Check if model name without tag matches (e.g., "qwen2.5" matches "qwen2.5:0.5b")
+    # Check if model name without tag matches (e.g., "qwen2.5" matches "gemma3:270m")
     model_base = model_name.split(":")[0]
     for existing in existing_models:
         if existing.startswith(model_base + ":"):

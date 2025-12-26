@@ -114,7 +114,7 @@ services:
       # Ollama
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
-      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:0.5b}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-gemma3:270m}
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text:latest}
       # JWT
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your-secret-key-here-change-in-production-min-32-chars}
